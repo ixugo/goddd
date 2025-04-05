@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/ixugo/goweb/pkg/web"
+	"github.com/ixugo/goddd/pkg/web"
 )
 
 var startRuntime = time.Now()

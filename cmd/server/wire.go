@@ -8,9 +8,9 @@ import (
 	"net/http"
 
 	"github.com/google/wire"
-	"github.com/ixugo/goweb/internal/conf"
-	"github.com/ixugo/goweb/internal/data"
-	"github.com/ixugo/goweb/internal/web/api"
+	"github.com/ixugo/goddd/internal/conf"
+	"github.com/ixugo/goddd/internal/data"
+	"github.com/ixugo/goddd/internal/web/api"
 )
 
 func wireApp(bc *conf.Bootstrap, log *slog.Logger) (http.Handler, func(), error) {

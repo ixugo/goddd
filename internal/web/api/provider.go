@@ -6,11 +6,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/wire"
-	"github.com/ixugo/goweb/internal/conf"
-	"github.com/ixugo/goweb/internal/core/version"
-	"github.com/ixugo/goweb/internal/core/version/store/versiondb"
-	"github.com/ixugo/goweb/pkg/orm"
-	"github.com/ixugo/goweb/pkg/web"
+	"github.com/ixugo/goddd/internal/conf"
+	"github.com/ixugo/goddd/internal/core/version"
+	"github.com/ixugo/goddd/internal/core/version/store/versiondb"
+	"github.com/ixugo/goddd/pkg/orm"
+	"github.com/ixugo/goddd/pkg/web"
 	"gorm.io/gorm"
 )
 

@@ -12,10 +12,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ixugo/goweb/internal/conf"
-	"github.com/ixugo/goweb/pkg/logger"
-	"github.com/ixugo/goweb/pkg/server"
-	"github.com/ixugo/goweb/pkg/system"
+	"github.com/ixugo/goddd/internal/conf"
+	"github.com/ixugo/goddd/pkg/logger"
+	"github.com/ixugo/goddd/pkg/server"
+	"github.com/ixugo/goddd/pkg/system"
 )
 
 var (

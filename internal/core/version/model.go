@@ -1,6 +1,6 @@
 package version
 
-import "github.com/ixugo/goweb/pkg/orm"
+import "github.com/ixugo/goddd/pkg/orm"
 
 // Version 数据库版本记录
 // 每次迁移，则创建一条记录

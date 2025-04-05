@@ -2,8 +2,8 @@ package api
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/ixugo/goweb/internal/core/version"
-	"github.com/ixugo/goweb/pkg/web"
+	"github.com/ixugo/goddd/internal/core/version"
+	"github.com/ixugo/goddd/pkg/web"
 )
 
 type VersionAPI struct {

@@ -1,7 +1,7 @@
 package versiondb
 
 import (
-	"github.com/ixugo/goweb/internal/core/version"
+	"github.com/ixugo/goddd/internal/core/version"
 	"gorm.io/gorm"
 )
 

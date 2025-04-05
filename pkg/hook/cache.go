@@ -3,7 +3,7 @@ package hook
 import (
 	"time"
 
-	"github.com/ixugo/goweb/pkg/conc"
+	"github.com/ixugo/goddd/pkg/conc"
 )
 
 // CacheFn 缓存函数

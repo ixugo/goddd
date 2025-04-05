@@ -4,8 +4,8 @@
 </p>
 
 <p align="center">
-    <a href="https://github.com/ixugo/goweb/releases"><img src="https://img.shields.io/github/v/release/ixugo/goweb?include_prereleases" alt="Version"/></a>
-    <a href="https://github.com/ixugo/goweb/blob/master/LICENSE.txt"><img src="https://img.shields.io/dub/l/vibe-d.svg" alt="License"/></a>
+    <a href="https://github.com/ixugo/goddd/releases"><img src="https://img.shields.io/github/v/release/ixugo/goweb?include_prereleases" alt="Version"/></a>
+    <a href="https://github.com/ixugo/goddd/blob/master/LICENSE.txt"><img src="https://img.shields.io/dub/l/vibe-d.svg" alt="License"/></a>
 	<a href="https://gin-gonic.com"><img width=30px src="https://avatars.githubusercontent.com/u/7894478?s=48&v=4" alt="GIN"/></a>
     <a href="https://gorm.io"><img width=70px src="https://gorm.io/gorm.svg" alt="GORM"/></a>
 
@@ -25,12 +25,12 @@ The goal of Goweb is to:
 
 If you think the above description fits your needs, then let's get started quickly.
 
-Supports [code generation](github.com/ixugo/gowebx).
+Supports [code generation](github.com/ixugo/godddx).
 
 ## Quick start
 
 1. Golang version >= 1.23.0
-2. `git clone github.com/ixugo/goweb`
+2. `git clone github.com/ixugo/goddd`
 3. `cd goweb && go build -o goweb ./cmd/server && ./goweb`
 4. Open a new terminal and access `curl http://localhost:8080/health`
 
