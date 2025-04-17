@@ -4,7 +4,7 @@
 </p>
 
 <p align="center">
-    <a href="https://github.com/ixugo/goddd/releases"><img src="https://img.shields.io/github/v/release/ixugo/goweb?include_prereleases" alt="Version"/></a>
+    <a href="https://github.com/ixugo/goddd/releases"><img src="https://img.shields.io/github/v/release/ixugo/goddd?include_prereleases" alt="Version"/></a>
     <a href="https://github.com/ixugo/goddd/blob/master/LICENSE.txt"><img src="https://img.shields.io/dub/l/vibe-d.svg" alt="License"/></a>
 	<a href="https://gin-gonic.com"><img width=30px src="https://avatars.githubusercontent.com/u/7894478?s=48&v=4" alt="GIN"/></a>
     <a href="https://gorm.io"><img width=70px src="https://gorm.io/gorm.svg" alt="GORM"/></a>
@@ -17,7 +17,7 @@
 
 This is a complete CRUD solution focused on REST API.
 
-The goal of Goweb is to:
+The goal of GoDDD is to:
 
 + Provide a clean architecture suitable for small and medium-sized projects.
 + Provide a modular structure for quickly starting a project, focusing on business development.
@@ -27,11 +27,13 @@ If you think the above description fits your needs, then let's get started quick
 
 Supports [code generation](github.com/ixugo/godddx).
 
+Supports [event bus/transaction messages](github.com/ixugo/nsqite).
+
 ## Quick start
 
 1. Golang version >= 1.23.0
 2. `git clone github.com/ixugo/goddd`
-3. `cd goweb && go build -o goweb ./cmd/server && ./goweb`
+3. `cd goddd && go build -o goddd ./cmd/server && ./goddd`
 4. Open a new terminal and access `curl http://localhost:8080/health`
 
 Note: When running in the editor, specify the output directory as the project root directory.
@@ -83,7 +85,7 @@ To follow the DRY (Don't Repeat Yourself) design principle, we reduce repetitive
 
 `WarpH` internally recognizes POST/PUT/DELETE/PATCH requests and binds the Request Body, while GET requests bind Request URL parameters.
 
-The second parameter of the input must be a pointer, and `*struct{}` is used when no parameters need to be bound. When defining the structure, especially note that the struct tags should be `json` or `form`. More details are available in the GIN framework’s parameter binding documentation.
+The second parameter of the input must be a pointer, and `*struct{}` is used when no parameters need to be bound. When defining the structure, especially note that the struct tags should be `json` or `form`. More details are available in the GIN framework's parameter binding documentation.
 
 + `json`: Can bind request body parameters.
 + `form`: Can bind query parameters.
@@ -144,9 +146,9 @@ func findUsers(ctx *gin.Context, in *Input) (*Output, error) {
 
 ## Error Handling
 
-From the above code, we can see that errors are directly returned. But doesn’t this expose the underlying error information to the user? And what about the HTTP status code for errors?
+From the above code, we can see that errors are directly returned. But doesn't this expose the underlying error information to the user? And what about the HTTP status code for errors?
 
-In fact, `web.Warn` does some additional work. For example, when there is an error during binding, it can pinpoint the specific error cause: Is the type wrong? Which property is incorrect? For example, when responding, we can extract information from the `err` and return the corresponding HTTP status code. Let’s take a closer look at error handling.
+In fact, `web.Warn` does some additional work. For example, when there is an error during binding, it can pinpoint the specific error cause: Is the type wrong? Which property is incorrect? For example, when responding, we can extract information from the `err` and return the corresponding HTTP status code. Let's take a closer look at error handling.
 
 `pkg/web` is an HTTP-related handling package, which includes middleware, response handling, error handling, authentication, logging, rate limiting, metrics, performance analysis, input validation, and more.
 
@@ -459,9 +461,9 @@ Convention is preferable to configuration. Some projects use `Request/Response` 
 
 Of course, output parameters can also serve as input, and you can define an alias or use them directly.
 
-Frequently, we want clarity on what we’re doing and why. This FAQ aims to offer some insight.
+Frequently, we want clarity on what we're doing and why. This FAQ aims to offer some insight.
 
-> How to write business plugins for Goweb?
+> How to write business plugins for GoDDD?
 
 ```go
 // RegisterVersion Some general business functions are depended upon by other business functions, such as table version control, dictionary, verification code, scheduled tasks, user management, etc.

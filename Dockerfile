@@ -9,7 +9,7 @@ WORKDIR /app
 
 ADD ./build/linux_amd64/bin ./
 
-LABEL Name=goweb Version=0.0.1
+LABEL Name=GoDDD Version=0.0.1
 
 EXPOSE 8080
 

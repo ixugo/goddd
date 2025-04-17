@@ -1,10 +1,10 @@
 <p align="center">
-    <img src="./logo.png#gh-light-mode-only" alt="GoWeb Logo" width="550"/>
-    <img src="./logo_dark.png#gh-dark-mode-only" alt="GoWeb Logo" width="550"/>
+    <img src="./logo.png#gh-light-mode-only" alt="GoDDD Logo" width="550"/>
+    <img src="./logo_dark.png#gh-dark-mode-only" alt="GoDDD Logo" width="550"/>
 </p>
 
 <p align="center">
-    <a href="https://github.com/ixugo/goddd/releases"><img src="https://img.shields.io/github/v/release/ixugo/goweb?include_prereleases" alt="Version"/></a>
+    <a href="https://github.com/ixugo/goddd/releases"><img src="https://img.shields.io/github/v/release/ixugo/goddd?include_prereleases" alt="Version"/></a>
     <a href="https://github.com/ixugo/goddd/blob/master/LICENSE.txt"><img src="https://img.shields.io/dub/l/vibe-d.svg" alt="License"/></a>
 	<a href="https://goreportcard.com/report/github.com/ixugo/goddd">
 	<img src="https://goreportcard.com/badge/github.com/ixugo/goddd"/>
@@ -20,7 +20,7 @@
 
 这是一个专注于 REST API 的完整 CURD 解决方案。
 
-Goweb 目标是:
+GoDDD 目标是:
 
 + 整洁架构，适用于中小型项目
 + 提供积木套装，快速开始项目，专注于业务开发
@@ -29,6 +29,8 @@ Goweb 目标是:
 如果你觉得以上描述符合你的需求，那就快速开始吧。
 
 支持[代码自动生成](github.com/ixugo/godddx)
+
+支持[事件总线/事务消息](github.com/ixugo/nsqite)
 
 ## 设计说明
 
@@ -51,7 +53,7 @@ Goweb 目标是:
 
 1. Golang 版本 >= 1.23.0
 2. `git clone github.com/ixugo/goddd`
-3. `cd goweb && go build -o goweb ./cmd/server && ./goweb`
+3. `cd goddd && go build -o goddd ./cmd/server && ./goddd`
 4. 新开一个终端访问 `curl http://localhost:8080/health`
 
 注意: 用编辑器运行时，要指定输出目录为项目根目录
@@ -482,7 +484,7 @@ API 只做参数获取，返回响应参数，只做最少的事情，方便从 
 
 很多时候，我们都想明确自己在做什么，为什么这样做，这个「常见问题」希望能提供一点解惑思路。
 
-> 如何为 goweb 编写业务插件?
+> 如何为 goddd 编写业务插件?
 
 ```go
 // RegisterVersion 有一些通用的业务，它们被其它业务依赖，属于业务的基层模块，例如表版本控制，字典，验证码，定时任务，用户管理等等。
