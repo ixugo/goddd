@@ -3,11 +3,14 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"unsafe"
 
 	"github.com/gin-gonic/gin"
-	// errors "github.com/go-kratos/kratos/v2/errors"
+	"github.com/ixugo/goddd/pkg/reason"
 )
 
 var defaultDebug = true
@@ -16,12 +19,8 @@ func SetRelease() {
 	defaultDebug = false
 }
 
-// Errorer ...
-type Errorer interface {
-	Reason() string
-	HTTPCode() int
-	Message() string
-	Details() []string
+func SetDebug() {
+	defaultDebug = true
 }
 
 // ResponseWriter ...
@@ -57,14 +56,13 @@ func Fail(c ResponseWriter, err error, fn ...WithData) {
 
 	code := 400
 
-	if err1, ok := err.(Errorer); ok {
-
-		if ok {
-			code = err1.HTTPCode()
-			out["reason"] = err1.Reason()
-			out["msg"] = err1.Message()
-			d := err1.Details()
-			if defaultDebug && len(d) > 0 {
+	if err1, ok := err.(reason.ErrorInfoer); ok {
+		code = err1.GetHTTPCode()
+		out["reason"] = err1.GetReason()
+		out["msg"] = err1.GetMessage()
+		if defaultDebug {
+			d := err1.GetDetails()
+			if len(d) > 0 {
 				out["details"] = d
 			}
 		}
@@ -76,33 +74,6 @@ func Fail(c ResponseWriter, err error, fn ...WithData) {
 		return
 	}
 
-	// if err, ok := err.(*errors.Error); ok {
-	// 	out["reason"] = err.Reason
-	// 	out["msg"] = err.Message
-	// 	d := err.Metadata
-	// 	if defaultDebug && len(d) > 0 {
-	// 		details := make([]string, 0, 3)
-	// 		for k, v := range d {
-	// 			details = append(details, fmt.Sprintf("%s:%v", k, v))
-	// 		}
-	// 		out["details"] = details
-	// 	}
-	// 	for i := range fn {
-	// 		fn[i](out)
-	// 	}
-	// 	c.JSON(code, out)
-	// 	c.Set(responseErr, err.Error())
-	// 	return
-	// }
-
-	// if errors.Is(err, context.DeadlineExceeded) {
-	// 	out["reason"] = "TIMEOUT"
-	// 	out["msg"] = "请求超时"
-	// 	c.JSON(code, out)
-	// 	c.Set(responseErr, err.Error())
-	// 	return
-	// }
-
 	c.JSON(code, out)
 	c.Set(responseErr, err.Error())
 }
@@ -110,14 +81,14 @@ func Fail(c ResponseWriter, err error, fn ...WithData) {
 func AbortWithStatusJSON(c ResponseWriter, err error, fn ...WithData) {
 	out := make(map[string]any)
 
-	err1, ok := err.(Errorer)
+	err1, ok := err.(reason.ErrorInfoer)
 
 	var code int
 	if ok {
-		code = err1.HTTPCode()
-		out["reason"] = err1.Reason()
-		out["msg"] = err1.Message()
-		d := err1.Details()
+		code = err1.GetHTTPCode()
+		out["reason"] = err1.GetReason()
+		out["msg"] = err1.GetMessage()
+		d := err1.GetDetails()
 		if defaultDebug && len(d) > 0 {
 			out["details"] = d
 		}
@@ -141,13 +112,13 @@ func WarpH[I any, O any](fn func(*gin.Context, *I) (O, error)) gin.HandlerFunc {
 			switch c.Request.Method {
 			case http.MethodGet:
 				if err := c.ShouldBindQuery(&in); err != nil {
-					Fail(c, ErrBadRequest.With(HanddleJSONErr(err).Error()))
+					Fail(c, reason.ErrBadRequest.With(HanddleJSONErr(err).Error()))
 					return
 				}
 			case http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodPatch:
 				if c.Request.ContentLength > 0 {
 					if err := c.ShouldBindJSON(&in); err != nil {
-						Fail(c, ErrBadRequest.With(HanddleJSONErr(err).Error()))
+						Fail(c, reason.ErrBadRequest.With(HanddleJSONErr(err).Error()))
 						return
 					}
 				}
@@ -173,7 +144,35 @@ func HandlerResponseMsg(resp http.Response) error {
 	}
 	var out ResponseMsg
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return ErrServer.Msg(out.Msg)
+		return reason.ErrServer.SetMsg(out.Msg)
 	}
-	return ErrServer.Msg(resp.Status)
+	return reason.ErrServer.SetMsg(resp.Status)
+}
+
+func HanddleJSONErr(err error) error {
+	if err == nil {
+		return nil
+	}
+
+	var syntaxError *json.SyntaxError
+	var unmarshalTypeError *json.UnmarshalTypeError
+	var invalidUnmarshalError *json.InvalidUnmarshalError
+
+	switch {
+	case errors.As(err, &syntaxError):
+		return fmt.Errorf("格式错误 (位于 %d)", syntaxError.Offset)
+	case errors.Is(err, io.ErrUnexpectedEOF):
+		return fmt.Errorf("格式错误")
+	case errors.As(err, &unmarshalTypeError):
+		if unmarshalTypeError.Field != "" {
+			return fmt.Errorf("正文包含不正确的格式类型 %q", unmarshalTypeError.Field)
+		}
+		return fmt.Errorf("正文包含不正确的格式类型 (位于 %d)", unmarshalTypeError.Offset)
+	case errors.Is(err, io.EOF):
+		return errors.New("正文不能为空")
+	case errors.As(err, &invalidUnmarshalError):
+		panic(err)
+	default:
+		return err
+	}
 }

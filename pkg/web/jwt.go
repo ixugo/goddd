@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v4"
+	"github.com/ixugo/goddd/pkg/reason"
 )
 
 // Claims ...
@@ -30,23 +31,20 @@ const (
 
 // AuthMiddleware 鉴权
 func AuthMiddleware(secret string) gin.HandlerFunc {
-	// var errResp = gin.H{
-	// "msg": "身份验证失败",
-	// }
 	return func(c *gin.Context) {
 		auth := c.Request.Header.Get("Authorization")
 		const prefix = "Bearer "
 		if len(auth) <= len(prefix) || !strings.EqualFold(auth[:len(prefix)], prefix) {
-			AbortWithStatusJSON(c, ErrUnauthorizedToken.Msg("身份验证失败"))
+			AbortWithStatusJSON(c, reason.ErrUnauthorizedToken.SetMsg("身份验证失败"))
 			return
 		}
 		claims, err := ParseToken(auth[len(prefix):], secret)
 		if err != nil {
-			AbortWithStatusJSON(c, ErrUnauthorizedToken.Msg("身份验证失败"))
+			AbortWithStatusJSON(c, reason.ErrUnauthorizedToken.SetMsg("身份验证失败"))
 			return
 		}
 		if err := claims.Valid(); err != nil {
-			AbortWithStatusJSON(c, ErrUnauthorizedToken.Msg("身份验证失败"))
+			AbortWithStatusJSON(c, reason.ErrUnauthorizedToken)
 			return
 		}
 
@@ -86,7 +84,7 @@ func AuthLevel(level int) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		l := c.GetInt("level")
 		if l > level || l == 0 {
-			Fail(c, ErrBadRequest.Msg("权限不足"))
+			Fail(c, reason.ErrBadRequest.SetMsg("权限不足"))
 			c.Abort()
 			return
 		}
@@ -140,7 +138,6 @@ func NewToken(input TokenInput) (string, error) {
 			ExpiresAt: jwt.NewNumericDate(now.Add(input.Exires)), // 失效时间
 			IssuedAt:  jwt.NewNumericDate(now),                   // 签发时间
 			Issuer:    "xx@golang.space",                         // 签发人
-			// Subject:   "login",                                    // 主题
 		},
 		Role: input.Role, // 角色
 	}

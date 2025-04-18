@@ -192,7 +192,7 @@ type Error struct {
 }
 ```
 
-core 层导出的函数或 API 层返回的错误，应该返回 web.Error 类型的错误。
+core 层导出的函数或 API 层返回的错误，应该返回 reason.Error 类型的错误。
 
 在封装的 web.WarpH 中，会正确记录错误到日志并返回给前端。
 
@@ -200,11 +200,11 @@ core 层导出的函数或 API 层返回的错误，应该返回 web.Error 类�
 func findUser(in *Input)  (*Output,error){
 	// 数据库操作发生错误
 	if err != nil {
-		return nil, web.ErrDB.Msg() // 错误的 respon 类型是 db 层错误，Msg 函数可以更改给用户的友好提示
+		return nil, reason.ErrDB.Msg() // 错误的 respon 类型是 db 层错误，Msg 函数可以更改给用户的友好提示
 	}
 	// 业务发生错误
 	if err != nil {
-		return nil, web.ErrServer.Withf("err[%s] ....",err) // Withf 可以写入 details 给开发者更多提示
+		return nil, reason.ErrServer.Withf("err[%s] ....",err) // Withf 可以写入 details 给开发者更多提示
 	}
 }
 ```

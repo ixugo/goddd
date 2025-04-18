@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/ixugo/goddd/domain/version/versionapi"
 	"github.com/ixugo/goddd/pkg/web"
 )
 
@@ -36,7 +37,7 @@ func setupRouter(r *gin.Engine, uc *Usecase) {
 	r.GET("/health", web.WarpH(uc.getHealth))
 	r.GET("/app/metrics/api", web.WarpH(uc.getMetricsAPI))
 
-	registerVersion(r, uc.Version, auth)
+	versionapi.Register(r, uc.Version, auth)
 }
 
 type getHealthOutput struct {

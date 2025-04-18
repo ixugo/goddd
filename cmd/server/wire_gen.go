@@ -7,6 +7,7 @@
 package main
 
 import (
+	"github.com/ixugo/goddd/domain/version/versionapi"
 	"github.com/ixugo/goddd/internal/conf"
 	"github.com/ixugo/goddd/internal/data"
 	"github.com/ixugo/goddd/internal/web/api"
@@ -21,12 +22,12 @@ func wireApp(bc *conf.Bootstrap, log *slog.Logger) (http.Handler, func(), error)
 	if err != nil {
 		return nil, nil, err
 	}
-	core := api.NewVersion(db)
-	versionAPI := api.NewVersionAPI(core)
+	core := versionapi.NewVersionCore(db)
+	versionapiAPI := versionapi.New(core)
 	usecase := &api.Usecase{
 		Conf:    bc,
 		DB:      db,
-		Version: versionAPI,
+		Version: versionapiAPI,
 	}
 	handler := api.NewHTTPHandler(usecase)
 	return handler, func() {

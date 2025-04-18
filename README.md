@@ -172,7 +172,7 @@ type Error struct {
 }
 ```
 
-Functions exported from the core layer or errors returned from the API layer should return errors of type `web.Error`.
+Functions exported from the core layer or errors returned from the API layer should return errors of type `reason.Error`.
 
 In the wrapped `web.WarpH`, errors are correctly logged and returned to the front-end.
 
@@ -180,11 +180,11 @@ In the wrapped `web.WarpH`, errors are correctly logged and returned to the fron
 func findUser(in *Input) (*Output, error) {
 	// Database operation error
 	if err != nil {
-		return nil, web.ErrDB.Msg() // The response type is a DB layer error, and the Msg function can modify the user-friendly message
+		return nil, reason.ErrDB.Msg() // The response type is a DB layer error, and the Msg function can modify the user-friendly message
 	}
 	// Business logic error
 	if err != nil {
-		return nil, web.ErrServer.Withf("err[%s] ....", err) // Withf can write details to provide more hints to the developer
+		return nil, reason.ErrServer.Withf("err[%s] ....", err) // Withf can write details to provide more hints to the developer
 	}
 }
 ```

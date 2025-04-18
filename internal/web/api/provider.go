@@ -1,32 +1,30 @@
 package api
 
 import (
-	"log/slog"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/wire"
+	"github.com/ixugo/goddd/domain/version/versionapi"
 	"github.com/ixugo/goddd/internal/conf"
-	"github.com/ixugo/goddd/internal/core/version"
-	"github.com/ixugo/goddd/internal/core/version/store/versiondb"
 	"github.com/ixugo/goddd/pkg/orm"
 	"github.com/ixugo/goddd/pkg/web"
 	"gorm.io/gorm"
 )
 
 var (
-	ProviderVersionSet = wire.NewSet(NewVersion)
+	ProviderVersionSet = wire.NewSet(versionapi.NewVersionCore)
 	ProviderSet        = wire.NewSet(
 		wire.Struct(new(Usecase), "*"),
 		NewHTTPHandler,
-		NewVersionAPI,
+		versionapi.New,
 	)
 )
 
 type Usecase struct {
 	Conf    *conf.Bootstrap
 	DB      *gorm.DB
-	Version VersionAPI
+	Version versionapi.API
 }
 
 // NewHTTPHandler 生成Gin框架路由内容
@@ -53,20 +51,4 @@ func NewHTTPHandler(uc *Usecase) http.Handler {
 	setupRouter(g, uc) // 设置路由处理函数
 
 	return g // 返回配置好的 Gin 实例作为 http.Handler
-}
-
-// NewVersion ...
-func NewVersion(db *gorm.DB) version.Core {
-	vdb := versiondb.NewDB(db)
-	core := version.NewCore(vdb)
-	isOK := core.IsAutoMigrate(dbVersion)
-	vdb.AutoMigrate(isOK)
-	if isOK {
-		slog.Info("更新数据库表结构")
-		if err := core.RecordVersion(dbVersion, dbRemark); err != nil {
-			slog.Error("RecordVersion", "err", err)
-		}
-	}
-	orm.EnabledAutoMigrate = isOK
-	return core
 }
