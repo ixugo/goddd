@@ -184,13 +184,6 @@ msg 应当是开发者母语的错误描述，`reason` 用于程序内部判定�
 
 details 应该仅开发模式可见，`web.SetRelease()` 可以设置为生产发布模式，此时 details 将不会写入 http response body。
 
-```go
-type Error struct {
-	reason  string   // 错误原因
-	msg     string   // 错误信息，用户可读
-	details []string // 错误扩展，开发可读
-}
-```
 
 core 层导出的函数或 API 层返回的错误，应该返回 reason.Error 类型的错误。
 
@@ -200,7 +193,7 @@ core 层导出的函数或 API 层返回的错误，应该返回 reason.Error �
 func findUser(in *Input)  (*Output,error){
 	// 数据库操作发生错误
 	if err != nil {
-		return nil, reason.ErrDB.Msg() // 错误的 respon 类型是 db 层错误，Msg 函数可以更改给用户的友好提示
+		return nil, reason.ErrDB.SetMsg() // 错误的 respon 类型是 db 层错误，Msg 函数可以更改给用户的友好提示
 	}
 	// 业务发生错误
 	if err != nil {
@@ -509,7 +502,6 @@ func RegisterVersion(r gin.IRouter, verAPI VersionAPI, handler ...gin.HandlerFun
 默认配置目录为可执行文件同目录下的 configs，也可以指定其它配置目录
 
 `./bin -conf ./configs`
-
 
 
 ## 项目主要依赖

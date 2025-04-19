@@ -164,13 +164,6 @@ In the `web.WarpH` wrapper, errors are actually handled by calling `web.Fail(err
 
 `details` should only be visible in development mode. You can set the release mode using `web.SetRelease()`, in which case `details` will not be included in the HTTP response body.
 
-```go
-type Error struct {
-	reason  string   // 错误原因
-	msg     string   // 错误信息，用户可读
-	details []string // 错误扩展，开发可读
-}
-```
 
 Functions exported from the core layer or errors returned from the API layer should return errors of type `reason.Error`.
 
@@ -180,7 +173,7 @@ In the wrapped `web.WarpH`, errors are correctly logged and returned to the fron
 func findUser(in *Input) (*Output, error) {
 	// Database operation error
 	if err != nil {
-		return nil, reason.ErrDB.Msg() // The response type is a DB layer error, and the Msg function can modify the user-friendly message
+		return nil, reason.ErrDB.SetMsg() // The response type is a DB layer error, and the Msg function can modify the user-friendly message
 	}
 	// Business logic error
 	if err != nil {
