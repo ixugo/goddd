@@ -4,7 +4,7 @@
 //go:build !wireinject
 // +build !wireinject
 
-package main
+package app
 
 import (
 	"github.com/ixugo/goddd/domain/version/versionapi"
@@ -17,7 +17,7 @@ import (
 
 // Injectors from wire.go:
 
-func wireApp(bc *conf.Bootstrap, log *slog.Logger) (http.Handler, func(), error) {
+func WireApp(bc *conf.Bootstrap, log *slog.Logger) (http.Handler, func(), error) {
 	db, err := data.SetupDB(bc, log)
 	if err != nil {
 		return nil, nil, err

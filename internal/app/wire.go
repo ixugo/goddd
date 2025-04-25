@@ -1,7 +1,7 @@
 //go:build wireinject
 // +build wireinject
 
-package main
+package app
 
 import (
 	"log/slog"
@@ -13,6 +13,6 @@ import (
 	"github.com/ixugo/goddd/internal/web/api"
 )
 
-func wireApp(bc *conf.Bootstrap, log *slog.Logger) (http.Handler, func(), error) {
+func WireApp(bc *conf.Bootstrap, log *slog.Logger) (http.Handler, func(), error) {
 	panic(wire.Build(data.ProviderSet, api.ProviderVersionSet, api.ProviderSet))
 }

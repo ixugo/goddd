@@ -9,7 +9,7 @@
 			"type": "go",
 			"request": "launch",
 			"mode": "auto",
-			"program": "${workspaceFolder}/cmd/server",
+			"program": "${workspaceFolder}/main.go",
 			"output": "__debug_bin_${workspaceFolderBasename}",
 			"cwd": "${workspaceFolder}"
 		}

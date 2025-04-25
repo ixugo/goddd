@@ -70,8 +70,8 @@ GoDDD 目标是:
 
 ```bash
 .
-├── cmd						可执行程序
-│   └── server
+├── main.go					主函数入口
+├── cmd						更多可执行程序
 ├── configs					配置文件
 ├── docs					设计文档/用户文档
 ├── internal					私有业务
