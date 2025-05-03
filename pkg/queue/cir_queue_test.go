@@ -1,10 +1,7 @@
 package queue
 
 import (
-	"fmt"
 	"testing"
-
-	"github.com/stretchr/testify/require"
 )
 
 func TestPush(t *testing.T) {
@@ -13,7 +10,8 @@ func TestPush(t *testing.T) {
 	for i := 1; i <= 100; i++ {
 		q.Push(i)
 	}
-
-	require.EqualValues(t, q.Size(), 5)
-	fmt.Println(q.Range())
+	if q.Size() != 5 {
+		t.Errorf("Size() = %d, want %d", q.Size(), 5)
+	}
+	t.Log(q.Range())
 }
