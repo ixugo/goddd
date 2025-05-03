@@ -117,7 +117,7 @@ func WarpH[I any, O any](fn func(*gin.Context, *I) (O, error)) gin.HandlerFunc {
 				}
 			case http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodPatch:
 				if c.Request.ContentLength > 0 {
-					if err := c.ShouldBindJSON(&in); err != nil {
+					if err := c.ShouldBind(&in); err != nil {
 						Fail(c, reason.ErrBadRequest.With(HanddleJSONErr(err).Error()))
 						return
 					}
