@@ -13,23 +13,22 @@ import (
 	"time"
 
 	"github.com/ixugo/goddd/pkg/hook"
+	"github.com/ixugo/goddd/pkg/orm"
 )
 
 type IDManager struct {
-	store  UniqueIDStorer
-	length int
+	store UniqueIDStorer
 	// TODO: 可以初始化时读取数据库内的数量，判断重复因子，从而减少尝试或更换策略
 }
 
-func NewIDManager(store UniqueIDStorer, length int) *IDManager {
+func NewIDManager(store UniqueIDStorer) *IDManager {
 	return &IDManager{
-		store:  store,
-		length: length,
+		store: store,
 	}
 }
 
 // UniqueID 获取唯一 id
-func (m *IDManager) UniqueID(prefix string) string {
+func (m *IDManager) UniqueID(prefix string, length int) string {
 	cost := hook.UseTiming(time.Second)
 	defer cost()
 
@@ -37,7 +36,7 @@ func (m *IDManager) UniqueID(prefix string) string {
 	for i := range 10 {
 		// 生成自定义长度随机数，通过数据库主键来防止碰撞，碰撞后再次尝试
 		for range 36 {
-			id := prefix + GenerateRandomString(m.length+i)
+			id := prefix + GenerateRandomString(length+i)
 			if err := m.store.Add(context.Background(), &UniqueID{ID: id}); err != nil {
 				slog.Error("UniqueID", "err", err)
 				continue
@@ -47,6 +46,12 @@ func (m *IDManager) UniqueID(prefix string) string {
 	}
 	slog.Error("UniqueID", "err", "超过最大循环次数，未获取到唯一 id")
 	return "unknown"
+}
+
+// UndoUniqueID 删除唯一 id
+func (m *IDManager) UndoUniqueID(id string) error {
+	var uni UniqueID
+	return m.store.Del(context.Background(), &uni, orm.Where("id=?", id))
 }
 
 // GenerateRandomString 生成随机字符串

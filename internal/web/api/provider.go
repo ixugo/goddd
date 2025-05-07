@@ -5,6 +5,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/wire"
+	"github.com/ixugo/goddd/domain/uniqueid"
+	"github.com/ixugo/goddd/domain/uniqueid/store/uniqueiddb"
 	"github.com/ixugo/goddd/domain/version/versionapi"
 	"github.com/ixugo/goddd/internal/conf"
 	"github.com/ixugo/goddd/pkg/orm"
@@ -51,4 +53,9 @@ func NewHTTPHandler(uc *Usecase) http.Handler {
 	setupRouter(g, uc) // 设置路由处理函数
 
 	return g // 返回配置好的 Gin 实例作为 http.Handler
+}
+
+// NewUniqueID 生成唯一 id
+func NewUniqueID(db *gorm.DB) uniqueid.Core {
+	return uniqueid.NewCore(uniqueiddb.NewDB(db).AutoMigrate(orm.EnabledAutoMigrate), 6)
 }

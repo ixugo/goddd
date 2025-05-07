@@ -107,8 +107,6 @@ func NewError(reason, msg string) CustomError {
 }
 
 func (e *Error) As(target any) bool {
-	if _, ok := target.(*Error); ok {
-		return true
-	}
-	return false
+	_, ok := target.(*Error)
+	return ok
 }

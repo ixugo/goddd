@@ -8,19 +8,32 @@ type Storer interface {
 
 // Core business domain
 type Core struct {
-	store Storer
-	m     *IDManager
+	store  Storer
+	m      *IDManager
+	length int
 }
 
 // NewCore create business domain
 func NewCore(store Storer, length int) Core {
 	return Core{
-		store: store,
-		m:     NewIDManager(store.UniqueID(), length),
+		store:  store,
+		length: length,
+		m:      NewIDManager(store.UniqueID()),
 	}
 }
 
 // UniqueID 获取全局唯一 ID
+// 当创建的 id 并未使用，或允许下次再次使用，请执行 UndoUniqueID
 func (c Core) UniqueID(prefix string) string {
-	return c.m.UniqueID(prefix)
+	return c.m.UniqueID(prefix, c.length)
+}
+
+// UniqueIDByCustomLen 获取自定义长度的全局 id
+func (c Core) UniqueIDWithCustomLen(prefix string, length int) string {
+	return c.m.UniqueID(prefix, length)
+}
+
+// UndoUniqueID 撤销唯一 id，如果 UniqueID 获取的某个 id 并未使用，或者随着数据源的删除可以调用此函数撤销
+func (c Core) UndoUniqueID(id string) error {
+	return c.m.UndoUniqueID(id)
 }
