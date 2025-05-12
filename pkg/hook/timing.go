@@ -25,3 +25,23 @@ func UseTiming(limit time.Duration) func() {
 		}
 	}
 }
+
+// UseMemoryUsage 计算内存占用
+// cost := UseMemoryUsage()
+// defer cost()
+func UseMemoryUsage() func() uint64 {
+	var m1, m2 runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&m1)
+	return func() uint64 {
+		runtime.ReadMemStats(&m2)
+		memUsed := m2.Alloc - m1.Alloc
+
+		pc, _, _, _ := runtime.Caller(1)
+		fn := runtime.FuncForPC(pc)
+
+		log := slog.With("cost(bytes)", float32(memUsed)/1024, "caller", fn.Name())
+		log.Debug("memory usage")
+		return memUsed
+	}
+}

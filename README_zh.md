@@ -284,6 +284,37 @@ new
 	// 业务处理
 ```
 
+### hook.UseMemoryUsage 计算函数内存花销写日志
+
+old
+
+```go
+	var m1, m2 runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&m1)
+	// 业务处理夹杂在时间计算中
+	runtime.ReadMemStats(&m2)
+	memUsed := m2.Alloc - m1.Alloc
+	slog.Info("函数内存占用: ", "KB", float32(memUsed)/1024)
+```
+
+new
+```go
+	cost := hook.UseMemoryUsage(time.Second)
+	defer cost()
+
+	// 业务处理
+
+```
+
+### hook.FileMD5 计算文件的 md5
+
+避免将文件全部读取到内存，按照 8k 缓存分块计算文件的 md5
+
+
+
+
+
 **更多 hook 直接看 pkg/hook 源码吧**
 
 

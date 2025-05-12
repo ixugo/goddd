@@ -3,6 +3,8 @@ package hook
 import (
 	"crypto/md5"
 	"encoding/hex"
+	"errors"
+	"io"
 	"unsafe"
 )
 
@@ -10,4 +12,25 @@ import (
 func MD5(s string) string {
 	b := md5.Sum(unsafe.Slice(unsafe.StringData(s), len(s)))
 	return hex.EncodeToString(b[:])
+}
+
+// FileMD5 通过缓冲区计算文件的 md5
+func FileMD5(r io.Reader) (string, error) {
+	h := md5.New()
+	buf := make([]byte, 8*1024)
+	for {
+		n, err := r.Read(buf)
+		if n > 0 {
+			if _, err := h.Write(buf[:n]); err != nil {
+				return "", err
+			}
+		}
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			return "", err
+		}
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
