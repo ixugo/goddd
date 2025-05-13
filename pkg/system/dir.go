@@ -1,10 +1,12 @@
 package system
 
 import (
+	"context"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
+	"time"
 )
 
 // Executable 获取可执行文件绝对路径
@@ -89,30 +91,60 @@ func CleanOldFiles(files []FileInfo, count int) (int, error) {
 	return count - num, nil
 }
 
-// RemoveEmptyDirs 删除空目录
-func RemoveEmptyDirs(rootDir string) error {
-	// 遍历目录树，按反向顺序处理目录
-	return filepath.Walk(rootDir, func(path string, info os.FileInfo, err error) error {
+// RemoveEmptyDirs 删除空目录，性能优化版，增加时间范围过滤
+func RemoveEmptyDirs(ctx context.Context, rootDir string, start, end time.Time) error {
+	// 使用 map 统计每个目录的文件数量
+	dirFileCount := make(map[string]int)
+	cleanRootDir := filepath.Clean(rootDir)
+	dirFileCount[filepath.Dir(cleanRootDir)]++
+	err := filepath.Walk(cleanRootDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
-
-		if !info.IsDir() {
-			return nil
-		}
-		// 检查目录是否为空
-		entries, err := os.ReadDir(path)
-		if err != nil {
-			return err
-		}
-		if len(entries) == 0 {
-			// 删除空目录
-			if err := os.Remove(path); err != nil {
-				slog.Error("删除空目录出错", "err", err)
+		if info.IsDir() && path != cleanRootDir {
+			// 只处理在时间范围内的目录
+			mod := info.ModTime()
+			if mod.Before(start) || mod.After(end) {
+				return filepath.SkipDir
 			}
+			dirFileCount[path] = 0
+		}
+		parentDir := filepath.Dir(path)
+		if parentDir != path { // 确保不是根目录
+			dirFileCount[parentDir]++
 		}
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+	// 遍历 map，将 == 0 的数量的目录删除
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+			changed := false
+			for dir, count := range dirFileCount {
+				if count != 0 {
+					continue
+				}
+				if err := os.RemoveAll(dir); err != nil {
+					return err
+				}
+				delete(dirFileCount, dir)
+				parentDir := filepath.Dir(dir)
+				if parentDir != dir {
+					dirFileCount[parentDir]--
+					changed = true
+				}
+
+			}
+			if !changed {
+				return nil
+			}
+		}
+	}
 }
 
 // Abs 获取绝对目录
