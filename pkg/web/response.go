@@ -117,6 +117,11 @@ func WarpH[I any, O any](fn func(*gin.Context, *I) (O, error)) gin.HandlerFunc {
 				}
 			case http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodPatch:
 				if c.Request.ContentLength > 0 {
+					contentType := c.Request.Header.Get("Content-Type")
+					if contentType == "" {
+						Fail(c, reason.ErrBadRequest.With("Content-Type 不能为空"))
+						return
+					}
 					if err := c.ShouldBind(&in); err != nil {
 						Fail(c, reason.ErrBadRequest.With(HanddleJSONErr(err).Error()))
 						return

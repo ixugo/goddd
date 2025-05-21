@@ -21,6 +21,7 @@ import (
 		sse := web.NewSSE(1024, time.Minute)
 
 		go func(){
+			defer sse.Close()
 			for range 3 {
 				sse.Publish(web.Event{
 					ID:    uuid.New().String(),
@@ -29,7 +30,6 @@ import (
 				})
 				time.Sleep(time.Second)
 			}
-			sse.Close()
 		}()
 		sse.ServeHTTP(w, r)
 	})
@@ -74,6 +74,7 @@ func (s *SSE) Close() {
 func (s *SSE) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	rc := http.NewResponseController(w) // nolint
 	_ = rc.SetWriteDeadline(time.Now().Add(s.timeout))
+	_ = rc.SetReadDeadline(time.Now().Add(s.timeout))
 
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
