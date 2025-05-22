@@ -149,7 +149,7 @@ build/local:
 			-X main.gitHash=$(HASH_AND_DATE) \
 			-X main.buildTimeAt=$(shell date +%s) \
 			-X main.release=true \
-			" -o=$(dir)/bin ./cmd/server
+			" -o=$(dir)/bin ./main.go
 	@echo '>>> OK'
 
 ## build/linux: 构建 linux 应用
