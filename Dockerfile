@@ -1,5 +1,7 @@
 FROM alpine:latest
 
+ARG TARGETARCH
+
 ENV TZ=Asia/Shanghai
 
 RUN apk --no-cache add ca-certificates \
@@ -7,7 +9,7 @@ RUN apk --no-cache add ca-certificates \
 
 WORKDIR /app
 
-ADD ./build/linux_amd64/bin ./
+COPY ./build/linux_${TARGETARCH} /app/
 
 LABEL Name=GoDDD Version=0.0.1
 

@@ -169,13 +169,29 @@ build/windows:
 	@make build/local GOOS=$(GOOS) GOARCH=$(GOARCH)
 
 docker/build:
-	@docker buildx build --force-rm=true --platform linux/amd64 -t $(IMAGE_NAME) .
+	@docker build --force-rm=true --platform linux/amd64 -t $(IMAGE_NAME) .
 
 docker/save:
 	@docker save -o $(MODULE_NAME)_$(VERSION).tar $(IMAGE_NAME)
 
 docker/push:
 	@docker push $(IMAGE_NAME)
+
+docker/deploy: build/clean
+	$(eval GOARCH := amd64)
+	$(eval GOOS := linux)
+	$(eval dir := $(BUILD_DIR_ROOT)/$(GOOS)_$(GOARCH))
+	@make build/local GOOS=$(GOOS) GOARCH=$(GOARCH)
+	@upx $(dir)/bin
+
+	$(eval GOARCH := arm64)
+	$(eval GOOS := linux)
+	$(eval dir := $(BUILD_DIR_ROOT)/$(GOOS)_$(GOARCH))
+	@make build/local GOOS=$(GOOS) GOARCH=$(GOARCH)
+	@upx $(dir)/bin
+
+	@docker build --force-rm=true --platform linux/amd64,linux/arm64 -t $(IMAGE_NAME) --push .
+
 
 # ==================================================================================== #
 # PRODUCTION
