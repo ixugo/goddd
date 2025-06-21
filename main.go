@@ -42,6 +42,8 @@ func main() {
 	}
 	bc.Debug = !getBuildRelease()
 	bc.BuildVersion = buildVersion
+	bc.ConfigDir = filedir
+	bc.ConfigPath = filePath
 
 	{
 		expvar.NewString("version").Set(buildVersion)

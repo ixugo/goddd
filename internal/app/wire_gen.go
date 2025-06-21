@@ -7,12 +7,13 @@
 package app
 
 import (
+	"log/slog"
+	"net/http"
+
 	"github.com/ixugo/goddd/domain/version/versionapi"
 	"github.com/ixugo/goddd/internal/conf"
 	"github.com/ixugo/goddd/internal/data"
 	"github.com/ixugo/goddd/internal/web/api"
-	"log/slog"
-	"net/http"
 )
 
 // Injectors from wire.go:

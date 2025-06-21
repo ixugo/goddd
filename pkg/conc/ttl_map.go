@@ -115,3 +115,11 @@ func (c *TTLMap[K, V]) Clear() {
 	c.data.Clear()
 	c.exp.Clear()
 }
+
+// Dispose 销毁协程
+func (c *TTLMap[K, V]) Dispose() {
+	c.Clear()
+	if c.cancel != nil {
+		c.cancel()
+	}
+}

@@ -5,6 +5,8 @@ import "time"
 type Bootstrap struct {
 	Debug        bool   `toml:"-" json:"-"`
 	BuildVersion string `toml:"-" json:"-"`
+	ConfigDir    string `toml:"-" json:"-"`
+	ConfigPath   string `toml:"-" json:"-"`
 
 	Server Server // 服务器
 	Data   Data   // 数据
