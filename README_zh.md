@@ -74,6 +74,10 @@ GoDDD 目标是:
 ├── cmd						更多可执行程序
 ├── configs					配置文件
 ├── docs					设计文档/用户文档
+├── domain 					提供一些通用模型
+│   ├── token 				token 过期与延迟，权限管理
+│   ├── version 			数据库版本控制，避免每次启动执行 gorm 迁移
+│   └── uniqueid			全局唯一 id 生成器
 ├── internal					私有业务
 │   ├── conf					配置模型
 │   ├── core					业务领域

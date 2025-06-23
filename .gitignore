@@ -38,3 +38,4 @@ data/
 logs/
 build/
 __debug_bin*
+tables/
