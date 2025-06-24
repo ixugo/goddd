@@ -16,6 +16,7 @@ type Token struct {
 	CreatedAt orm.Time `gorm:"column:created_at;notNull;default:CURRENT_TIMESTAMP" json:"created_at"`
 	UpdatedAt orm.Time `gorm:"column:updated_at;notNull;default:CURRENT_TIMESTAMP" json:"updated_at"`
 	ExpiredAt orm.Time `gorm:"column:expired_at;notNull;default:CURRENT_TIMESTAMP;comment:过期时间" json:"expired_at"` // 过期时间
+	Reason    string   `gorm:"column:reason;notNull;default:''" json:"reason"`                                     // 过期原因
 }
 
 // TableName database table name

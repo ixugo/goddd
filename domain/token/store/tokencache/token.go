@@ -16,6 +16,30 @@ var _ token.TokenStorer = (*Token)(nil)
 
 type Token Cache
 
+// Expire implements token.TokenStorer.
+func (c *Token) Expire(ctx context.Context, scope string, userID string, reason string) ([]string, error) {
+	keys, err := c.store.Token().Expire(ctx, scope, userID, reason)
+	if err != nil {
+		return keys, err
+	}
+	for _, key := range keys {
+		c.token.Del(ctx, c.cacheKey(key))
+	}
+	return keys, nil
+}
+
+// DelAllForUser implements token.TokenStorer.
+func (c *Token) DelAllForUser(ctx context.Context, scope string, userID string) ([]string, error) {
+	keys, err := c.store.Token().DelAllForUser(ctx, scope, userID)
+	if err != nil {
+		return keys, err
+	}
+	for _, key := range keys {
+		c.token.Del(ctx, c.cacheKey(key))
+	}
+	return keys, nil
+}
+
 func (c *Token) cacheKey(key any) string {
 	return fmt.Sprintf("TOKEN:%v", key)
 }

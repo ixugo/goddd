@@ -17,6 +17,22 @@ var _ token.TokenStorer = Token{}
 // Token Related business namespaces
 type Token DB
 
+// Expire implements token.TokenStorer.
+func (d Token) Expire(ctx context.Context, scope string, userID string, reason string) ([]string, error) {
+	var expiredTokens []token.Token
+	if err := d.db.WithContext(ctx).Clauses(clause.Returning{Columns: []clause.Column{{Name: "id"}, {Name: "hash"}}}).
+		Where("scope = ? AND user_id = ? AND expired_at > ?", scope, userID, time.Now()).
+		Model(&expiredTokens).Update("reason", reason).Error; err != nil {
+		return nil, err
+	}
+
+	hashs := make([]string, len(expiredTokens))
+	for i, t := range expiredTokens {
+		hashs[i] = hex.EncodeToString(t.Hash)
+	}
+	return hashs, nil
+}
+
 // NewToken instance object
 func NewToken(db *gorm.DB) Token {
 	return Token{db: db}
@@ -65,8 +81,19 @@ func (d Token) EditWithSession(tx *gorm.DB, model *token.Token, changeFn func(b 
 }
 
 // DelAllForUser 删除用户的 token
-func (d Token) DelAllForUser(ctx context.Context, scope, userID string) error {
-	return d.db.WithContext(ctx).Where("scope = ? AND user_id = ?", scope, userID).Delete(&token.Token{}).Error
+func (d Token) DelAllForUser(ctx context.Context, scope, userID string) ([]string, error) {
+	var deletedTokens []token.Token
+	result := d.db.WithContext(ctx).Clauses(clause.Returning{Columns: []clause.Column{{Name: "id"}, {Name: "hash"}}}).
+		Where("scope = ? AND user_id = ?", scope, userID).Delete(&deletedTokens)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+
+	hashs := make([]string, len(deletedTokens))
+	for i, t := range deletedTokens {
+		hashs[i] = hex.EncodeToString(t.Hash)
+	}
+	return hashs, nil
 }
 
 // DelExpired 删除过期的 token

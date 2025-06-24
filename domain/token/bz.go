@@ -32,6 +32,7 @@ func (c Core) DelExpired(ctx context.Context, before time.Time) ([]string, error
 	return c.store.Token().DelExpired(ctx, before)
 }
 
+// Valid 验证 token 是否过期
 func (c Core) Valid(ctx context.Context, token string) error {
 	hash := sha256.Sum256([]byte(token))
 	var to Token
@@ -43,7 +44,20 @@ func (c Core) Valid(ctx context.Context, token string) error {
 		return reason.ErrDB.Withf("token get err[%s]", err.Error())
 	}
 	if to.ExpiredAt.Before(time.Now()) {
+		if to.Reason != "" {
+			return reason.ErrUnauthorizedToken.SetMsg(to.Reason)
+		}
 		return reason.ErrUnauthorizedToken.SetMsg("请重新登录")
 	}
 	return nil
+}
+
+// DelAllForUser 删除用户的所有 token
+func (c Core) DelAllForUser(ctx context.Context, scope, userID string) ([]string, error) {
+	return c.store.Token().DelAllForUser(ctx, scope, userID)
+}
+
+// Expire 主动过期
+func (c Core) Expire(ctx context.Context, scope string, userID string, reason string) ([]string, error) {
+	return c.store.Token().Expire(ctx, scope, userID, reason)
 }

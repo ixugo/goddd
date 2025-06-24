@@ -19,6 +19,9 @@ type TokenStorer interface {
 	Edit(context.Context, *Token, func(*Token), ...orm.QueryOption) error
 	Del(context.Context, *Token, ...orm.QueryOption) error
 	DelExpired(ctx context.Context, before time.Time) ([]string, error)
+	DelAllForUser(ctx context.Context, scope, userID string) ([]string, error)
+	// 主动过期的函数，记录过期的原因，对用户友好
+	Expire(ctx context.Context, scope, userID, reason string) ([]string, error)
 }
 
 // FindToken Paginated search
