@@ -44,7 +44,7 @@ func AuthMiddleware(secret string) gin.HandlerFunc {
 			return
 		}
 		if err := claims.Valid(); err != nil {
-			AbortWithStatusJSON(c, reason.ErrUnauthorizedToken)
+			AbortWithStatusJSON(c, reason.ErrUnauthorizedToken.SetMsg("请重新登录"))
 			return
 		}
 
@@ -97,7 +97,7 @@ func ParseToken(tokenString string, secret string) (*Claims, error) {
 	var claims Claims
 	token, err := jwt.ParseWithClaims(tokenString, &claims, func(token *jwt.Token) (interface{}, error) {
 		return []byte(secret), nil
-	})
+	}, jwt.WithoutClaimsValidation())
 	if err != nil {
 		return nil, err
 	}

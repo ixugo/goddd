@@ -47,19 +47,19 @@ func (a TokenAPI) findTokens(c *gin.Context, in *token.FindTokenInput) (any, err
 	return gin.H{"items": items, "total": total}, err
 }
 
-func (a TokenAPI) getToken(c *gin.Context, _ *struct{}) (any, error) {
-	tokenID, _ := strconv.Atoi(c.Param("id"))
-	return a.TokenCore.GetToken(c.Request.Context(), tokenID)
-}
+// func (a TokenAPI) getToken(c *gin.Context, _ *struct{}) (any, error) {
+// 	tokenID, _ := strconv.Atoi(c.Param("id"))
+// 	return a.TokenCore.GetToken(c.Request.Context(), tokenID)
+// }
 
-func (a TokenAPI) editToken(c *gin.Context, in *token.EditTokenInput) (any, error) {
-	tokenID, _ := strconv.Atoi(c.Param("id"))
-	return a.TokenCore.EditToken(c.Request.Context(), in, tokenID)
-}
+// func (a TokenAPI) editToken(c *gin.Context, in *token.EditTokenInput) (any, error) {
+// 	tokenID, _ := strconv.Atoi(c.Param("id"))
+// 	return a.TokenCore.EditToken(c.Request.Context(), in, tokenID)
+// }
 
-func (a TokenAPI) addToken(c *gin.Context, in *token.AddTokenInput) (any, error) {
-	return a.TokenCore.AddToken(c.Request.Context(), in)
-}
+// func (a TokenAPI) addToken(c *gin.Context, in *token.AddTokenInput) (any, error) {
+// 	return a.TokenCore.AddToken(c.Request.Context(), in)
+// }
 
 func (a TokenAPI) delToken(c *gin.Context, _ *struct{}) (any, error) {
 	tokenID, _ := strconv.Atoi(c.Param("id"))
