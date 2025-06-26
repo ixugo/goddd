@@ -34,7 +34,7 @@ func SetLevel(l string) {
 }
 
 // NewJSONLogger 创建JSON日志
-func NewJSONLogger(debug bool, w io.Writer) *zap.Logger {
+func NewJSONLogger(debug bool, w io.Writer, sampler Sampler) *zap.Logger {
 	config := zap.NewProductionEncoderConfig()
 	config.EncodeTime = zapcore.TimeEncoderOfLayout("2006-01-02 15:04:05.000")
 	config.NameKey = ""
@@ -49,7 +49,7 @@ func NewJSONLogger(debug bool, w io.Writer) *zap.Logger {
 		zapcore.NewJSONEncoder(config),
 		zapcore.NewMultiWriteSyncer(mulitWriteSyncer...),
 		Level,
-	), time.Second, 5, 5)
+	), time.Duration(sampler.TickSec)*time.Second, sampler.First, sampler.Thereafter)
 	return zap.New(core, zap.AddCaller())
 }
 
@@ -136,6 +136,14 @@ type Config struct {
 	RotationTime time.Duration
 	RotationSize int64  // 单位字节
 	Level        string // debug/info/warn/error
+
+	Sampler Sampler // 采样器
+}
+
+type Sampler struct {
+	TickSec    int `command:"时间窗口(秒)"`
+	First      int `command:"每个时间窗口内记录的前N条日志"`
+	Thereafter int `command:"超过N条后每M条记录一次"`
 }
 
 // func getLevel(level string) zapcore.Level {
@@ -163,16 +171,28 @@ func NewDefaultConfig() Config {
 		MaxAge:       7 * 24 * time.Hour,
 		RotationTime: 1 * time.Hour,
 		RotationSize: 1 * 1024 * 1024,
+		Sampler: Sampler{
+			TickSec:    1,
+			First:      5,
+			Thereafter: 5,
+		},
 	}
 }
 
 // SetupSlog 初始化日志
 func SetupSlog(cfg Config) (*slog.Logger, func()) {
 	SetLevel(cfg.Level)
+
+	if cfg.Sampler.TickSec <= 0 {
+		cfg.Sampler.TickSec = 1
+		cfg.Sampler.First = 5
+		cfg.Sampler.Thereafter = 5
+	}
+
 	r := rotatelog(cfg.Dir, cfg.MaxAge, cfg.RotationTime, cfg.RotationSize)
 	log := slog.New(
 		zapslog.NewHandler(
-			NewJSONLogger(cfg.Debug, r).Core(),
+			NewJSONLogger(cfg.Debug, r, cfg.Sampler).Core(),
 			zapslog.WithCaller(cfg.Debug),
 		),
 	)
