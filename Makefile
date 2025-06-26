@@ -21,6 +21,21 @@ confirm:
 title:
 	@echo -e "\033[34m$(content)\033[0m"
 
+.PHONY: rename
+## rename: clone 后的模板，需要更新 module 名
+rename:
+	@if [ -z "$(name)" ]; then \
+		echo "错误: 请提供 name 参数，例如: make rename name=github.com/name/project"; \
+		exit 1; \
+	fi
+	@rm -rf domain/* pkg/*
+	@echo "正在替换模块名为: $(name)"
+	@find . -type f -name "*.go" -exec sed -i.bak 's|github\.com/ixugo/goddd/internal|$(name)/internal|g' {} \;
+	@sed -i.bak 's|github\.com/ixugo/goddd|$(name)|g' go.mod
+	@find . -name "*.bak" -delete
+	@go mod tidy
+	@echo -e "\n模块名替换完成"
+
 # ==================================================================================== #
 # DEVELOPMENT
 # ==================================================================================== #

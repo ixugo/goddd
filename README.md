@@ -36,7 +36,10 @@ Supports [event bus/transaction messages](github.com/ixugo/nsqite).
 3. `cd goddd && go build -o goddd ./cmd/server && ./goddd`
 4. Open a new terminal and access `curl http://localhost:8080/health`
 
-Note: When running in the editor, specify the output directory as the project root directory.
+5. Modify the module package name:
+   `make rename name=github.com/name/project`
+   Replace `name` with your actual module name.
+
 
 
 
@@ -76,6 +79,7 @@ Best Practices for This Project: https://github.com/gowvp/gb28181
 3. The store is the database operation module, dependent on models with dependency inversion towards the core, avoiding the need to define models at each layer.
 
 4. Input/output parameters in the API layer may directly depend on models defined in the core layer, with input and output models distinguished by appending `Input/Output` to the model names.
+
 
 ## Request Parameter Wrapping
 

@@ -56,7 +56,10 @@ GoDDD 目标是:
 3. `cd goddd && go build -o goddd ./cmd/server && ./goddd`
 4. 新开一个终端访问 `curl http://localhost:8080/health`
 
-注意: 用编辑器运行时，要指定输出目录为项目根目录
+5. 修改模块包名
+`make rename name=github.com/name/project`
+将 name 替换成实际的模块名
+
 
 
 ## 引用文章
