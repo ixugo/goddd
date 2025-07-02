@@ -269,6 +269,48 @@ new
 	// Business processing
 ```
 
+### hook.UseTimer Timer with flexible intervals
+
+old
+
+```go
+func scheduleTask() {
+	for {
+		// Business processing
+		processTask()
+
+		// Complex time calculation logic mixed with business logic
+		now := time.Now()
+		nextRun := time.Date(now.Year(), now.Month(), now.Day()+1, 2, 0, 0, 0, now.Location()) // Run at 2 AM tomorrow
+		if nextRun.Before(now) {
+			nextRun = nextRun.Add(24 * time.Hour)
+		}
+		time.Sleep(nextRun.Sub(now))
+	}
+}
+```
+
+new
+
+```go
+func scheduleTask(ctx context.Context) {
+	hook.UseTimer(ctx, processTask, func() time.Duration {
+		return hook.NextTimeTomorrow(2, 0, 0) // Run at 2 AM every day
+	})
+}
+
+// Or for immediate execution with different intervals
+func scheduleTaskWithFirstRun(ctx context.Context) {
+	nextTime := hook.NextTimeWithFirst(
+		time.Second,        // Run immediately (after 1 second)
+		func() time.Duration {
+			return 10 * time.Minute // Then run every 10 minutes
+		},
+	)
+	hook.UseTimer(ctx, processTask, nextTime)
+}
+```
+
 **Check out the source code in pkg/hook for more hooks.**
 
 

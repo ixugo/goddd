@@ -318,9 +318,47 @@ new
 
 避免将文件全部读取到内存，按照 8k 缓存分块计算文件的 md5
 
+### hook.UseTimer 灵活间隔的定时器
 
+old
 
+```go
+func scheduleTask() {
+	for {
+		// 业务处理
+		processTask()
 
+		// 复杂的时间计算逻辑夹杂在业务中
+		now := time.Now()
+		nextRun := time.Date(now.Year(), now.Month(), now.Day()+1, 2, 0, 0, 0, now.Location()) // 明天凌晨2点执行
+		if nextRun.Before(now) {
+			nextRun = nextRun.Add(24 * time.Hour)
+		}
+		time.Sleep(nextRun.Sub(now))
+	}
+}
+```
+
+new
+
+```go
+func scheduleTask(ctx context.Context) {
+	hook.UseTimer(ctx, processTask, func() time.Duration {
+		return hook.NextTimeTomorrow(2, 0, 0) // 每天凌晨2点执行
+	})
+}
+
+// 或者立即执行一次，然后按不同间隔执行
+func scheduleTaskWithFirstRun(ctx context.Context) {
+	nextTime := hook.NextTimeWithFirst(
+		time.Second,        // 立即执行（1秒后）
+		func() time.Duration {
+			return 10 * time.Minute // 之后每10分钟执行一次
+		},
+	)
+	hook.UseTimer(ctx, processTask, nextTime)
+}
+```
 
 **更多 hook 直接看 pkg/hook 源码吧**
 
