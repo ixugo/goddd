@@ -1,10 +1,8 @@
-// Author: xiexu
-// Date: 2022-09-20
-
 package server
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"sync"
 	"time"
@@ -26,6 +24,7 @@ type Server struct {
 	notify          chan error
 	shutdownTimeout time.Duration
 	once            sync.Once
+	lis             net.Listener
 }
 
 // New 初始化并启动路由
@@ -54,14 +53,22 @@ func New(handler http.Handler, opts ...Option) *Server {
 
 func (s *Server) Start() {
 	s.once.Do(func() {
-		s.notify <- s.server.ListenAndServe()
+		if s.lis != nil {
+			s.notify <- s.server.Serve(s.lis)
+		} else {
+			s.notify <- s.server.ListenAndServe()
+		}
 		close(s.notify)
 	})
 }
 
 func (s *Server) StartTLS(certFile, keyFile string) {
 	s.once.Do(func() {
-		s.notify <- s.server.ListenAndServeTLS(certFile, keyFile)
+		if s.lis != nil {
+			s.notify <- s.server.ServeTLS(s.lis, certFile, keyFile)
+		} else {
+			s.notify <- s.server.ListenAndServeTLS(certFile, keyFile)
+		}
 		close(s.notify)
 	})
 }

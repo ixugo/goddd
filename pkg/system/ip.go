@@ -87,7 +87,6 @@ func udpPortUsed(port int) bool {
 	addr, _ := net.ResolveUDPAddr("udp", net.JoinHostPort("", strconv.Itoa(port)))
 	conn, err := net.ListenUDP("udp", addr)
 	if err != nil {
-		fmt.Println(err)
 		return true
 	}
 	_ = conn.Close()

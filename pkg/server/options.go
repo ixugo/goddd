@@ -1,6 +1,3 @@
-// Author: xiexu
-// Date: 2022-09-20
-
 package server
 
 import (
@@ -54,5 +51,11 @@ func DefaultPrintln() Option {
 func ErrorLog(log *log.Logger) Option {
 	return func(s *Server) {
 		s.server.ErrorLog = log
+	}
+}
+
+func Listener(lis net.Listener) Option {
+	return func(s *Server) {
+		s.lis = lis
 	}
 }
