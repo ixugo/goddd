@@ -12,12 +12,11 @@ import (
 
 // Claims ...
 type Claims struct {
-	UID        int
-	Username   string
-	GroupID    int
-	GroupLevel int8
-	Role       string
-	Level      int
+	UID      int
+	Username string
+	GroupID  int
+	Role     string
+	Level    int
 	jwt.RegisteredClaims
 }
 
@@ -26,6 +25,7 @@ const (
 	token      = "token"
 	username   = "username"
 	groupLevel = "group_level"
+	level      = "level"
 	role       = "role"
 )
 
@@ -51,7 +51,7 @@ func AuthMiddleware(secret string) gin.HandlerFunc {
 		c.Set(uid, claims.UID)
 		c.Set(username, claims.Username)
 		c.Set(token, auth)
-		c.Set(groupLevel, claims.GroupLevel)
+		c.Set(level, claims.Level)
 		c.Next()
 	}
 }
@@ -71,10 +71,10 @@ func GetRole(c *gin.Context) string {
 	return c.GetString(role)
 }
 
-func GetGroupLevel(c *gin.Context) int8 {
-	v, exist := c.Get(groupLevel)
+func GetLevel(c *gin.Context) int {
+	v, exist := c.Get(level)
 	if exist {
-		return v.(int8)
+		return v.(int)
 	}
 	return 12
 }
@@ -112,14 +112,13 @@ func ParseToken(tokenString string, secret string) (*Claims, error) {
 }
 
 type TokenInput struct {
-	UID        int
-	GroupID    int
-	GroupLevel int8
-	Username   string
-	Secret     string
-	Role       string
-	Level      int
-	Exires     time.Duration
+	UID      int
+	GroupID  int
+	Username string
+	Secret   string
+	Role     string
+	Level    int
+	Exires   time.Duration
 }
 
 // NewToken 创建 token
@@ -129,11 +128,10 @@ func NewToken(input TokenInput) (string, error) {
 	}
 	now := time.Now()
 	claims := Claims{
-		UID:        input.UID,
-		Username:   input.Username,
-		GroupID:    input.GroupID,
-		GroupLevel: input.GroupLevel,
-		Level:      input.Level,
+		UID:      input.UID,
+		Username: input.Username,
+		GroupID:  input.GroupID,
+		Level:    input.Level,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(now.Add(input.Exires)), // 失效时间
 			IssuedAt:  jwt.NewNumericDate(now),                   // 签发时间

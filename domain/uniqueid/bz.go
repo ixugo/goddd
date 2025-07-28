@@ -16,15 +16,32 @@ import (
 	"github.com/ixugo/goddd/pkg/orm"
 )
 
+const (
+	// 删除 o 和 i 的字符集，避免视觉混淆
+	LetterBytes36NoOI = "abcdefghjklmnpqrstuvwxyz0123456789"
+
+	LetterBytes72      = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	LetterBytes36      = "abcdefghijklmnopqrstuvwxyz0123456789" // default
+	LetterBytes36Upper = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+)
+
 type IDManager struct {
 	store UniqueIDStorer
 	// TODO: 可以初始化时读取数据库内的数量，判断重复因子，从而减少尝试或更换策略
+
+	letterBytes string // 随机字符串字符集
 }
 
 func NewIDManager(store UniqueIDStorer) *IDManager {
 	return &IDManager{
-		store: store,
+		store:       store,
+		letterBytes: LetterBytes36,
 	}
+}
+
+// SetLetterBytes 设置随机字符串字符集
+func (m *IDManager) SetLetterBytes(letterBytes string) {
+	m.letterBytes = letterBytes
 }
 
 // UniqueID 获取唯一 id
@@ -36,7 +53,7 @@ func (m *IDManager) UniqueID(prefix string, length int) string {
 	for i := range 10 {
 		// 生成自定义长度随机数，通过数据库主键来防止碰撞，碰撞后再次尝试
 		for range 36 {
-			id := prefix + GenerateRandomString(length+i)
+			id := prefix + GenerateRandomString(m.letterBytes, length+i)
 			if err := m.store.Add(context.Background(), &UniqueID{ID: id}); err != nil {
 				slog.Error("UniqueID", "err", err)
 				continue
@@ -55,9 +72,7 @@ func (m *IDManager) UndoUniqueID(id string) error {
 }
 
 // GenerateRandomString 生成随机字符串
-// 采用全小写+数字，有识别需求，可以删除 o/0，i/l 之一
-func GenerateRandomString(length int) string {
-	const letterBytes = "abcdefghijklmnopqrstuvwxyz1234567890"
+func GenerateRandomString(letterBytes string, length int) string {
 	lettersLength := big.NewInt(int64(len(letterBytes)))
 	result := make([]byte, length)
 	for i := 0; i < length; i++ {
