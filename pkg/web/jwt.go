@@ -118,13 +118,13 @@ type TokenInput struct {
 	Secret   string
 	Role     string
 	Level    int
-	Exires   time.Duration
+	Expires  time.Duration
 }
 
 // NewToken 创建 token
 func NewToken(input TokenInput) (string, error) {
-	if input.Exires <= 0 {
-		input.Exires = 2 * time.Hour
+	if input.Expires <= 0 {
+		input.Expires = 2 * time.Hour
 	}
 	now := time.Now()
 	claims := Claims{
@@ -133,9 +133,9 @@ func NewToken(input TokenInput) (string, error) {
 		GroupID:  input.GroupID,
 		Level:    input.Level,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(now.Add(input.Exires)), // 失效时间
-			IssuedAt:  jwt.NewNumericDate(now),                   // 签发时间
-			Issuer:    "xx@golang.space",                         // 签发人
+			ExpiresAt: jwt.NewNumericDate(now.Add(input.Expires)), // 失效时间
+			IssuedAt:  jwt.NewNumericDate(now),                    // 签发时间
+			Issuer:    "xx@golang.space",                          // 签发人
 		},
 		Role: input.Role, // 角色
 	}

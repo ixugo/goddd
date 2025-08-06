@@ -131,12 +131,12 @@ func NewEngine(db *gorm.DB) Engine {
 }
 
 var (
-	ErrRevordNotFound = gorm.ErrRecordNotFound
+	ErrRecordNotFound = gorm.ErrRecordNotFound
 	ErrDuplicatedKey  = gorm.ErrDuplicatedKey
 )
 
 func IsErrRecordNotFound(err error) bool {
-	return errors.Is(err, ErrRevordNotFound)
+	return errors.Is(err, ErrRecordNotFound)
 }
 
 func IsDuplicatedKey(err error) bool {
