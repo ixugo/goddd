@@ -34,15 +34,15 @@ func main() {
 
 	// 初始化配置
 	var bc conf.Bootstrap
-	filedir, _ := system.Abs(*configDir)
-	_ = os.MkdirAll(filedir, 0o755)
-	filePath := filepath.Join(filedir, "config.toml")
+	fileDir, _ := system.Abs(*configDir)
+	_ = os.MkdirAll(fileDir, 0o755)
+	filePath := filepath.Join(fileDir, "config.toml")
 	if err := conf.SetupConfig(&bc, filePath); err != nil {
 		panic(err)
 	}
 	bc.Debug = !getBuildRelease()
 	bc.BuildVersion = buildVersion
-	bc.ConfigDir = filedir
+	bc.ConfigDir = fileDir
 	bc.ConfigPath = filePath
 
 	{

@@ -26,11 +26,11 @@ func (d Token) Expire(ctx context.Context, scope string, userID string, reason s
 		return nil, err
 	}
 
-	hashs := make([]string, len(expiredTokens))
+	hashes := make([]string, len(expiredTokens))
 	for i, t := range expiredTokens {
-		hashs[i] = hex.EncodeToString(t.Hash)
+		hashes[i] = hex.EncodeToString(t.Hash)
 	}
-	return hashs, nil
+	return hashes, nil
 }
 
 // NewToken instance object
@@ -89,11 +89,11 @@ func (d Token) DelAllForUser(ctx context.Context, scope, userID string) ([]strin
 		return nil, result.Error
 	}
 
-	hashs := make([]string, len(deletedTokens))
+	hashes := make([]string, len(deletedTokens))
 	for i, t := range deletedTokens {
-		hashs[i] = hex.EncodeToString(t.Hash)
+		hashes[i] = hex.EncodeToString(t.Hash)
 	}
-	return hashs, nil
+	return hashes, nil
 }
 
 // DelExpired 删除过期的 token
@@ -105,9 +105,9 @@ func (d Token) DelExpired(ctx context.Context, before time.Time) ([]string, erro
 		return nil, result.Error
 	}
 
-	hashs := make([]string, len(deletedTokens))
+	hashes := make([]string, len(deletedTokens))
 	for i, t := range deletedTokens {
-		hashs[i] = hex.EncodeToString(t.Hash)
+		hashes[i] = hex.EncodeToString(t.Hash)
 	}
-	return hashs, nil
+	return hashes, nil
 }
