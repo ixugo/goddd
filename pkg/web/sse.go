@@ -1,13 +1,11 @@
 package web
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -112,24 +110,6 @@ type EventMessage struct {
 	id    string
 	event string
 	data  string
-}
-
-func (m *EventMessage) prepareMessage() []byte {
-	var data bytes.Buffer
-	if len(m.id) > 0 {
-		data.WriteString(fmt.Sprintf("id: %s\n", strings.Replace(m.id, "\n", "", -1)))
-	}
-	if len(m.event) > 0 {
-		data.WriteString(fmt.Sprintf("event: %s\n", strings.Replace(m.event, "\n", "", -1)))
-	}
-	if len(m.data) > 0 {
-		lines := strings.Split(m.data, "\n")
-		for _, line := range lines {
-			data.WriteString(fmt.Sprintf("data: %s\n", line))
-		}
-	}
-	data.WriteString("\n")
-	return data.Bytes()
 }
 
 func NewEventMessage(event string, data map[string]any) *EventMessage {

@@ -45,7 +45,8 @@ func SetupPProf(r *gin.Engine, ips *[]string) {
 	debug.GET("/vars", gin.WrapH(expvar.Handler()))
 }
 
+// SetupMutexProfile 启用互斥锁采样，rate=1 开启采样, rate<=0 关闭采样
 func SetupMutexProfile(rate int) {
-	runtime.SetBlockProfileRate(1)
-	runtime.SetMutexProfileFraction(1)
+	runtime.SetBlockProfileRate(rate)
+	runtime.SetMutexProfileFraction(rate)
 }

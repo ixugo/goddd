@@ -21,12 +21,11 @@ type Claims struct {
 }
 
 const (
-	uid        = "uid"
-	token      = "token"
-	username   = "username"
-	groupLevel = "group_level"
-	level      = "level"
-	role       = "role"
+	uid      = "uid"
+	token    = "token"
+	username = "username"
+	level    = "level"
+	role     = "role"
 )
 
 // AuthMiddleware 鉴权

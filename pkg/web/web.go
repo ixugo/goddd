@@ -107,12 +107,13 @@ func (f PagerFilter) Limit() int {
 	return f.Size
 }
 
-func Limit(v, min, max int) int {
-	if v < min {
-		return min
+// Limit 限制数值在 min 和 max 之间
+func Limit(v, minV, maxV int) int {
+	if v < minV {
+		return minV
 	}
-	if v > max {
-		return max
+	if v > maxV {
+		return maxV
 	}
 	return v
 }

@@ -2,7 +2,7 @@ package web
 
 import (
 	"bytes"
-	"crypto/sha1"
+	"crypto/sha1" // nolint
 	"encoding/hex"
 	"log/slog"
 	"net/http"
@@ -40,6 +40,7 @@ func CacheControlMaxAge(millisecond int) gin.HandlerFunc {
 	}
 }
 
+// EtagHandler 添加 ETag 头，用于缓存静态资源
 func EtagHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		bw := EtagWriter{

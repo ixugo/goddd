@@ -104,11 +104,11 @@ func AbortWithStatusJSON(c ResponseWriter, err error, fn ...WithData) {
 }
 
 // WarpH 让函数更专注于业务，一般入参和出参应该是指针类型
-// 没有入参时，应该使用 struct{}
+// 没有入参时，应该使用 *struct{}
 func WarpH[I any, O any](fn func(*gin.Context, *I) (O, error)) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var in I
-		if unsafe.Sizeof(in) != 0 {
+		if unsafe.Sizeof(in) > 0 { // nolint
 			switch c.Request.Method {
 			case http.MethodGet:
 				if err := c.ShouldBindQuery(&in); err != nil {

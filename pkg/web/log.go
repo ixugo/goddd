@@ -21,11 +21,11 @@ func (w *bodyLogWriter) Unwrap() http.ResponseWriter {
 }
 
 func (w *bodyLogWriter) Write(b []byte) (int, error) {
-	max := len(b)
-	if max > 100 {
-		max = 100
+	maxLen := len(b)
+	if maxLen > 100 {
+		maxLen = 100
 	}
-	w.body.Write(b[:max])
+	w.body.Write(b[:maxLen])
 	return w.ResponseWriter.Write(b)
 }
 

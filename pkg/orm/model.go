@@ -93,11 +93,12 @@ func (t *Time) UnmarshalJSON(b []byte) error {
 	l := len(b)
 	s := unsafe.String(unsafe.SliceData(b), l)
 	if v, err := strconv.Atoi(s); err == nil {
-		if l == 10 {
+		switch l {
+		case 10:
 			*t = Time{time.Unix(int64(v), 0)}
-		} else if l == 13 {
+		case 13:
 			*t = Time{time.UnixMilli(int64(v))}
-		} else {
+		default:
 			return json.Unmarshal(b, &t.Time)
 		}
 		return nil
@@ -167,12 +168,12 @@ func (t *Time) Scan(input interface{}) error {
 }
 
 func (t Time) MarshalJSON() ([]byte, error) {
-	return []byte(`"` + t.Format(time.DateTime) + `"`), nil
+	return []byte(`"` + t.Time.Format(time.DateTime) + `"`), nil
 }
 
 func (t Time) Value() (driver.Value, error) {
 	if t.Time.IsZero() {
-		return nil, nil
+		return nil, nil // nolint
 	}
 	return t.Time, nil
 }
@@ -182,8 +183,8 @@ type Tabler interface {
 	TableName() string
 }
 
-// JsonUnmarshal 将 input 反序列化到 obj 上
-func JsonUnmarshal(input, obj any) error {
+// JSONUnmarshal 将 input 反序列化到 obj 上
+func JSONUnmarshal(input, obj any) error {
 	if v, ok := input.([]byte); ok {
 		return json.Unmarshal(v, obj)
 	}

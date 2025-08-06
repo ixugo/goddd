@@ -11,11 +11,11 @@ const (
 )
 
 // ErrPrintf error output
-func ErrPrintf(format string, a ...interface{}) {
+func ErrPrintf(format string, a ...any) {
 	fmt.Printf(Red+format+Reset, a...)
 }
 
 // WarnPrintf warn output
-func WarnPrintf(format string, a ...interface{}) {
+func WarnPrintf(format string, a ...any) {
 	fmt.Printf(Yellow+format+Reset, a...)
 }

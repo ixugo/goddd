@@ -175,7 +175,7 @@ func IP2Info(ip string) (Info, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		return Info{}, fmt.Errorf(resp.Status)
+		return Info{}, fmt.Errorf("HTTP GET Err[%s]", resp.Status)
 	}
 	var out Info
 	reader := transform.NewReader(resp.Body, simplifiedchinese.GB18030.NewDecoder())
