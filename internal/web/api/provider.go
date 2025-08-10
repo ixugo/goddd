@@ -56,5 +56,6 @@ func NewHTTPHandler(uc *Usecase) http.Handler {
 
 // NewUniqueID 生成唯一 id
 func NewUniqueID(db *gorm.DB) uniqueid.Core {
-	return uniqueid.NewCore(uniqueiddb.NewDB(db).AutoMigrate(orm.EnabledAutoMigrate), 6)
+	store := uniqueiddb.NewDB(db).AutoMigrate(orm.EnabledAutoMigrate)
+	return uniqueid.NewCore(store, 6)
 }

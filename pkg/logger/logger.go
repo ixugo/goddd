@@ -191,11 +191,12 @@ func SetupSlog(cfg Config) (*slog.Logger, func()) {
 
 	r := rotatelog(cfg.Dir, cfg.MaxAge, cfg.RotationTime, cfg.RotationSize)
 	log := slog.New(
-		zapslog.NewHandler(
+		newSlog(
 			NewJSONLogger(cfg.Debug, r, cfg.Sampler).Core(),
 			zapslog.WithCaller(cfg.Debug),
 		),
 	)
+
 	if cfg.ID != "" {
 		log = log.With("serviceID", cfg.ID)
 	}

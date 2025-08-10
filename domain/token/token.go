@@ -52,7 +52,7 @@ func (c Core) GetToken(ctx context.Context, id int) (*Token, error) {
 func (c Core) AddToken(ctx context.Context, in *AddTokenInput) (*Token, error) {
 	var out Token
 	if err := copier.Copy(&out, in); err != nil {
-		slog.Error("Copy", "err", err)
+		slog.ErrorContext(ctx, "Copy", "err", err)
 	}
 	out.UpdatedAt = orm.Now()
 	if err := c.store.Token().Add(ctx, &out); err != nil {
@@ -66,7 +66,7 @@ func (c Core) EditToken(ctx context.Context, in *EditTokenInput, id int) (*Token
 	var out Token
 	if err := c.store.Token().Edit(ctx, &out, func(b *Token) {
 		if err := copier.Copy(b, in); err != nil {
-			slog.Error("Copy", "err", err)
+			slog.ErrorContext(ctx, "Copy", "err", err)
 		}
 	}, orm.Where("id=?", id)); err != nil {
 		return nil, reason.ErrDB.Withf(`Edit err[%s]`, err.Error())

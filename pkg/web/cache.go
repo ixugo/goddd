@@ -59,7 +59,7 @@ func EtagHandler() gin.HandlerFunc {
 		}
 		ctx.Header("ETag", etag)
 		if _, err := bw.ResponseWriter.Write(buf); err != nil {
-			slog.Error("write err", "err", err)
+			slog.ErrorContext(ctx.Request.Context(), "write err", "err", err)
 		}
 	}
 }

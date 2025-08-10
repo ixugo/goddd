@@ -1,10 +1,16 @@
 package logger
 
-import "testing"
+import (
+	"context"
+	"log/slog"
+	"testing"
+)
 
 func TestSlog(t *testing.T) {
 	log, _ := SetupSlog(Config{
-		Debug: false,
+		Debug: true,
 	})
-	log.Info("Hello World")
+
+	ctx := WithAttr(context.Background(), slog.String("key", "value"))
+	log.InfoContext(ctx, "Hello World")
 }

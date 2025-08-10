@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/ixugo/goddd/pkg/logger"
 )
 
 type bodyLogWriter struct {
@@ -32,16 +33,19 @@ func (w *bodyLogWriter) Write(b []byte) (int, error) {
 // Logger 第二个参数是否记录 请求与响应的 body。
 func Logger(log *slog.Logger, recordBodyFn func(*gin.Context) bool) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		traceID := uuid.NewString()
+		c.Request = c.Request.WithContext(logger.WithAttr(c.Request.Context(), slog.String("trace_id", traceID)))
+
 		var reqBody string
 		var blw bodyLogWriter
 
-		recordBody := recordBodyFn(c)
+		recordBody := recordBodyFn != nil && recordBodyFn(c)
 
 		if recordBody {
 			// 请求参数
 			raw, err := c.GetRawData()
 			if err != nil {
-				slog.Error("logger", "err", err)
+				slog.ErrorContext(c.Request.Context(), "logger", "err", err)
 			}
 			maxL := len(raw)
 			if maxL > 100 {
@@ -59,8 +63,8 @@ func Logger(log *slog.Logger, recordBodyFn func(*gin.Context) bool) gin.HandlerF
 		}
 
 		now := time.Now()
-		// traceid := trace.SpanContextFromContext(c.Request.Context()).TraceID().String()
-		SetTraceID(c, uuid.NewString())
+
+		SetTraceID(c, traceID)
 		c.Next()
 
 		code := c.Writer.Status()
@@ -72,13 +76,12 @@ func Logger(log *slog.Logger, recordBodyFn func(*gin.Context) bool) gin.HandlerF
 			"remoteaddr", c.ClientIP(),
 			"statuscode", code,
 			"since", time.Since(now).Milliseconds(),
-			"trace_id", MustTraceID(c),
 		}
 		if recordBody {
 			out = append(out, []any{"request_body", reqBody, "response_body", blw.body.String()}...)
 		}
 		if code >= 200 && code < 400 {
-			log.Info("OK", out...)
+			log.InfoContext(c.Request.Context(), "OK", out...)
 			return
 		}
 		// 约定: 返回给客户端的错误，记录的 key 为 responseErr
@@ -86,6 +89,6 @@ func Logger(log *slog.Logger, recordBodyFn func(*gin.Context) bool) gin.HandlerF
 		if !(code == 404 || code == 401) {
 			out = append(out, []any{"err", errStr})
 		}
-		log.Warn("Bad", out...)
+		log.WarnContext(c.Request.Context(), "Bad", out...)
 	}
 }

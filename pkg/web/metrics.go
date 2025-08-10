@@ -25,10 +25,10 @@ func Metrics() gin.HandlerFunc {
 	urls := expvar.NewMap("requestURLs")
 	statusCodes := expvar.NewMap("statusCodes")
 	// 协程数量
-	go func() {
-		queue.NewCirQueue[expvar.Int](10)
-		// queue.CirQueue
-	}()
+	// go func() {
+	// queue.NewCirQueue[expvar.Int](10)
+	// queue.CirQueue
+	// }()
 
 	return func(c *gin.Context) {
 		totalRequests.Add(1)
@@ -39,7 +39,7 @@ func Metrics() gin.HandlerFunc {
 
 		status := c.Writer.Status()
 		if status != 404 {
-			urls.Add(c.Request.RequestURI, 1)
+			urls.Add(c.Request.Method+" "+c.FullPath(), 1)
 		}
 		statusCodes.Add(strconv.Itoa(status), 1)
 	}
