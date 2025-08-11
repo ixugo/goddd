@@ -20,7 +20,7 @@
   # 日志存储目录，不能使用特殊符号
   Dir = './logs'
   # 记录级别 debug/info/warn/error
-  Level = 'info'
+  Level = 'debug'
   # 保留日志多久，超过时间自动删除
   MaxAge = '744h0m0s'
   # 多久时间，分割一个新的日志文件

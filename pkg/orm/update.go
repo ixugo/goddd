@@ -52,7 +52,7 @@ func OrderBy(value any) QueryOption {
 // Universal 通用增删改查
 type Universal[T any] interface {
 	Get(context.Context, *T, ...QueryOption) error
-	Edit(context.Context, *T, func(*T), ...QueryOption) error
+	Edit(context.Context, *T, func(*T) error, ...QueryOption) error
 	Del(context.Context, *T, ...QueryOption) error
 	Add(context.Context, *T) error
 	Find(context.Context, *[]*T, Pager, ...QueryOption) (int64, error)
@@ -68,7 +68,7 @@ type Type[T any] struct {
 	db *gorm.DB
 }
 
-func NewUniversal[T any](db *gorm.DB) Universal[T] {
+func NewType[T any](db *gorm.DB) Type[T] {
 	return Type[T]{db: db}
 }
 
@@ -92,8 +92,8 @@ func FirstWithContext(ctx context.Context, db *gorm.DB, out any, opts ...QueryOp
 }
 
 // Update 通用更新
-func (t Type[T]) Edit(ctx context.Context, model *T, changeFn func(*T), opts ...QueryOption) error {
-	return UpdateWithContext(ctx, t.db, model, changeFn, opts...)
+func (t Type[T]) Edit(ctx context.Context, model *T, changeFn func(*T) error, opts ...QueryOption) error {
+	return UpdateWithContext2(ctx, t.db, model, changeFn, opts...)
 }
 
 func (t Type[T]) Add(ctx context.Context, model *T) error {
@@ -119,6 +119,27 @@ func UpdateWithContext[T any](ctx context.Context, db *gorm.DB, model *T, change
 			}
 		}
 		changeFn(model)
+		return tx.Save(model).Error
+	})
+}
+
+func UpdateWithContext2[T any](ctx context.Context, db *gorm.DB, model *T, changeFn func(*T) error, opts ...QueryOption) error {
+	if len(opts) == 0 {
+		panic("where is empty")
+	}
+	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		{
+			tx := tx.Clauses(clause.Locking{Strength: "UPDATE"})
+			for _, opt := range opts {
+				tx = opt(tx)
+			}
+			if err := tx.First(model).Error; err != nil {
+				return err
+			}
+		}
+		if err := changeFn(model); err != nil {
+			return err
+		}
 		return tx.Save(model).Error
 	})
 }

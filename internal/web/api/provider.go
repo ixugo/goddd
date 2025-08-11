@@ -37,7 +37,7 @@ func NewHTTPHandler(uc *Usecase) http.Handler {
 		cfg.HTTP.JwtSecret = orm.GenerateRandomString(32)
 	}
 	// 如果不处于调试模式，将 Gin 设置为发布模式
-	if !cfg.Debug {
+	if !uc.Conf.Debug {
 		gin.SetMode(gin.ReleaseMode)
 	}
 	g := gin.New()

@@ -37,6 +37,7 @@ func main() {
 	fileDir, _ := system.Abs(*configDir)
 	_ = os.MkdirAll(fileDir, 0o755)
 	filePath := filepath.Join(fileDir, "config.toml")
+	configIsNotExistWrite(filePath)
 	if err := conf.SetupConfig(&bc, filePath); err != nil {
 		panic(err)
 	}
@@ -56,4 +57,13 @@ func main() {
 	}
 
 	app.Run(&bc)
+}
+
+// configIsNotExistWrite 配置文件不存在时，回写配置
+func configIsNotExistWrite(path string) {
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		if err := conf.WriteConfig(conf.DefaultConfig(), path); err != nil {
+			system.ErrPrintf("WriteConfig", "err", err)
+		}
+	}
 }

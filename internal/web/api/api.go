@@ -26,15 +26,18 @@ func setupRouter(r *gin.Engine, uc *Usecase) {
 			c.AbortWithStatus(http.StatusInternalServerError)
 		}),
 		web.Metrics(),
-		web.Logger(slog.Default(), func(_ *gin.Context) bool {
-			// true:记录请求响应报文
-			return uc.Conf.Server.Debug
+		web.Logger(),
+		// debug 环境中配合 debug 日志级别，记录请求体与响应体
+		web.LoggerWithBody(web.DefaultBodyLimit, func(_ *gin.Context) bool {
+			// true: 表示忽略记录日志
+			// !debug 表示非调试环境不记录
+			return !uc.Conf.Debug
 		}),
 	)
 	go web.CountGoroutines(10*time.Minute, 20)
 
 	auth := web.AuthMiddleware(uc.Conf.Server.HTTP.JwtSecret)
-	r.GET("/health", web.WarpH(uc.getHealth))
+	r.Any("/health", web.WarpH(uc.getHealth))
 	r.GET("/app/metrics/api", web.WarpH(uc.getMetricsAPI))
 
 	versionapi.Register(r, uc.Version, auth)
@@ -60,8 +63,8 @@ type getMetricsAPIOutput struct {
 	RealTimeRequests int64  `json:"real_time_requests"` // 实时请求数
 	TotalRequests    int64  `json:"total_requests"`     // 总请求数
 	TotalResponses   int64  `json:"total_responses"`    // 总响应数
-	RequestTop10     []KV   `json:"request_top10"`      // 请求TOP10
-	StatusCodeTop10  []KV   `json:"status_code_top10"`  // 状态码TOP10
+	RequestTop       []KV   `json:"request_top"`        // 请求TOP
+	StatusCodeTop    []KV   `json:"status_code_top"`    // 状态码TOP
 	Goroutines       any    `json:"goroutines"`         // 协程数量
 	NumGC            uint32 `json:"num_gc"`             // gc 次数
 	SysAlloc         uint64 `json:"sys_alloc"`          // 内存占用
@@ -74,8 +77,8 @@ func (uc *Usecase) getMetricsAPI(_ *gin.Context, _ *struct{}) (*getMetricsAPIOut
 	resps := expvar.Get("responses").(*expvar.Int).Value()
 	urls := expvar.Get(`requestURLs`).(*expvar.Map)
 	status := expvar.Get(`statusCodes`).(*expvar.Map)
-	u := sortExpvarMap(urls, 10)
-	s := sortExpvarMap(status, 10)
+	u := sortExpvarMap(urls, 15)
+	s := sortExpvarMap(status, 15)
 	g := expvar.Get("goroutine_num").(expvar.Func)
 
 	var stats runtime.MemStats
@@ -85,8 +88,8 @@ func (uc *Usecase) getMetricsAPI(_ *gin.Context, _ *struct{}) (*getMetricsAPIOut
 		RealTimeRequests: req,
 		TotalRequests:    reqs,
 		TotalResponses:   resps,
-		RequestTop10:     u,
-		StatusCodeTop10:  s,
+		RequestTop:       u,
+		StatusCodeTop:    s,
 		Goroutines:       g(),
 		NumGC:            stats.NumGC,
 		SysAlloc:         stats.Sys,

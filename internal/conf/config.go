@@ -14,8 +14,7 @@ type Bootstrap struct {
 }
 
 type Server struct {
-	Debug bool
-	HTTP  ServerHTTP `comment:"对外提供的服务，建议由 nginx 代理"` // HTTP服务器
+	HTTP ServerHTTP `comment:"对外提供的服务，建议由 nginx 代理"` // HTTP服务器
 }
 
 type ServerHTTP struct {

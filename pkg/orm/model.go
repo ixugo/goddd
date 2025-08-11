@@ -94,6 +94,8 @@ func (t *Time) UnmarshalJSON(b []byte) error {
 	s := unsafe.String(unsafe.SliceData(b), l)
 	if v, err := strconv.Atoi(s); err == nil {
 		switch l {
+		case 1:
+			*t = Time{}
 		case 10:
 			*t = Time{time.Unix(int64(v), 0)}
 		case 13:
@@ -104,7 +106,13 @@ func (t *Time) UnmarshalJSON(b []byte) error {
 		return nil
 	}
 
-	date, err := time.ParseInLocation(time.DateTime, strings.Trim(string(b), `"`), time.Local)
+	str := strings.Trim(s, `"`)
+	if str == "" {
+		*t = Time{}
+		return nil
+	}
+
+	date, err := time.ParseInLocation(time.DateTime, str, time.Local)
 	if err == nil {
 		t.Time = date
 		return nil
@@ -182,6 +190,9 @@ func (t Time) Value() (driver.Value, error) {
 type Tabler interface {
 	TableName() string
 }
+
+// Deprecated: 请使用 JSONUnmarshal
+var JsonUnmarshal = JSONUnmarshal
 
 // JSONUnmarshal 将 input 反序列化到 obj 上
 func JSONUnmarshal(input, obj any) error {
