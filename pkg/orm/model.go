@@ -12,9 +12,18 @@ import (
 	"gorm.io/gorm"
 )
 
+// Deprecated: 请使用 GetEnabledAutoMigrate,SetEnabledAutoMigrate
 // EnabledAutoMigrate 是否开启自动迁移
 // 每次表迁移耗时，提供此全局变量，程序可根据需要是否迁移
 var EnabledAutoMigrate bool
+
+func SetEnabledAutoMigrate(v bool) {
+	EnabledAutoMigrate = v
+}
+
+func GetEnabledAutoMigrate() bool {
+	return EnabledAutoMigrate
+}
 
 // Scaner 所有模型内组合的结构体，必须满足该接口
 type Scaner interface {
