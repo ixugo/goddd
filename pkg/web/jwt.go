@@ -94,7 +94,7 @@ func AuthLevel(level int) gin.HandlerFunc {
 // ParseToken 解析 token
 func ParseToken(tokenString string, secret string) (*Claims, error) {
 	var claims Claims
-	token, err := jwt.ParseWithClaims(tokenString, &claims, func(token *jwt.Token) (interface{}, error) {
+	token, err := jwt.ParseWithClaims(tokenString, &claims, func(*jwt.Token) (any, error) {
 		return []byte(secret), nil
 	}, jwt.WithoutClaimsValidation())
 	if err != nil {

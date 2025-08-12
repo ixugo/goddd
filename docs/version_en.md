@@ -25,7 +25,7 @@ versionapi.DBVersion = "0.0.2"
 versionapi.DBRemark = "Added user avatar field"
 ```
 
-The `orm.EnabledAutoMigrate` variable can be used to globally control AutoMigrate's enabled state.
+The `orm.SetEnabledAutoMigrate` variable can be used to globally control AutoMigrate's enabled state.
 
 ## What are the Benefits?
 

@@ -25,7 +25,7 @@ versionapi.DBVersion = "0.0.2"
 versionapi.DBRemark = "添加了用户头像字段"
 ```
 
-通过 `orm.EnabledAutoMigrate` 可以全局控制 AutoMigrate 的启用状态。
+通过 `orm.SetEnabledAutoMigrate()` 可以全局控制 AutoMigrate 的启用状态。
 
 ## 这样做有什么好处？
 

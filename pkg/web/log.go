@@ -40,6 +40,13 @@ func (w *BufferWriter) Write(b []byte) (int, error) {
 	return w.ResponseWriter.Write(b)
 }
 
+// IgnoreBool 忽略指定值
+func IgnoreBool(v bool) func(*gin.Context) bool {
+	return func(*gin.Context) bool {
+		return v
+	}
+}
+
 // IgnorePrefix 忽略指定路由前缀
 func IgnorePrefix(prefix ...string) func(*gin.Context) bool {
 	return func(c *gin.Context) bool {

@@ -27,6 +27,6 @@ func NewVersionCore(db *gorm.DB) version.Core {
 			slog.Error("RecordVersion", "err", err)
 		}
 	}
-	orm.EnabledAutoMigrate = isOK
+	orm.SetEnabledAutoMigrate(isOK)
 	return core
 }

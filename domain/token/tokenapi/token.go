@@ -21,7 +21,7 @@ type TokenAPI struct {
 
 func NewTokenAPI(db *gorm.DB) TokenAPI {
 	var store token.Storer
-	store = tokendb.NewDB(db).AutoMigrate(orm.EnabledAutoMigrate)
+	store = tokendb.NewDB(db).AutoMigrate(orm.GetEnabledAutoMigrate())
 	// 如果需要缓存，可以取消注释
 	// 目前缓存是通过 id 缓存，而此领域没有获取 id 的条件
 	store = tokencache.NewCache(store, conc.NewTTLCache(time.Hour))
