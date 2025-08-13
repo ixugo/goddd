@@ -1,18 +1,29 @@
 package web
 
 import (
-	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/ixugo/goddd/pkg/conc"
 	"golang.org/x/time/rate"
 )
 
 // RateLimiter 限流器
-func RateLimiter(r rate.Limit, b int) gin.HandlerFunc {
+// 可以在 handler 中执行 AbortWithStatusJSON 相关操作，用于替代默认行为
+func RateLimiter(r rate.Limit, b int, handler ...gin.HandlerFunc) gin.HandlerFunc {
 	l := rate.NewLimiter(rate.Limit(r), b)
+
+	var fn gin.HandlerFunc
+	if len(handler) > 0 {
+		fn = handler[0]
+	}
+
 	return func(c *gin.Context) {
 		if !l.Allow() {
+			if fn != nil {
+				fn(c)
+				return
+			}
 			c.AbortWithStatusJSON(400, gin.H{"msg": "服务器繁忙"})
 			return
 		}
@@ -20,17 +31,22 @@ func RateLimiter(r rate.Limit, b int) gin.HandlerFunc {
 	}
 }
 
-type client struct {
-	limiter    *rate.Limiter
-	lastSeenAt time.Time
-}
-
 // IPRateLimiter IP 限流器
-func IPRateLimiterForGin(r rate.Limit, b int) gin.HandlerFunc {
+// 可以在 handler 中执行 AbortWithStatusJSON 相关操作，用于替代默认行为
+func IPRateLimiterForGin(r rate.Limit, b int, handler ...gin.HandlerFunc) gin.HandlerFunc {
 	limiter := IPRateLimiter(r, b)
+
+	var fn gin.HandlerFunc
+	if len(handler) > 0 {
+		fn = handler[0]
+	}
+
 	return func(c *gin.Context) {
-		ip := c.RemoteIP()
-		if !limiter(ip) {
+		if !limiter(c.RemoteIP()) {
+			if fn != nil {
+				fn(c)
+				return
+			}
 			c.AbortWithStatusJSON(400, gin.H{"msg": "服务器繁忙"})
 			return
 		}
@@ -40,32 +56,12 @@ func IPRateLimiterForGin(r rate.Limit, b int) gin.HandlerFunc {
 
 // IPRateLimiter IP 限流器
 func IPRateLimiter(r rate.Limit, b int) func(ip string) bool {
-	var m sync.Mutex
-	clients := make(map[string]*client)
-	// 定时清理
-	go func() {
-		ticker := time.NewTicker(30 * time.Second)
-		defer ticker.Stop()
-		for {
-			<-ticker.C
-			m.Lock()
-			for k, v := range clients {
-				if time.Since(v.lastSeenAt) > 3*time.Minute {
-					delete(clients, k)
-				}
-			}
-			m.Unlock()
-		}
-	}()
+	cache := conc.NewTTLMap[string, *rate.Limiter]()
 	return func(ip string) bool {
-		m.Lock()
-		v, exist := clients[ip]
-		if !exist {
-			v = &client{limiter: rate.NewLimiter(r, b), lastSeenAt: time.Now()}
-			clients[ip] = v
+		v, ok := cache.Load(ip)
+		if !ok {
+			v, _ = cache.LoadOrStore(ip, rate.NewLimiter(r, b), 3*time.Minute)
 		}
-		v.lastSeenAt = time.Now()
-		m.Unlock()
-		return v.limiter.Allow()
+		return v.Allow()
 	}
 }
