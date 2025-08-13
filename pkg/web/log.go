@@ -145,3 +145,24 @@ func LoggerWithBody(limit int, ignoreFn ...func(*gin.Context) bool) gin.HandlerF
 		}
 	}
 }
+
+// LoggerWithUseTime 记录请求用时
+// >= maxLimit 时，记录 warn 级别日志
+func LoggerWithUseTime(maxLimit time.Duration, ignoreFn ...func(*gin.Context) bool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		for _, fn := range ignoreFn {
+			if fn(c) {
+				c.Next()
+				return
+			}
+		}
+
+		now := time.Now()
+		c.Next()
+		since := time.Since(now)
+
+		if since >= maxLimit {
+			slog.WarnContext(c.Request.Context(), "check use time", "since", since.Milliseconds())
+		}
+	}
+}
