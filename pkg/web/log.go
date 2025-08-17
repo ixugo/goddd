@@ -47,6 +47,13 @@ func IgnoreBool(v bool) func(*gin.Context) bool {
 	}
 }
 
+// IgnoreMethod 忽略指定请求方式的请求，一般用于忽略 options
+func IgnoreMethod(method string) func(*gin.Context) bool {
+	return func(ctx *gin.Context) bool {
+		return ctx.Request.Method == method
+	}
+}
+
 // IgnorePrefix 忽略指定路由前缀
 func IgnorePrefix(prefix ...string) func(*gin.Context) bool {
 	return func(c *gin.Context) bool {
@@ -105,7 +112,7 @@ func Logger(ignoreFn ...func(*gin.Context) bool) gin.HandlerFunc {
 		// 约定: 返回给客户端的错误，记录的 key 为 responseErr
 		errStr, _ := c.Get(responseErr)
 		if !(code == 404 || code == 401) {
-			out = append(out, []any{"err", errStr})
+			out = append(out, "err", errStr)
 		}
 		slog.WarnContext(c.Request.Context(), "Bad", out...)
 	}

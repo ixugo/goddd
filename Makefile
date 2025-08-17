@@ -104,7 +104,7 @@ HASH_AND_DATE := $(shell git log -n1 --pretty=format:"%h-%cd" --date=format:%y%m
 BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
 
 # 如果想仅支持注释标签，可以去掉 --tags，否则会包含轻量标签
-RECENT_TAG := $(shell git describe --tags --abbrev=0  2>&1 | grep -v "fatal" || echo "v0.0.0")
+RECENT_TAG := $(shell git describe --tags --abbrev=0  2>&1 | grep -v -e "fatal" -e "Try" || echo "v0.0.0")
 
 ifeq ($(RECENT_TAG),v0.0.0)
 	COMMITS := $(shell git rev-list --count HEAD)
