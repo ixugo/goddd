@@ -110,7 +110,7 @@ func Logger(ignoreFn ...func(*gin.Context) bool) gin.HandlerFunc {
 			return
 		}
 		// 约定: 返回给客户端的错误，记录的 key 为 responseErr
-		errStr, _ := c.Get(responseErr)
+		errStr, _ := c.Get(ResponseErr)
 		if !(code == 404 || code == 401) {
 			out = append(out, "err", errStr)
 		}

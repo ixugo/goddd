@@ -32,7 +32,7 @@ type ResponseWriter interface {
 	AbortWithStatusJSON(code int, obj interface{})
 }
 
-const responseErr = "responseErr"
+const ResponseErr = "responseErr"
 
 type HTTPContext interface {
 	JSON(int, any)
@@ -70,12 +70,12 @@ func Fail(c ResponseWriter, err error, fn ...WithData) {
 			fn[i](out)
 		}
 		c.JSON(code, out)
-		c.Set(responseErr, err.Error())
+		c.Set(ResponseErr, err.Error())
 		return
 	}
 
 	c.JSON(code, out)
-	c.Set(responseErr, err.Error())
+	c.Set(ResponseErr, err.Error())
 }
 
 func AbortWithStatusJSON(c ResponseWriter, err error, fn ...WithData) {
@@ -100,7 +100,7 @@ func AbortWithStatusJSON(c ResponseWriter, err error, fn ...WithData) {
 		fn[i](out)
 	}
 	c.AbortWithStatusJSON(code, out)
-	c.Set(responseErr, err.Error())
+	c.Set(ResponseErr, err.Error())
 }
 
 // WarpH 让函数更专注于业务，一般入参和出参应该是指针类型
