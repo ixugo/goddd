@@ -17,9 +17,19 @@ func SetupConfig(v any, path string) error {
 
 // WriteConfig 将配置写回文件
 func WriteConfig(v any, path string) error {
-	b, err := toml.Marshal(v)
+	tmp := path + ".tmp"
+	_ = os.RemoveAll(tmp)
+
+	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, b, 0o600)
+	defer f.Close()
+	if err := toml.NewEncoder(f).SetIndentTables(true).Encode(v); err != nil {
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
 }
