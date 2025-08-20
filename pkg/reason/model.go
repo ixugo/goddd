@@ -110,3 +110,10 @@ func (e *Error) As(target any) bool {
 	_, ok := target.(*Error)
 	return ok
 }
+
+// IsCustomError 是否自定义的错误
+// 需要断言后的类型，建议直接使用 `err.(CustomError)` 语法
+func IsCustomError(err error) bool {
+	_, ok := err.(CustomError)
+	return ok
+}

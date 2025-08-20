@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"unsafe"
 
 	"github.com/gin-gonic/gin"
@@ -101,6 +102,11 @@ func AbortWithStatusJSON(c ResponseWriter, err error, fn ...WithData) {
 	}
 	c.AbortWithStatusJSON(code, out)
 	c.Set(ResponseErr, err.Error())
+}
+
+// WarpHs 包装业务处理函数的同时，支持多个中间件
+func WarpHs[I any, O any](fn func(*gin.Context, *I) (O, error), mid ...gin.HandlerFunc) []gin.HandlerFunc {
+	return slices.Concat(mid, []gin.HandlerFunc{WarpH(fn)})
 }
 
 // WarpH 让函数更专注于业务，一般入参和出参应该是指针类型
