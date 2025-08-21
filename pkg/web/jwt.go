@@ -13,7 +13,7 @@ import (
 const (
 	KeyUserID      = "uid"
 	KeyLevel       = "level"
-	KeyRole        = "role"
+	KeyRoleID      = "role_id"
 	KeyUsername    = "username"
 	KeyTokenString = "token"
 )
@@ -41,7 +41,7 @@ func (c ClaimsData) SetLevel(level int) ClaimsData {
 }
 
 func (c ClaimsData) SetRole(role string) ClaimsData {
-	c[KeyRole] = role
+	c[KeyRoleID] = role
 	return c
 }
 
@@ -93,8 +93,8 @@ func GetUsername(c *gin.Context) string {
 }
 
 // GetRole 获取用户角色
-func GetRole(c *gin.Context) string {
-	return c.GetString(KeyRole)
+func GetRoleID(c *gin.Context) int {
+	return c.GetInt(KeyRoleID)
 }
 
 func GetLevel(c *gin.Context) int {
