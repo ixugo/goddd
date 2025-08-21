@@ -19,6 +19,8 @@ const (
 )
 
 // Claims ...
+// 注意 int 类型在 json 反序列化后会是 float64
+// 即通过 gin.context 获取的数字参数，都要用 GetFloat64
 type Claims struct {
 	Data map[string]any
 	jwt.RegisteredClaims
@@ -40,8 +42,8 @@ func (c ClaimsData) SetLevel(level int) ClaimsData {
 	return c
 }
 
-func (c ClaimsData) SetRole(role string) ClaimsData {
-	c[KeyRoleID] = role
+func (c ClaimsData) SetRoleID(roleID int) ClaimsData {
+	c[KeyRoleID] = roleID
 	return c
 }
 
@@ -84,7 +86,7 @@ func AuthMiddleware(secret string) gin.HandlerFunc {
 
 // GetUID 获取用户 ID
 func GetUID(c *gin.Context) int {
-	return c.GetInt(KeyUserID)
+	return GetInt(c, KeyUserID)
 }
 
 // GetUsername 获取用户名
@@ -94,21 +96,31 @@ func GetUsername(c *gin.Context) string {
 
 // GetRole 获取用户角色
 func GetRoleID(c *gin.Context) int {
-	return c.GetInt(KeyRoleID)
+	return GetInt(c, KeyRoleID)
+}
+
+func GetInt(c *gin.Context, key string) int {
+	v, exist := c.Get(key)
+	if !exist {
+		return 0
+	}
+	switch v := v.(type) {
+	case float64:
+		return int(v)
+	case int:
+		return v
+	}
+	return 0
 }
 
 func GetLevel(c *gin.Context) int {
-	v, exist := c.Get(KeyLevel)
-	if exist {
-		return v.(int)
-	}
-	return 12
+	return GetInt(c, KeyLevel)
 }
 
 func AuthLevel(level int) gin.HandlerFunc {
 	// 等级从1开始，等级越小，权限越大
 	return func(c *gin.Context) {
-		l := c.GetInt("level")
+		l := GetLevel(c)
 		if l > level || l == 0 {
 			Fail(c, reason.ErrBadRequest.SetMsg("权限不足"))
 			c.Abort()
@@ -139,10 +151,17 @@ func ParseToken(tokenString string, secret string) (*Claims, error) {
 
 type TokenOptions func(*Claims)
 
-// WithExpiresAt 设置过期时间
+// WithExpiresAt 设置指定过期时间
 func WithExpiresAt(expiresAt time.Time) TokenOptions {
 	return func(c *Claims) {
 		c.ExpiresAt = jwt.NewNumericDate(expiresAt)
+	}
+}
+
+// WithExpires 设置多久过期
+func WithExpires(duration time.Duration) TokenOptions {
+	return func(c *Claims) {
+		c.ExpiresAt = jwt.NewNumericDate(time.Now().Add(duration))
 	}
 }
 
