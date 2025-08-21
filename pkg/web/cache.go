@@ -1,14 +1,13 @@
 package web
 
 import (
-	"bytes"
-	"crypto/sha1" // nolint
-	"encoding/hex"
+	"bytes" // nolint
 	"log/slog"
 	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/ixugo/goddd/pkg/hook"
 )
 
 type EtagWriter struct {
@@ -41,6 +40,7 @@ func CacheControlMaxAge(millisecond int) gin.HandlerFunc {
 }
 
 // EtagHandler 添加 ETag 头，用于缓存静态资源
+// 不适合大文件场景
 func EtagHandler() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		bw := EtagWriter{
@@ -49,16 +49,14 @@ func EtagHandler() gin.HandlerFunc {
 		ctx.Writer = &bw
 		ctx.Next()
 
-		hash := sha1.New()
-		buf := bw.body.Bytes()
-		hash.Write(buf)
-		etag := `"` + hex.EncodeToString(hash.Sum(nil)) + `"`
+		hash, _ := hook.SegmentMD5(&bw.body)
+		etag := `"` + hash + `"`
 		if match := ctx.GetHeader("If-None-Match"); match != "" && match == etag {
 			ctx.Writer.WriteHeader(http.StatusNotModified)
 			return
 		}
 		ctx.Header("ETag", etag)
-		if _, err := bw.ResponseWriter.Write(buf); err != nil {
+		if _, err := bw.ResponseWriter.Write(bw.body.Bytes()); err != nil {
 			slog.ErrorContext(ctx.Request.Context(), "write err", "err", err)
 		}
 	}

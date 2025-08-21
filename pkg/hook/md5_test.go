@@ -11,7 +11,7 @@ func TestMD5AndFileMD5(t *testing.T) {
 	file := strings.Repeat("test_md5.txt", 1024*10)
 
 	strMD5 := MD5(file)
-	fileMD5, err := FileMD5(bytes.NewReader([]byte(file)))
+	fileMD5, err := SegmentMD5(bytes.NewReader([]byte(file)))
 	if err != nil {
 		t.Fatalf("FileMD5 error: %v", err)
 	}
@@ -32,7 +32,7 @@ func TestFileMD5MemoryUsage(t *testing.T) {
 	}
 	defer file.Close()
 
-	if _, err := FileMD5(file); err != nil {
+	if _, err := SegmentMD5(file); err != nil {
 		t.Fatalf("FileMD5 error: %v", err)
 	}
 }

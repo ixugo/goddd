@@ -14,8 +14,8 @@ func MD5(s string) string {
 	return hex.EncodeToString(b[:])
 }
 
-// FileMD5 通过缓冲区计算文件的 md5
-func FileMD5(r io.Reader) (string, error) {
+// SegmentMD5 通过缓冲区分段计算 md5
+func SegmentMD5(r io.Reader) (string, error) {
 	h := md5.New()
 	buf := make([]byte, 8*1024)
 	for {
