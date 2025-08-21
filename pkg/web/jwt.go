@@ -61,6 +61,10 @@ func (c ClaimsData) Set(key string, value any) ClaimsData {
 func AuthMiddleware(secret string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		auth := c.Request.Header.Get("Authorization")
+		// header 中没有时，尝试从 query 参数中取
+		if auth == "" {
+			auth = c.Query("token")
+		}
 		const prefix = "Bearer "
 		if len(auth) <= len(prefix) || !strings.EqualFold(auth[:len(prefix)], prefix) {
 			AbortWithStatusJSON(c, reason.ErrUnauthorizedToken.SetMsg("身份验证失败"))
@@ -97,6 +101,11 @@ func GetUsername(c *gin.Context) string {
 // GetRole 获取用户角色
 func GetRoleID(c *gin.Context) int {
 	return GetInt(c, KeyRoleID)
+}
+
+// GetToken 获取 token
+func GetToken(c *gin.Context) string {
+	return c.GetString(KeyTokenString)
 }
 
 func GetInt(c *gin.Context, key string) int {
