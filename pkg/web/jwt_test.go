@@ -1,6 +1,7 @@
 package web
 
 import (
+	"fmt"
 	"testing"
 )
 
@@ -18,4 +19,21 @@ func TestJWT(t *testing.T) {
 	// oldTokenStr = "eyJhbGciOiJIUzI1NVCJ9.ey5zcGFjDU3fQ.ACcit_wskXj_Vo5foBonA7LGHg"
 	// _, err = ParseToken(oldTokenStr, secret)
 	// require.NotNil(t, err)
+}
+
+func TestClaimsData(t *testing.T) {
+	data := NewClaimsData()
+	data.SetUserID(123)
+
+	if data[KeyUserID] != 123 {
+		t.Errorf("SetUserID failed")
+	}
+
+	for i := range 100000 {
+		data.Set(fmt.Sprintf("key%d", i), i)
+	}
+
+	if len(data) != 100001 {
+		t.Errorf("Set failed")
+	}
 }

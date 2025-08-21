@@ -10,23 +10,50 @@ import (
 	"github.com/ixugo/goddd/pkg/reason"
 )
 
+const (
+	KeyUserID      = "uid"
+	KeyLevel       = "level"
+	KeyRole        = "role"
+	KeyUsername    = "username"
+	KeyTokenString = "token"
+)
+
 // Claims ...
 type Claims struct {
-	UID      int
-	Username string
-	GroupID  int
-	Role     string
-	Level    int
+	Data map[string]any
 	jwt.RegisteredClaims
 }
 
-const (
-	uid      = "uid"
-	token    = "token"
-	username = "username"
-	level    = "level"
-	role     = "role"
-)
+type ClaimsData map[string]any
+
+func NewClaimsData() ClaimsData {
+	return make(ClaimsData)
+}
+
+func (c ClaimsData) SetUserID(uid int) ClaimsData {
+	c[KeyUserID] = uid
+	return c
+}
+
+func (c ClaimsData) SetLevel(level int) ClaimsData {
+	c[KeyLevel] = level
+	return c
+}
+
+func (c ClaimsData) SetRole(role string) ClaimsData {
+	c[KeyRole] = role
+	return c
+}
+
+func (c ClaimsData) SetUsername(username string) ClaimsData {
+	c[KeyUsername] = username
+	return c
+}
+
+func (c ClaimsData) Set(key string, value any) ClaimsData {
+	c[key] = value
+	return c
+}
 
 // AuthMiddleware 鉴权
 func AuthMiddleware(secret string) gin.HandlerFunc {
@@ -47,31 +74,31 @@ func AuthMiddleware(secret string) gin.HandlerFunc {
 			return
 		}
 
-		c.Set(uid, claims.UID)
-		c.Set(username, claims.Username)
-		c.Set(token, auth)
-		c.Set(level, claims.Level)
+		c.Set(KeyTokenString, auth)
+		for k, v := range claims.Data {
+			c.Set(k, v)
+		}
 		c.Next()
 	}
 }
 
 // GetUID 获取用户 ID
 func GetUID(c *gin.Context) int {
-	return c.GetInt(uid)
+	return c.GetInt(KeyUserID)
 }
 
 // GetUsername 获取用户名
 func GetUsername(c *gin.Context) string {
-	return c.GetString(username)
+	return c.GetString(KeyUsername)
 }
 
 // GetRole 获取用户角色
 func GetRole(c *gin.Context) string {
-	return c.GetString(role)
+	return c.GetString(KeyRole)
 }
 
 func GetLevel(c *gin.Context) int {
-	v, exist := c.Get(level)
+	v, exist := c.Get(KeyLevel)
 	if exist {
 		return v.(int)
 	}
@@ -110,34 +137,54 @@ func ParseToken(tokenString string, secret string) (*Claims, error) {
 	return c, nil
 }
 
-type TokenInput struct {
-	UID      int
-	GroupID  int
-	Username string
-	Secret   string
-	Role     string
-	Level    int
-	Expires  time.Duration
+type TokenOptions func(*Claims)
+
+// WithExpiresAt 设置过期时间
+func WithExpiresAt(expiresAt time.Time) TokenOptions {
+	return func(c *Claims) {
+		c.ExpiresAt = jwt.NewNumericDate(expiresAt)
+	}
+}
+
+// WithIssuedAt 设置签发时间
+func WithIssuedAt(issuedAt time.Time) TokenOptions {
+	return func(c *Claims) {
+		c.IssuedAt = jwt.NewNumericDate(issuedAt)
+	}
+}
+
+// WithIssuer 设置签发人
+func WithIssuer(issuer string) TokenOptions {
+	return func(c *Claims) {
+		c.Issuer = issuer
+	}
+}
+
+// WithNotBefore 设置生效时间
+func WithNotBefore(notBefore time.Time) TokenOptions {
+	return func(c *Claims) {
+		c.NotBefore = jwt.NewNumericDate(notBefore)
+	}
 }
 
 // NewToken 创建 token
-func NewToken(input TokenInput) (string, error) {
-	if input.Expires <= 0 {
-		input.Expires = 2 * time.Hour
+// 秘钥不能为空，默认过期时间是 6 个小时
+func NewToken(data map[string]any, secret string, opts ...TokenOptions) (string, error) {
+	if secret == "" {
+		return "", fmt.Errorf("secret is required")
 	}
 	now := time.Now()
 	claims := Claims{
-		UID:      input.UID,
-		Username: input.Username,
-		GroupID:  input.GroupID,
-		Level:    input.Level,
+		Data: data,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(now.Add(input.Expires)), // 失效时间
+			ExpiresAt: jwt.NewNumericDate(now.Add(6 * time.Hour)), // 失效时间
 			IssuedAt:  jwt.NewNumericDate(now),                    // 签发时间
 			Issuer:    "xx@golang.space",                          // 签发人
 		},
-		Role: input.Role, // 角色
 	}
-	tokenClaims := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return tokenClaims.SignedString([]byte(input.Secret))
+	for _, opt := range opts {
+		opt(&claims)
+	}
+	tc := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return tc.SignedString([]byte(secret))
 }
