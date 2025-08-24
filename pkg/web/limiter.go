@@ -5,6 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/ixugo/goddd/pkg/conc"
+	"github.com/ixugo/goddd/pkg/reason"
 	"golang.org/x/time/rate"
 )
 
@@ -63,5 +64,16 @@ func IPRateLimiter(r rate.Limit, b int) func(ip string) bool {
 			v, _ = cache.LoadOrStore(ip, rate.NewLimiter(r, b), 3*time.Minute)
 		}
 		return v.Allow()
+	}
+}
+
+// LimitContentLength 限制请求体大小，比如限制 1MB，可以传入 1024*1024
+func LimitContentLength(limit int) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if c.Request.ContentLength > int64(limit) {
+			AbortWithStatusJSON(c, reason.ErrContentTooLarge)
+			return
+		}
+		c.Next()
 	}
 }

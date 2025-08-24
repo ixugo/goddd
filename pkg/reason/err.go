@@ -18,6 +18,7 @@ var (
 	ErrFileUpload           = NewError("ErrFileUpload", "文件上传失败")
 	ErrFileTooLarge         = NewError("ErrFileTooLarge", "文件大小超出限制")
 	ErrUnsupportedMediaType = NewError("ErrUnsupportedMediaType", "不支持的媒体类型")
+	ErrContentTooLarge      = NewError("ErrContentTooLarge", "请求体过大")
 )
 
 // 业务错误
