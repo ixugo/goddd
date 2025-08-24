@@ -7,16 +7,16 @@ import (
 	"time"
 )
 
-// ScrollPager 滚动翻页
-type ScrollPager[T any] struct {
+// ScrollPageOutput 滚动翻页
+type ScrollPageOutput[T any] struct {
 	Items []T    `json:"items"`
 	Next  string `json:"next"`
 }
 
 // PageOutput 分页数据
-type PageOutput struct {
+type PageOutput[T any] struct {
+	Items []T   `json:"items"`
 	Total int64 `json:"total"`
-	Items any   `json:"items"`
 }
 
 // PagerFilter 分页过滤
@@ -128,12 +128,7 @@ func Offset(page, size int) int {
 // GetBaseURL 提取请求地址
 // 例如 http://127.0.0.1:8080/health 提取出 http://127.0.0.1:8080
 func GetBaseURL(req *http.Request) string {
-	scheme := "http"
-	if req.TLS != nil {
-		scheme = "https"
-	}
-	host := req.Host
-	return fmt.Sprintf("%s://%s", scheme, host)
+	return fmt.Sprintf("%s://%s", GetScheme(req), req.Host)
 }
 
 // GetHost 提取主机 IP 或域名
@@ -144,4 +139,16 @@ func GetHost(c *http.Request) string {
 		host = l[0]
 	}
 	return host
+}
+
+// GetScheme 获取请求协议
+// 例如 http://127.0.0.1:8080/health 提取出 http
+func GetScheme(c *http.Request) string {
+	if c.URL.Scheme != "" {
+		return c.URL.Scheme
+	}
+	if c.TLS != nil {
+		return "https"
+	}
+	return "http"
 }

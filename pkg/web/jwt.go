@@ -10,6 +10,8 @@ import (
 	"github.com/ixugo/goddd/pkg/reason"
 )
 
+// 为确保兼容性，以下值不可更改
+// uid 和 role_id 是 int 类型，其余未明确标识的是字符串类型
 const (
 	KeyUserID      = "uid"
 	KeyLevel       = "level"
@@ -28,6 +30,9 @@ type Claims struct {
 
 type ClaimsData map[string]any
 
+// NewClaimsData 提供了一些默认的设置，例如 SetUserID
+// 提供的不够用时，请使用 Set(k,v)，并实现对应的 GetK() 函数
+// 也可以匿名嵌套实现更多
 func NewClaimsData() ClaimsData {
 	return make(ClaimsData)
 }
@@ -142,20 +147,10 @@ func AuthLevel(level int) gin.HandlerFunc {
 // ParseToken 解析 token
 func ParseToken(tokenString string, secret string) (*Claims, error) {
 	var claims Claims
-	token, err := jwt.ParseWithClaims(tokenString, &claims, func(*jwt.Token) (any, error) {
+	_, err := jwt.ParseWithClaims(tokenString, &claims, func(*jwt.Token) (any, error) {
 		return []byte(secret), nil
 	}, jwt.WithoutClaimsValidation())
-	if err != nil {
-		return nil, err
-	}
-	if token == nil {
-		return nil, fmt.Errorf("解析失败")
-	}
-	c, ok := token.Claims.(*Claims)
-	if !ok {
-		return nil, fmt.Errorf("令牌类型错误")
-	}
-	return c, nil
+	return &claims, err
 }
 
 type TokenOptions func(*Claims)
