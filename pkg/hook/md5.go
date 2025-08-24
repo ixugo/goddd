@@ -3,34 +3,26 @@ package hook
 import (
 	"crypto/md5"
 	"encoding/hex"
-	"errors"
 	"io"
 	"unsafe"
 )
 
-// MD5 计算 md5
+// MD5 计算字符串的 md5
 func MD5(s string) string {
-	b := md5.Sum(unsafe.Slice(unsafe.StringData(s), len(s)))
+	return MD5FromBytes(unsafe.Slice(unsafe.StringData(s), len(s)))
+}
+
+// MD5 计算字节数组的 md5
+func MD5FromBytes(s []byte) string {
+	b := md5.Sum(s)
 	return hex.EncodeToString(b[:])
 }
 
-// SegmentMD5 通过缓冲区分段计算 md5
-func SegmentMD5(r io.Reader) (string, error) {
+// MD5FromIO 计算 io.Reader 的 md5
+func MD5FromIO(r io.Reader) (string, error) {
 	h := md5.New()
-	buf := make([]byte, 8*1024)
-	for {
-		n, err := r.Read(buf)
-		if n > 0 {
-			if _, err := h.Write(buf[:n]); err != nil {
-				return "", err
-			}
-		}
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				break
-			}
-			return "", err
-		}
+	if _, err := io.Copy(h, r); err != nil {
+		return "", err
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
 }

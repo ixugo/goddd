@@ -2,6 +2,7 @@ package hook
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"strings"
 	"testing"
@@ -11,7 +12,7 @@ func TestMD5AndFileMD5(t *testing.T) {
 	file := strings.Repeat("test_md5.txt", 1024*10)
 
 	strMD5 := MD5(file)
-	fileMD5, err := SegmentMD5(bytes.NewReader([]byte(file)))
+	fileMD5, err := MD5FromIO(bytes.NewReader([]byte(file)))
 	if err != nil {
 		t.Fatalf("FileMD5 error: %v", err)
 	}
@@ -32,7 +33,7 @@ func TestFileMD5MemoryUsage(t *testing.T) {
 	}
 	defer file.Close()
 
-	if _, err := SegmentMD5(file); err != nil {
+	if _, err := MD5FromIO(file); err != nil {
 		t.Fatalf("FileMD5 error: %v", err)
 	}
 }
@@ -48,4 +49,29 @@ func TestMD5WithReadAll(t *testing.T) {
 	}
 	md5str := MD5(string(data))
 	t.Logf("MD5(一次性读入)结果: %s", md5str)
+}
+
+func BenchmarkMD5(b *testing.B) {
+	str := strings.Repeat("abcdefghijklmnopqrstuvwxyz", 1024*1024)
+	s := bytes.NewBuffer([]byte(str))
+	a := s.Bytes()
+
+	b.Run("io md5", func(b *testing.B) {
+		s := bytes.NewReader(a)
+		for b.Loop() {
+			s.Seek(0, io.SeekStart)
+
+			MD5FromIO(s)
+		}
+	})
+	b.Run("bytes md5", func(b *testing.B) {
+		for b.Loop() {
+			MD5FromBytes(a)
+		}
+	})
+	b.Run("str md5", func(b *testing.B) {
+		for b.Loop() {
+			MD5(str)
+		}
+	})
 }

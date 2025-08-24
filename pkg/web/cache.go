@@ -49,7 +49,7 @@ func EtagHandler() gin.HandlerFunc {
 		ctx.Writer = &bw
 		ctx.Next()
 
-		hash, _ := hook.SegmentMD5(&bw.body)
+		hash, _ := hook.MD5FromIO(&bw.body)
 		etag := `"` + hash + `"`
 		if match := ctx.GetHeader("If-None-Match"); match != "" && match == etag {
 			ctx.Writer.WriteHeader(http.StatusNotModified)
