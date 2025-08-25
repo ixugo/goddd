@@ -586,3 +586,9 @@ func RegisterVersion(r gin.IRouter, verAPI VersionAPI, handler ...gin.HandlerFun
 + gorm
 + slog / zap
 + wire
+
+## 你也许还关心
+
+[github.com/ixugo/amap 高德地图 API](https://github.com/ixugo/amap)
+[github.com/ixugo/netpulse 免费API，查询IP信息](https://github.com/ixugo/netpulse)
+[github.com/ixugo/bytepool 带引用计数的内存池](https://github.com/ixugo/bytepool)
