@@ -39,3 +39,5 @@ logs/
 build/
 __debug_bin*
 tables/
+*.pprof
+*.test

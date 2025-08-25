@@ -19,17 +19,31 @@ func NewTTLMap[K comparable, V any]() *TTLMap[K, V] {
 	c := TTLMap[K, V]{}
 	ctx, cancel := context.WithCancel(context.Background())
 	c.cancel = cancel
-	go c.tickerCleanup(ctx)
+	go c.tickerCleanup(ctx, 0)
 	return &c
 }
 
-// SwichFixedTimeCleanup 固定时间清除全部数据
+// SwichFixedTimeClear 固定时间清除全部数据
 // 参数 afterFn 用于获取间隔多久以后执行
 func (c *TTLMap[K, V]) SwichFixedTimeClear(afterFn func() time.Duration) *TTLMap[K, V] {
-	c.cancel()
+	if c.cancel != nil {
+		c.cancel()
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	c.cancel = cancel
 	go c.fixedTimeCleanup(ctx, afterFn)
+	return c
+}
+
+// SetTickerCleanup 设置定时清除，传 0 表示每 1 秒检测一次，interval 表示检测间隔时间
+func (c *TTLMap[K, V]) SetTickerCleanup(interval time.Duration) *TTLMap[K, V] {
+	if c.cancel != nil {
+		c.cancel()
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	c.cancel = cancel
+	go c.tickerCleanup(ctx, interval)
 	return c
 }
 
@@ -47,8 +61,11 @@ func (c *TTLMap[K, V]) fixedTimeCleanup(ctx context.Context, fn func() time.Dura
 	}
 }
 
-func (c *TTLMap[K, V]) tickerCleanup(ctx context.Context) {
-	ticker := time.NewTicker(time.Second)
+func (c *TTLMap[K, V]) tickerCleanup(ctx context.Context, interval time.Duration) {
+	if interval <= 0 {
+		interval = time.Second
+	}
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {
 		select {

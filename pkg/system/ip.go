@@ -4,7 +4,9 @@
 package system
 
 import (
+	"context"
 	"crypto/tls"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -12,9 +14,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"golang.org/x/text/encoding/simplifiedchinese"
-	"golang.org/x/text/transform"
 )
 
 // LocalIP 获取本地IP地址
@@ -95,36 +94,54 @@ func udpPortUsed(port int) bool {
 
 // ExternalIP 获取公网 IP
 func ExternalIP() (string, error) {
+	const link = "aHR0cHM6Ly9hcGkubGl2ZS5iaWxpYmlsaS5jb20vY2xpZW50L3YxL0lwL2dldEluZm9OZXc="
+
+	resolver := &net.Resolver{
+		PreferGo: true,
+		Dial: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			d := net.Dialer{Timeout: 8 * time.Second}
+			return d.DialContext(ctx, "udp4", "8.8.8.8:53")
+		},
+	}
+	dialer := &net.Dialer{
+		Resolver: resolver,
+		Timeout:  30 * time.Second,
+	}
 	c := http.Client{
 		Timeout: 5 * time.Second,
 		Transport: &http.Transport{
+			DialContext: dialer.DialContext,
 			TLSClientConfig: &tls.Config{
 				InsecureSkipVerify: true, // nolint
 			},
 		},
 	}
-
-	resp, err := c.Get("https://api.live.bilibili.com/client/v1/Ip/getInfoNew")
+	url, _ := base64.StdEncoding.DecodeString(link)
+	resp, err := c.Get(string(url))
 	if err != nil {
 		return "", err
 	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
+	defer resp.Body.Close()
 
-	var v bilibiliResponse
+	var v externalResponse
 	err = json.NewDecoder(resp.Body).Decode(&v)
-	return v.Data.Addr, err
+	if err != nil {
+		return "", err
+	}
+	if v.Code != 0 {
+		return "", fmt.Errorf("code: %d, msg: %s", v.Code, v.Message)
+	}
+	return v.Data.Addr, nil
 }
 
-type bilibiliResponse struct {
+type externalResponse struct {
 	Code    int          `json:"code"`
 	Msg     string       `json:"msg"`
 	Message string       `json:"message"`
-	Data    bilibiliData `json:"data"`
+	Data    ExternalData `json:"data"`
 }
 
-type bilibiliData struct {
+type ExternalData struct {
 	Addr      string `json:"addr"`
 	Country   string `json:"country"`
 	Province  string `json:"province"`
@@ -132,75 +149,4 @@ type bilibiliData struct {
 	ISP       string `json:"isp"`
 	Latitude  string `json:"latitude"`
 	Longitude string `json:"longitude"`
-}
-
-var cli = http.Client{
-	Timeout: 3 * time.Second,
-	Transport: &http.Transport{
-		Proxy:                 http.ProxyFromEnvironment,
-		ForceAttemptHTTP2:     true,
-		MaxIdleConns:          50,
-		MaxConnsPerHost:       30,
-		IdleConnTimeout:       90 * time.Second,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
-	},
-}
-
-const url = "http://whois.pconline.com.cn/ipJson.jsp?json=true&ip="
-
-type Info struct {
-	IP          string `json:"ip"`
-	Pro         string `json:"pro"`        // 省;安徽省
-	ProCode     string `json:"proCode"`    // 省区域代码;340000
-	City        string `json:"city"`       // 城市;合肥市
-	CityCode    string `json:"cityCode"`   // 城市代码;340100
-	Region      string `json:"region"`     // 区域;蜀山区
-	RegionCode  string `json:"regionCode"` // 区域代码;340104
-	Addr        string `json:"addr"`       // 完整地址;安徽省合肥市蜀山区 电
-	RegionNames string `json:"regionNames"`
-	Err         string `json:"err"`
-}
-
-func IP2Info(ip string) (Info, error) {
-	netip := net.ParseIP(ip)
-	if netip.IsLoopback() || netip.IsPrivate() {
-		return Info{IP: ip, Addr: "内网 IP"}, nil
-	}
-
-	resp, err := cli.Get(url + ip)
-	if err != nil {
-		return Info{}, nil
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		return Info{}, fmt.Errorf("HTTP GET Err[%s]", resp.Status)
-	}
-	var out Info
-	reader := transform.NewReader(resp.Body, simplifiedchinese.GB18030.NewDecoder())
-	err = json.NewDecoder(reader).Decode(&out)
-	return out, err
-}
-
-// CompareVersionFunc 比较 ip 或 版本号是否一致
-func CompareVersionFunc(a, b string, f func(a, b string) bool) bool {
-	s1 := versionToStr(a)
-	s2 := versionToStr(b)
-	if len(s1) != len(s2) {
-		return true
-	}
-	return f(s1, s2)
-}
-
-func versionToStr(str string) string {
-	var result strings.Builder
-	arr := strings.Split(str, ".")
-	for _, item := range arr {
-		if idx := strings.Index(item, "-"); idx != -1 {
-			item = item[0:idx]
-		}
-		result.WriteString(fmt.Sprintf("%03s", item))
-	}
-	return result.String()
 }
