@@ -16,10 +16,19 @@ import (
 
 var defaultDebug = true
 
+// IsRelease 是否是生产环境
+func IsRelease() bool {
+	return !defaultDebug
+}
+
+// SetRelease 设置为生产环境
+// 接口不在输出 details 信息
 func SetRelease() {
 	defaultDebug = false
 }
 
+// SetDebug 设置为开发环境
+// 接口输出 details 信息，details 会包含敏感信息
 func SetDebug() {
 	defaultDebug = true
 }
