@@ -3,6 +3,7 @@ package web
 import (
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 )
@@ -66,18 +67,21 @@ func (d DateFilter) DefaultEndAt(date time.Time) time.Time {
 }
 
 // MustSortColumn 忽略安全问题
+// 失败如果是空串，则不做排序处理
 func (f PagerFilter) MustSortColumn() string {
-	return strings.TrimLeft(f.Sort, "-")
+	column, ok := f.SortColumn()
+	if !ok {
+		return ""
+	}
+	return column + " " + f.SortDirection()
 }
 
 // SortColumn 通过对 SortColumn 设置值，仅对允许的值做排序处理
-func (f PagerFilter) SortColumn() (string, error) {
-	for _, v := range f.SortSafelist {
-		if f.Sort == v {
-			return strings.TrimLeft(f.Sort, "-"), nil
-		}
+func (f PagerFilter) SortColumn() (string, bool) {
+	if f.Sort != "" && slices.Contains(f.SortSafelist, f.Sort) {
+		return strings.TrimPrefix(f.Sort, "-"), true
 	}
-	return "", fmt.Errorf("%s 不支持排序", f.Sort)
+	return "", false
 }
 
 // SortDirection 如果 sort 携带负号返回倒序，否则返回正序
