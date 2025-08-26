@@ -28,11 +28,11 @@ func getUser(ctx *gin.Context) {
 3. 响应格式不统一
 4. 业务逻辑被淹没在技术细节中
 
-本文将介绍如何通过 `web.WarpH` 这个优雅的封装方案，解决这些问题。
+本文将介绍如何通过 `web.WrapH` 这个优雅的封装方案，解决这些问题。
 
 ## 优雅的解决方案
 
-`web.WarpH` 是一个基于泛型（Generic）的封装函数，它通过以下方式解决上述问题：
+`web.WrapH` 是一个基于泛型（Generic）的封装函数，它通过以下方式解决上述问题：
 
 1. 自动处理参数绑定
 2. 统一错误处理
@@ -41,10 +41,10 @@ func getUser(ctx *gin.Context) {
 
 ### 核心实现
 
-`web.WarpH` 的实现基于 Go 1.18 引入的泛型特性，它通过类型参数 `I` 和 `O` 分别表示输入和输出类型：
+`web.WrapH` 的实现基于 Go 1.18 引入的泛型特性，它通过类型参数 `I` 和 `O` 分别表示输入和输出类型：
 
 ```go
-func WarpH[I any, O any](fn func(*gin.Context, *I) (O, error)) gin.HandlerFunc {
+func WrapH[I any, O any](fn func(*gin.Context, *I) (O, error)) gin.HandlerFunc {
     return func(c *gin.Context) {
         var in I
         if unsafe.Sizeof(in) != 0 {
@@ -81,7 +81,7 @@ func WarpH[I any, O any](fn func(*gin.Context, *I) (O, error)) gin.HandlerFunc {
 
 ### 使用示例
 
-使用 `web.WarpH` 后，代码变得异常简洁：
+使用 `web.WrapH` 后，代码变得异常简洁：
 
 ```go
 func getUser(ctx *gin.Context, in *UserInput) (*UserOutput, error) {
@@ -91,7 +91,7 @@ func getUser(ctx *gin.Context, in *UserInput) (*UserOutput, error) {
 
 ### 优势分析
 
-`web.WarpH` 通过泛型和统一的错误处理机制，让开发者专注于业务逻辑的实现。它提供了标准化的参数绑定、错误处理和响应格式化，大幅减少了重复代码。同时，泛型带来的类型安全性和 IDE 支持，让开发过程更加高效和可靠。
+`web.WrapH` 通过泛型和统一的错误处理机制，让开发者专注于业务逻辑的实现。它提供了标准化的参数绑定、错误处理和响应格式化，大幅减少了重复代码。同时，泛型带来的类型安全性和 IDE 支持，让开发过程更加高效和可靠。
 
 ## 实际应用场景
 
@@ -99,7 +99,7 @@ func getUser(ctx *gin.Context, in *UserInput) (*UserOutput, error) {
 
 ```go
 // 路由定义
-router.GET("/users/:id", web.WarpH(getUser))
+router.GET("/users/:id", web.WrapH(getUser))
 
 // 处理函数，使用 `*struct{}` 空值来避免底层执行参数绑定
 func getUser(ctx *gin.Context, in *struct{}) (*UserOutput, error) {
@@ -114,7 +114,7 @@ func getUser(ctx *gin.Context, in *struct{}) (*UserOutput, error) {
 
 ```go
 // 路由定义
-router.GET("/users", web.WarpH(listUsers))
+router.GET("/users", web.WrapH(listUsers))
 
 // 请求参数(定义在 user 包中)
 type FindUsersInput struct {
@@ -135,7 +135,7 @@ func findUsers(ctx *gin.Context, in *FindUsersInput) (*FindUsersOutput, error) {
 
 ```go
 // 路由定义
-router.PUT("/users/:id", web.WarpH(updateUser))
+router.PUT("/users/:id", web.WrapH(updateUser))
 
 // 请求参数
 type UpdateUserInput struct {
@@ -157,7 +157,7 @@ func updateUser(ctx *gin.Context, in *UpdateUserInput) (*UserOutput, error) {
 
 ```go
 // 路由定义
-router.DELETE("/users/:id", web.WarpH(deleteUser))
+router.DELETE("/users/:id", web.WrapH(deleteUser))
 
 // 处理函数
 func deleteUser(ctx *gin.Context, in *struct{}) (any, error) {
@@ -168,7 +168,7 @@ func deleteUser(ctx *gin.Context, in *struct{}) (any, error) {
 
 这个场景展示了如何处理 DELETE 请求，以及无返回值的处理方式。
 
-遇到下载文件或非 curd 的复杂场景，你可以不使用 `web.WarpH`，而是 `gin.HandlerFunc`。
+遇到下载文件或非 curd 的复杂场景，你可以不使用 `web.WrapH`，而是 `gin.HandlerFunc`。
 
 
 细心的读者可能会发现，在本文的示例代码中，API 层直接返回了 error，那么状态码和错误内容是如何处理的呢？这个问题我们将在下一篇文章中详细讨论~
@@ -183,7 +183,7 @@ func deleteUser(ctx *gin.Context, in *struct{}) (any, error) {
 
 ## 总结
 
-通过使用 `web.WarpH`，我们可以：
+通过使用 `web.WrapH`，我们可以：
 1. 大幅减少重复代码
 2. 提高代码可维护性
 3. 统一错误处理
@@ -193,7 +193,7 @@ func deleteUser(ctx *gin.Context, in *struct{}) (any, error) {
 
 ## 关于 goddd
 
-本文介绍的 `web.WarpH` 是 [goddd](https://github.com/ixugo/goddd) 项目中的一个核心组件。goddd 是一个基于 DDD（领域驱动设计）理念的 Go 项目目标，它提供了一系列工具和最佳实践，帮助开发者构建可维护、可扩展的应用程序。
+本文介绍的 `web.WrapH` 是 [goddd](https://github.com/ixugo/goddd) 项目中的一个核心组件。goddd 是一个基于 DDD（领域驱动设计）理念的 Go 项目目标，它提供了一系列工具和最佳实践，帮助开发者构建可维护、可扩展的应用程序。
 
 如果你对本文介绍的内容感兴趣，欢迎访问 [goddd 项目](https://github.com/ixugo/goddd) 了解更多细节。项目提供了完整的示例代码和详细的文档，可以帮助你快速上手。
 

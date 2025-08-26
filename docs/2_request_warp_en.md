@@ -28,11 +28,11 @@ This code pattern repeatedly appears in projects, leading to:
 3. Inconsistent response formats
 4. Business logic buried in technical details
 
-This article will introduce how to solve these problems through the elegant encapsulation solution of `web.WarpH`.
+This article will introduce how to solve these problems through the elegant encapsulation solution of `web.WrapH`.
 
 ## Elegant Solution
 
-`web.WarpH` is a generic-based encapsulation function that solves the above problems through:
+`web.WrapH` is a generic-based encapsulation function that solves the above problems through:
 
 1. Automatic parameter binding
 2. Unified error handling
@@ -41,10 +41,10 @@ This article will introduce how to solve these problems through the elegant enca
 
 ### Core Implementation
 
-`web.WarpH`'s implementation is based on the generic feature introduced in Go 1.18, using type parameters `I` and `O` to represent input and output types respectively:
+`web.WrapH`'s implementation is based on the generic feature introduced in Go 1.18, using type parameters `I` and `O` to represent input and output types respectively:
 
 ```go
-func WarpH[I any, O any](fn func(*gin.Context, *I) (O, error)) gin.HandlerFunc {
+func WrapH[I any, O any](fn func(*gin.Context, *I) (O, error)) gin.HandlerFunc {
     return func(c *gin.Context) {
         var in I
         if unsafe.Sizeof(in) != 0 {
@@ -81,7 +81,7 @@ Key points of this implementation:
 
 ### Usage Example
 
-With `web.WarpH`, the code becomes exceptionally concise:
+With `web.WrapH`, the code becomes exceptionally concise:
 
 ```go
 func getUser(ctx *gin.Context, in *UserInput) (*UserOutput, error) {
@@ -91,7 +91,7 @@ func getUser(ctx *gin.Context, in *UserInput) (*UserOutput, error) {
 
 ### Advantage Analysis
 
-`web.WarpH` allows developers to focus on business logic implementation rather than repetitive boilerplate code. Through generics and unified error handling mechanisms, it achieves code conciseness and maintainability. At compile time, generics ensure type safety, prevent runtime type errors, and provide better IDE support.
+`web.WrapH` allows developers to focus on business logic implementation rather than repetitive boilerplate code. Through generics and unified error handling mechanisms, it achieves code conciseness and maintainability. At compile time, generics ensure type safety, prevent runtime type errors, and provide better IDE support.
 
 ## Practical Application Scenarios
 
@@ -99,7 +99,7 @@ func getUser(ctx *gin.Context, in *UserInput) (*UserOutput, error) {
 
 ```go
 // Route definition
-router.GET("/users/:id", web.WarpH(getUser))
+router.GET("/users/:id", web.WrapH(getUser))
 
 // Handler function, using `*struct{}` empty value to avoid parameter binding
 func getUser(ctx *gin.Context, in *struct{}) (*UserOutput, error) {
@@ -114,7 +114,7 @@ This scenario demonstrates how to handle GET requests without request parameters
 
 ```go
 // Route definition
-router.GET("/users", web.WarpH(listUsers))
+router.GET("/users", web.WrapH(listUsers))
 
 // Request parameters (defined in user package)
 type FindUsersInput struct {
@@ -135,7 +135,7 @@ This scenario demonstrates how to use `form` tags to handle query parameters.
 
 ```go
 // Route definition
-router.PUT("/users/:id", web.WarpH(updateUser))
+router.PUT("/users/:id", web.WrapH(updateUser))
 
 // Request parameters
 type UpdateUserInput struct {
@@ -157,7 +157,7 @@ This scenario demonstrates how to handle PUT requests with both path parameters 
 
 ```go
 // Route definition
-router.DELETE("/users/:id", web.WarpH(deleteUser))
+router.DELETE("/users/:id", web.WrapH(deleteUser))
 
 // Handler function
 func deleteUser(ctx *gin.Context, in *struct{}) (any, error) {
@@ -168,7 +168,7 @@ func deleteUser(ctx *gin.Context, in *struct{}) (any, error) {
 
 This scenario demonstrates how to handle DELETE requests and handle cases with no return value.
 
-For complex scenarios like file downloads or non-CRUD operations, you can use `gin.HandlerFunc` instead of `web.WarpH`.
+For complex scenarios like file downloads or non-CRUD operations, you can use `gin.HandlerFunc` instead of `web.WrapH`.
 
 ## Best Practices
 
@@ -180,7 +180,7 @@ For complex scenarios like file downloads or non-CRUD operations, you can use `g
 
 ## Summary
 
-By using `web.WarpH`, we can:
+By using `web.WrapH`, we can:
 1. Significantly reduce repetitive code
 2. Improve code maintainability
 3. Unify error handling
@@ -190,7 +190,7 @@ This encapsulation approach is particularly suitable for team collaboration, hel
 
 ## About goddd
 
-The `web.WarpH` introduced in this article is a core component of the [goddd](https://github.com/ixugo/goddd) project. goddd is a Go project based on DDD (Domain-Driven Design) principles, providing a series of tools and best practices to help developers build maintainable and extensible applications.
+The `web.WrapH` introduced in this article is a core component of the [goddd](https://github.com/ixugo/goddd) project. goddd is a Go project based on DDD (Domain-Driven Design) principles, providing a series of tools and best practices to help developers build maintainable and extensible applications.
 
 If you're interested in the content introduced in this article, welcome to visit the [goddd project](https://github.com/ixugo/goddd) for more details. The project provides complete example code and detailed documentation to help you get started quickly.
 

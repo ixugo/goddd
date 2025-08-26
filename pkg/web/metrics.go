@@ -24,11 +24,6 @@ func Metrics() gin.HandlerFunc {
 	totalResponses := expvar.NewInt("responses")
 	urls := expvar.NewMap("requestURLs")
 	statusCodes := expvar.NewMap("statusCodes")
-	// 协程数量
-	// go func() {
-	// queue.NewCirQueue[expvar.Int](10)
-	// queue.CirQueue
-	// }()
 
 	return func(c *gin.Context) {
 		totalRequests.Add(1)

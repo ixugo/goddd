@@ -94,7 +94,7 @@ func (u *Core) GetUser(id int64) (*UserOutput, error) {
 }
 ```
 
-还记得上一篇文章提到的 `web.WarpH` 函数吗? 其响应错误实际是调用的 `web.Fail(err)`，此方法会判断错误是否是 `reason.Error` 类型，如果是，则按照其定义的 http 状态码，reason, msg 等信息返回给客户端。
+还记得上一篇文章提到的 `web.WrapH` 函数吗? 其响应错误实际是调用的 `web.Fail(err)`，此方法会判断错误是否是 `reason.Error` 类型，如果是，则按照其定义的 http 状态码，reason, msg 等信息返回给客户端。
 
 类似
 

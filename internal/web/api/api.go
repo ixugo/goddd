@@ -37,8 +37,8 @@ func setupRouter(r *gin.Engine, uc *Usecase) {
 	go web.CountGoroutines(10*time.Minute, 20)
 
 	auth := web.AuthMiddleware(uc.Conf.Server.HTTP.JwtSecret)
-	r.Any("/health", web.WarpH(uc.getHealth))
-	r.GET("/app/metrics/api", web.WarpH(uc.getMetricsAPI))
+	r.Any("/health", web.WrapH(uc.getHealth))
+	r.GET("/app/metrics/api", web.WrapH(uc.getMetricsAPI))
 
 	versionapi.Register(r, uc.Version, auth)
 }

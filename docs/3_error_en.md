@@ -94,7 +94,7 @@ func (u *Core) GetUser(id int64) (*UserOutput, error) {
 }
 ```
 
-Remember the `web.WarpH` function mentioned in the previous article? Its error response actually calls `web.Fail(err)`, which checks if the error is of type `reason.Error`. If it is, it returns the defined HTTP status code, reason, and msg to the client.
+Remember the `web.WrapH` function mentioned in the previous article? Its error response actually calls `web.Fail(err)`, which checks if the error is of type `reason.Error`. If it is, it returns the defined HTTP status code, reason, and msg to the client.
 
 Similar to:
 

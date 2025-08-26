@@ -109,9 +109,9 @@ GoDDD 目标是:
 
 本项目使用 GIN 作为 web 处理框架，路由函数需要实现 `gin.HandlerFunc`，在实现 API 层函数时，遇到的第一个问题是绑定参数，几乎每个函数都会涉及到反序列化，函数开头都充斥了 `ctx.ShouldBindJSON` 之类的代码。
 
-根据 DRY（Don't Repeat Yourself）设计原则，通过减少重复代码来提高代码的可维护性和可重用性。该项目封装了 `web.WarpH` 其返回 `gin.HandlerFunc`，`web.WarpH` 的参数类似 GRPC，`func(ctx *gin.Context, in *struct{}) (*Output, error)`。
+根据 DRY（Don't Repeat Yourself）设计原则，通过减少重复代码来提高代码的可维护性和可重用性。该项目封装了 `web.WrapH` 其返回 `gin.HandlerFunc`，`web.WrapH` 的参数类似 GRPC，`func(ctx *gin.Context, in *struct{}) (*Output, error)`。
 
-WarpH 内部识别 POST/PUT/DELETE/PATCH 请求则绑定 Request Body，Get 请求则绑定 Request URL params。
+WrapH 内部识别 POST/PUT/DELETE/PATCH 请求则绑定 Request Body，Get 请求则绑定 Request URL params。
 
 入参第二个参数类型必须是指针，使用 `*struct{}` 表示没有参数，不需要绑定。在定义结构体时，尤其要注意结构体的 tag 应该是 `json` 或者 `form`，更多细节参考 GIN 框架参数绑定。
 
@@ -120,7 +120,7 @@ WarpH 内部识别 POST/PUT/DELETE/PATCH 请求则绑定 Request Body，Get 请�
 
 返回值第一个参数是具体的 response body 内容，建议避免使用 any，其类型即可以是值，也可以是指针，赋予了更多灵活性。
 
-当参数在多个位置时，即路由参数/查询参数/请求体参数同时存在，可以实现新的 web.WarpH2 或直接实现 `gin.HandlerFunc`。
+当参数在多个位置时，即路由参数/查询参数/请求体参数同时存在，可以实现新的 web.WrapH2 或直接实现 `gin.HandlerFunc`。
 
 以下是两种代码的示例:
 
@@ -148,7 +148,7 @@ func findUsers(ctx *gin.Context, in *Input) (*Output, error) {
 
 `web.Warh` 的封装默认是响应 application/json 类型。
 
-在开发过程中，新同事实现 `gin.HandlerFunc` 时更容易遗忘 `return` 语句。使用 `web.WarpH` 能确保不遗落 `return`。
+在开发过程中，新同事实现 `gin.HandlerFunc` 时更容易遗忘 `return` 语句。使用 `web.WrapH` 能确保不遗落 `return`。
 
 以下是两种代码的示例
 
@@ -187,14 +187,14 @@ msg 应当是开发者母语的错误描述，`reason` 用于程序内部判定�
 
 通常在前后端分离项目中，前端遇到一些错误，都需要询问后端发生了什么情况，通过 `details` 前端可以减少更多提问。
 
-在 `web.WarpH` 的封装中，错误实际是调用的 `web.Fail(err)`，此方法会判断 `reason` 应该返回怎样的 http statusCode，开发者可以在 `pkg/web/error.go` 中 `HTTPCode()` 函数实现更多 http statusCode 扩展，默认提供了 200/400/401 三种状态码。
+在 `web.WrapH` 的封装中，错误实际是调用的 `web.Fail(err)`，此方法会判断 `reason` 应该返回怎样的 http statusCode，开发者可以在 `pkg/web/error.go` 中 `HTTPCode()` 函数实现更多 http statusCode 扩展，默认提供了 200/400/401 三种状态码。
 
 details 应该仅开发模式可见，`web.SetRelease()` 可以设置为生产发布模式，此时 details 将不会写入 http response body。
 
 
 core 层导出的函数或 API 层返回的错误，应该返回 reason.Error 类型的错误。
 
-在封装的 web.WarpH 中，会正确记录错误到日志并返回给前端。
+在封装的 web.WrapH 中，会正确记录错误到日志并返回给前端。
 
 ```go
 func findUser(in *Input)  (*Output,error){
@@ -512,7 +512,7 @@ func NewVersionAPI(ver *version.Core) VersionAPI {
 // registerVersion 向路由注册业务接口
 func registerVersion(r gin.IRouter, verAPI VersionAPI, handler ...gin.HandlerFunc) {
 	ver := r.Group("/version", handler...)
-	ver.GET("", web.WarpH(verAPI.getVersion))
+	ver.GET("", web.WrapH(verAPI.getVersion))
 }
 
 func (v VersionAPI) getVersion(_ *gin.Context, _ *struct{}) (any, error) {
@@ -561,7 +561,7 @@ API 只做参数获取，返回响应参数，只做最少的事情，方便从 
 // 具体可以参考项目代码
 func RegisterVersion(r gin.IRouter, verAPI VersionAPI, handler ...gin.HandlerFunc) {
 	ver := r.Group("/version", handler...)
-	ver.GET("", web.WarpH(verAPI.getVersion))
+	ver.GET("", web.WrapH(verAPI.getVersion))
 }
 ```
 

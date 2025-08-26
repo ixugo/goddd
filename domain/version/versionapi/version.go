@@ -17,7 +17,7 @@ func New(ver version.Core) API {
 func Register(r gin.IRouter, verAPI API, handler ...gin.HandlerFunc) {
 	{
 		group := r.Group("/version", handler...)
-		group.GET("", web.WarpH(verAPI.getVersion))
+		group.GET("", web.WrapH(verAPI.getVersion))
 	}
 }
 

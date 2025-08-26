@@ -14,6 +14,8 @@ import (
 	"github.com/ixugo/goddd/pkg/reason"
 )
 
+const ResponseErr = "responseErr"
+
 var defaultDebug = true
 
 // IsRelease 是否是生产环境
@@ -41,8 +43,6 @@ type ResponseWriter interface {
 	context.Context
 	AbortWithStatusJSON(code int, obj interface{})
 }
-
-const ResponseErr = "responseErr"
 
 type HTTPContext interface {
 	JSON(int, any)
@@ -113,14 +113,24 @@ func AbortWithStatusJSON(c ResponseWriter, err error, fn ...WithData) {
 	c.Set(ResponseErr, err.Error())
 }
 
-// WarpHs 包装业务处理函数的同时，支持多个中间件
+// Deprecated: 请使用 WrapHs
 func WarpHs[I any, O any](fn func(*gin.Context, *I) (O, error), mid ...gin.HandlerFunc) []gin.HandlerFunc {
-	return slices.Concat(mid, []gin.HandlerFunc{WarpH(fn)})
+	return WrapHs(fn, mid...)
 }
 
-// WarpH 让函数更专注于业务，一般入参和出参应该是指针类型
-// 没有入参时，应该使用 *struct{}
+// Deprecated: 请使用 WrapH
 func WarpH[I any, O any](fn func(*gin.Context, *I) (O, error)) gin.HandlerFunc {
+	return WrapH(fn)
+}
+
+// WrapHs 包装业务处理函数的同时，支持多个中间件
+func WrapHs[I any, O any](fn func(*gin.Context, *I) (O, error), mid ...gin.HandlerFunc) []gin.HandlerFunc {
+	return slices.Concat(mid, []gin.HandlerFunc{WrapH(fn)})
+}
+
+// WrapH 让函数更专注于业务，一般入参和出参应该是指针类型
+// 没有入参时，应该使用 *struct{}
+func WrapH[I any, O any](fn func(*gin.Context, *I) (O, error)) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var in I
 		if unsafe.Sizeof(in) > 0 { // nolint

@@ -32,11 +32,11 @@ func NewTokenAPI(db *gorm.DB) TokenAPI {
 func Register(g gin.IRouter, api TokenAPI, handler ...gin.HandlerFunc) {
 	{
 		group := g.Group("/tokens", handler...)
-		group.GET("", web.WarpH(api.findTokens))
-		group.DELETE("/:id", web.WarpH(api.delToken))
-		// group.GET("/:id", web.WarpH(api.getToken))
-		// group.PUT("/:id", web.WarpH(api.editToken))
-		// group.POST("", web.WarpH(api.addToken))
+		group.GET("", web.WrapH(api.findTokens))
+		group.DELETE("/:id", web.WrapH(api.delToken))
+		// group.GET("/:id", web.WrapH(api.getToken))
+		// group.PUT("/:id", web.WrapH(api.editToken))
+		// group.POST("", web.WrapH(api.addToken))
 	}
 }
 

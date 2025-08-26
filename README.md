@@ -85,9 +85,9 @@ Best Practices for This Project: https://github.com/gowvp/gb28181
 
 This project uses GIN as the web framework, and the route functions need to implement `gin.HandlerFunc`. The first issue encountered when implementing API functions is binding parameters. Almost every function involves deserialization, and the function heads are cluttered with `ctx.ShouldBindJSON` and similar code.
 
-To follow the DRY (Don't Repeat Yourself) design principle, we reduce repetitive code to improve maintainability and reusability. The project wraps `web.WarpH`, which returns a `gin.HandlerFunc`. The parameters for `web.WarpH` are similar to gRPC, with a signature like `func(ctx *gin.Context, in *struct{}) (*Output, error)`.
+To follow the DRY (Don't Repeat Yourself) design principle, we reduce repetitive code to improve maintainability and reusability. The project wraps `web.WrapH`, which returns a `gin.HandlerFunc`. The parameters for `web.WrapH` are similar to gRPC, with a signature like `func(ctx *gin.Context, in *struct{}) (*Output, error)`.
 
-`WarpH` internally recognizes POST/PUT/DELETE/PATCH requests and binds the Request Body, while GET requests bind Request URL parameters.
+`WrapH` internally recognizes POST/PUT/DELETE/PATCH requests and binds the Request Body, while GET requests bind Request URL parameters.
 
 The second parameter of the input must be a pointer, and `*struct{}` is used when no parameters need to be bound. When defining the structure, especially note that the struct tags should be `json` or `form`. More details are available in the GIN framework's parameter binding documentation.
 
@@ -96,7 +96,7 @@ The second parameter of the input must be a pointer, and `*struct{}` is used whe
 
 The first parameter of the return value is the actual response body content, and it is recommended to avoid using `any`. The type can be either a value or a pointer, providing more flexibility.
 
-When parameters exist in multiple places, such as route parameters, query parameters, and request body parameters, you can implement a new `web.WarpH2` or directly implement `gin.HandlerFunc`.
+When parameters exist in multiple places, such as route parameters, query parameters, and request body parameters, you can implement a new `web.WrapH2` or directly implement `gin.HandlerFunc`.
 
 Here are two code examples:
 
@@ -123,9 +123,9 @@ func findUsers(ctx *gin.Context, in *Input) (*Output, error) {
 
 Clearly defining the response type can make the code easier to understand. The goal is to improve code readability and maintainability by paying attention to more details.
 
-The web.WarpH wrapper defaults to returning a response with the application/json content type.
+The web.WrapH wrapper defaults to returning a response with the application/json content type.
 
-During development, new colleagues may forget the return statement when implementing gin.HandlerFunc. Using web.WarpH ensures that the return statement is not omitted.
+During development, new colleagues may forget the return statement when implementing gin.HandlerFunc. Using web.WrapH ensures that the return statement is not omitted.
 
 Here are two code examples:
 
@@ -164,14 +164,14 @@ When designing the project, we considered that status codes might be hard to int
 
 In front-end and back-end separated projects, when the front-end encounters an error, they often need to ask the back-end what happened. Through `details`, the front-end can reduce the number of inquiries.
 
-In the `web.WarpH` wrapper, errors are actually handled by calling `web.Fail(err)`. This method determines which HTTP status code should be returned based on the `reason`. Developers can implement more HTTP status code extensions in the `pkg/web/error.go` file through the `HTTPCode()` function. By default, three status codes are provided: 200, 400, and 401.
+In the `web.WrapH` wrapper, errors are actually handled by calling `web.Fail(err)`. This method determines which HTTP status code should be returned based on the `reason`. Developers can implement more HTTP status code extensions in the `pkg/web/error.go` file through the `HTTPCode()` function. By default, three status codes are provided: 200, 400, and 401.
 
 `details` should only be visible in development mode. You can set the release mode using `web.SetRelease()`, in which case `details` will not be included in the HTTP response body.
 
 
 Functions exported from the core layer or errors returned from the API layer should return errors of type `reason.Error`.
 
-In the wrapped `web.WarpH`, errors are correctly logged and returned to the front-end.
+In the wrapped `web.WrapH`, errors are correctly logged and returned to the front-end.
 
 ```go
 func findUser(in *Input) (*Output, error) {
@@ -460,7 +460,7 @@ func NewVersionAPI(ver *version.Core) VersionAPI {
 // registerVersion Registers business interface with the router.
 func registerVersion(r gin.IRouter, verAPI VersionAPI, handler ...gin.HandlerFunc) {
 	ver := r.Group("/version", handler...)
-	ver.GET("", web.WarpH(verAPI.getVersion))
+	ver.GET("", web.WrapH(verAPI.getVersion))
 }
 
 func (v VersionAPI) getVersion(_ *gin.Context, _ *struct{}) (any, error) {
@@ -510,7 +510,7 @@ Frequently, we want clarity on what we're doing and why. This FAQ aims to offer 
 // Refer to project code for specifics.
 func RegisterVersion(r gin.IRouter, verAPI VersionAPI, handler ...gin.HandlerFunc) {
 	ver := r.Group("/version", handler...)
-	ver.GET("", web.WarpH(verAPI.getVersion))
+	ver.GET("", web.WrapH(verAPI.getVersion))
 }
 ```
 
