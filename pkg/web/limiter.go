@@ -10,13 +10,16 @@ import (
 )
 
 // RateLimiter 限流器
-// 可以在 handler 中执行 AbortWithStatusJSON 相关操作，用于替代默认行为
-func RateLimiter(r rate.Limit, b int, handler ...gin.HandlerFunc) gin.HandlerFunc {
+// 可以在 filter 中执行 AbortWithStatusJSON 相关操作，用于替代默认行为
+// r 每秒允许发生的事件
+// b 最大桶容量，处理突发事件
+// filter 达到限流时的处理，可以过滤某些路由，也可以自定义返回错误，如果 filter 不为空，则达到限流后不会有任何动作
+func RateLimiter(r rate.Limit, b int, filter ...gin.HandlerFunc) gin.HandlerFunc {
 	l := rate.NewLimiter(rate.Limit(r), b)
 
 	var fn gin.HandlerFunc
-	if len(handler) > 0 {
-		fn = handler[0]
+	if len(filter) > 0 {
+		fn = filter[0]
 	}
 
 	return func(c *gin.Context) {
@@ -33,13 +36,26 @@ func RateLimiter(r rate.Limit, b int, handler ...gin.HandlerFunc) gin.HandlerFun
 }
 
 // IPRateLimiter IP 限流器
-// 可以在 handler 中执行 AbortWithStatusJSON 相关操作，用于替代默认行为
-func IPRateLimiterForGin(r rate.Limit, b int, handler ...gin.HandlerFunc) gin.HandlerFunc {
+// 可以在 filter 中执行 AbortWithStatusJSON 相关操作，用于替代默认行为
+// r 每秒允许发生的事件
+// b 最大桶容量，处理突发事件
+// filter 达到限流时的处理，可以过滤某些路由，也可以自定义返回错误，如果 filter 不为空，则达到限流后不会有任何动作
+// example:
+//
+//		IPRateLimiterForGin(1, 10, func(c *gin.Context) {
+//	     	// 指定路由放行
+//			if c.Request.URL.Path == "/api/v1/login" {
+//				c.Next()
+//				return
+//			}
+//			AbortWithStatusJSON(c, reason.ErrRateLimit)
+//		})
+func IPRateLimiterForGin(r rate.Limit, b int, filter ...gin.HandlerFunc) gin.HandlerFunc {
 	limiter := IPRateLimiter(r, b)
 
 	var fn gin.HandlerFunc
-	if len(handler) > 0 {
-		fn = handler[0]
+	if len(filter) > 0 {
+		fn = filter[0]
 	}
 
 	return func(c *gin.Context) {
@@ -48,7 +64,7 @@ func IPRateLimiterForGin(r rate.Limit, b int, handler ...gin.HandlerFunc) gin.Ha
 				fn(c)
 				return
 			}
-			c.AbortWithStatusJSON(400, gin.H{"msg": "服务器繁忙"})
+			AbortWithStatusJSON(c, reason.ErrRateLimit)
 			return
 		}
 		c.Next()

@@ -19,6 +19,8 @@ var (
 	ErrFileTooLarge         = NewError("ErrFileTooLarge", "文件大小超出限制")
 	ErrUnsupportedMediaType = NewError("ErrUnsupportedMediaType", "不支持的媒体类型")
 	ErrContentTooLarge      = NewError("ErrContentTooLarge", "请求体过大")
+
+	ErrRateLimit = NewError("ErrRateLimit", "请求频率过高").SetHTTPStatus(429)
 )
 
 // 业务错误
