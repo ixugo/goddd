@@ -20,7 +20,7 @@ func WriteConfig(v any, path string) error {
 	tmp := path + ".tmp"
 	_ = os.RemoveAll(tmp)
 
-	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
 	if err != nil {
 		return err
 	}

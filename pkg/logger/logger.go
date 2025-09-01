@@ -205,12 +205,14 @@ func SetupSlog(cfg Config) (*slog.Logger, func()) {
 	}
 	slog.SetDefault(log)
 
-	crashFile, err := os.OpenFile(filepath.Join(cfg.Dir, "crash.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	file, err := os.OpenFile(filepath.Join(cfg.Dir, "crash.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err == nil {
-		_ = SetCrashOutput(crashFile)
+		_ = SetCrashOutput(file)
 	}
 	return log, func() {
-		crashFile.Close()
+		if file != nil {
+			file.Close()
+		}
 	}
 }
 

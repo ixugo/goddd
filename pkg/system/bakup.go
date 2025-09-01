@@ -1,7 +1,6 @@
 package system
 
 import (
-	"fmt"
 	"log/slog"
 	"os"
 )
@@ -30,8 +29,7 @@ func (f *FileBackup) start() {
 		case <-f.quit:
 			return
 		case data := <-f.ch:
-			fmt.Println(">>>>>>>")
-			if err := os.WriteFile(f.backupPath, data, 0o600); err != nil {
+			if err := os.WriteFile(f.backupPath, data, 0o644); err != nil { // nolint
 				slog.Error("WriteFile", "err", err)
 				continue
 			}
