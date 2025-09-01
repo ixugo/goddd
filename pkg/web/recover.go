@@ -15,18 +15,13 @@ func Recover() gin.HandlerFunc {
 		// variable after the fact.
 		defer func() {
 			if rec := recover(); rec != nil {
-
-				// Stack trace will be provided.
 				trace := debug.Stack()
 				err := fmt.Errorf("PANIC [%v] TRACE[%s]", rec, string(trace))
 				fmt.Println(err)
 
-				// v := MustGetMetrics(c)
-				// v.Panics.Add()
-				c.AbortWithStatusJSON(500, gin.H{"msg": rec})
+				traceID := MustTraceID(c)
+				c.AbortWithStatusJSON(500, gin.H{"msg": rec, "trace_id": traceID})
 				return
-				// Updates the metrics stored in the context.
-				// metrics.AddPanics(ctx)
 			}
 		}()
 
