@@ -84,9 +84,18 @@ func IPRateLimiter(r rate.Limit, b int) func(ip string) bool {
 }
 
 // LimitContentLength 限制请求体大小，比如限制 1MB，可以传入 1024*1024
-func LimitContentLength(limit int) gin.HandlerFunc {
+func LimitContentLength(limit int, filter ...gin.HandlerFunc) gin.HandlerFunc {
+	var fn gin.HandlerFunc
+	if len(filter) > 0 {
+		fn = filter[0]
+	}
+
 	return func(c *gin.Context) {
 		if c.Request.ContentLength > int64(limit) {
+			if fn != nil {
+				fn(c)
+				return
+			}
 			AbortWithStatusJSON(c, reason.ErrContentTooLarge)
 			return
 		}

@@ -104,6 +104,15 @@ func Update[T any](db *gorm.DB, model *T, changeFn func(*T), opts ...QueryOption
 	return UpdateWithContext(context.TODO(), db, model, changeFn, opts...)
 }
 
+func CountWithContext[T any](ctx context.Context, db *gorm.DB, opts ...QueryOption) (int64, error) {
+	var count int64
+	tx := db.WithContext(ctx).Model(new(T))
+	for _, opt := range opts {
+		tx = opt(tx)
+	}
+	return count, tx.Count(&count).Error
+}
+
 func UpdateWithContext[T any](ctx context.Context, db *gorm.DB, model *T, changeFn func(*T), opts ...QueryOption) error {
 	if len(opts) == 0 {
 		panic("where is empty")
