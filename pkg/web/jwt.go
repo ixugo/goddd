@@ -131,9 +131,18 @@ func GetLevel(c *gin.Context) int {
 	return GetInt(c, KeyLevel)
 }
 
-func AuthLevel(level int) gin.HandlerFunc {
+// AuthLevel 类似日志，可以使用
+// IgnorePrefix,IgnoreMethod,IgnoreBool,IgoreContains 等方法
+func AuthLevel(level int, ignoreFn ...func(*gin.Context) bool) gin.HandlerFunc {
 	// 等级从1开始，等级越小，权限越大
 	return func(c *gin.Context) {
+		for _, fn := range ignoreFn {
+			if fn(c) {
+				c.Next()
+				return
+			}
+		}
+
 		l := GetLevel(c)
 		if l > level || l == 0 {
 			Fail(c, reason.ErrBadRequest.SetMsg("权限不足"))
