@@ -61,14 +61,15 @@ func EtagHandler(ignoreFn ...IngoreOption) gin.HandlerFunc {
 		ctx.Writer = &bw
 		ctx.Next()
 
-		hash, _ := hook.MD5FromIO(&bw.body)
+		buf := bw.body.Bytes()
+		hash := hook.MD5FromBytes(buf)
 		etag := `"` + hash + `"`
+		ctx.Header("ETag", etag)
 		if match := ctx.GetHeader("If-None-Match"); match != "" && match == etag {
 			ctx.Writer.WriteHeader(http.StatusNotModified)
 			return
 		}
-		ctx.Header("ETag", etag)
-		if _, err := bw.ResponseWriter.Write(bw.body.Bytes()); err != nil {
+		if _, err := bw.ResponseWriter.Write(buf); err != nil {
 			slog.ErrorContext(ctx.Request.Context(), "write err", "err", err)
 		}
 	}
