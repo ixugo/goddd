@@ -66,24 +66,26 @@ func Fail(c ResponseWriter, err error, fn ...WithData) {
 
 	code := 400
 
-	if err1, ok := err.(reason.ErrorInfoer); ok {
-		code = err1.GetHTTPCode()
-		out["reason"] = err1.GetReason()
-		out["msg"] = err1.GetMessage()
+	if e1, ok := err.(reason.ErrorInfoer); ok {
+		code = e1.GetHTTPCode()
+		out["reason"] = e1.GetReason()
+		out["msg"] = e1.GetMessage()
+
+		// 是否需要添加 details
 		if defaultDebug {
-			d := err1.GetDetails()
+			d := e1.GetDetails()
 			if len(d) > 0 {
 				out["details"] = d
 			}
 		}
-		for i := range fn {
-			fn[i](out)
-		}
-		c.JSON(code, out)
-		c.Set(ResponseErr, err.Error())
-		return
+		// c.JSON(code, out)
+		// c.Set(ResponseErr, err.Error())
+		// return
 	}
 
+	for i := range fn {
+		fn[i](out)
+	}
 	c.JSON(code, out)
 	c.Set(ResponseErr, err.Error())
 }
@@ -98,6 +100,7 @@ func AbortWithStatusJSON(c ResponseWriter, err error, fn ...WithData) {
 		code = err1.GetHTTPCode()
 		out["reason"] = err1.GetReason()
 		out["msg"] = err1.GetMessage()
+
 		d := err1.GetDetails()
 		if defaultDebug && len(d) > 0 {
 			out["details"] = d

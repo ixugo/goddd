@@ -135,8 +135,9 @@ type IngoreOption func(*gin.Context) bool
 
 // AuthLevel 类似日志，可以使用
 // IgnorePrefix,IgnoreMethod,IgnoreBool,IgoreContains 等方法
+// 用于限制特定级别的访问，当访问级别大于 level 时响应权限不足，<= level 时放行
+// 等级从1开始，等级越小，权限越大
 func AuthLevel(level int, ignoreFn ...IngoreOption) gin.HandlerFunc {
-	// 等级从1开始，等级越小，权限越大
 	return func(c *gin.Context) {
 		for _, fn := range ignoreFn {
 			if fn(c) {
