@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -63,6 +64,13 @@ func IgnorePrefix(prefix ...string) IngoreOption {
 			}
 		}
 		return false
+	}
+}
+
+// IgnorePath 忽略指定路由
+func IgnorePath(path ...string) IngoreOption {
+	return func(c *gin.Context) bool {
+		return slices.Contains(path, c.Request.URL.Path)
 	}
 }
 
