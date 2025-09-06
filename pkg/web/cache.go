@@ -29,9 +29,15 @@ func (w *EtagWriter) Write(b []byte) (int, error) {
 // Cache-Control: no-store        # 完全不缓存
 // Cache-Control: private         # 只允许浏览器缓存
 // Cache-Control: public          # 允许中间代理缓存
-func CacheControlMaxAge(millisecond int) gin.HandlerFunc {
-	age := strconv.Itoa(millisecond)
+func CacheControlMaxAge(second int, ignoreFn ...IngoreOption) gin.HandlerFunc {
+	age := strconv.Itoa(second)
 	return func(ctx *gin.Context) {
+		for _, fn := range ignoreFn {
+			if fn(ctx) {
+				ctx.Next()
+				return
+			}
+		}
 		if ctx.Request.Method == "GET" {
 			ctx.Header("Cache-Control", "max-age="+age)
 		}
@@ -40,9 +46,15 @@ func CacheControlMaxAge(millisecond int) gin.HandlerFunc {
 }
 
 // EtagHandler 添加 ETag 头，用于缓存静态资源
-// 不适合大文件场景
-func EtagHandler() gin.HandlerFunc {
+// 不适合大文件场景，每次都是实时计算的
+func EtagHandler(ignoreFn ...IngoreOption) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
+		for _, fn := range ignoreFn {
+			if fn(ctx) {
+				ctx.Next()
+				return
+			}
+		}
 		bw := EtagWriter{
 			ResponseWriter: ctx.Writer,
 		}

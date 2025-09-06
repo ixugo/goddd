@@ -41,21 +41,21 @@ func (w *BufferWriter) Write(b []byte) (int, error) {
 }
 
 // IgnoreBool 忽略指定值
-func IgnoreBool(v bool) func(*gin.Context) bool {
+func IgnoreBool(v bool) IngoreOption {
 	return func(*gin.Context) bool {
 		return v
 	}
 }
 
 // IgnoreMethod 忽略指定请求方式的请求，一般用于忽略 options
-func IgnoreMethod(method string) func(*gin.Context) bool {
+func IgnoreMethod(method string) IngoreOption {
 	return func(ctx *gin.Context) bool {
 		return ctx.Request.Method == method
 	}
 }
 
 // IgnorePrefix 忽略指定路由前缀
-func IgnorePrefix(prefix ...string) func(*gin.Context) bool {
+func IgnorePrefix(prefix ...string) IngoreOption {
 	return func(c *gin.Context) bool {
 		for _, p := range prefix {
 			if strings.HasPrefix(c.Request.URL.Path, p) {
@@ -67,7 +67,7 @@ func IgnorePrefix(prefix ...string) func(*gin.Context) bool {
 }
 
 // IgoreContains 忽略包含的路由
-func IgoreContains(substrs ...string) func(*gin.Context) bool {
+func IgoreContains(substrs ...string) IngoreOption {
 	return func(c *gin.Context) bool {
 		for _, p := range substrs {
 			if strings.Contains(c.Request.URL.Path, p) {
@@ -80,7 +80,7 @@ func IgoreContains(substrs ...string) func(*gin.Context) bool {
 
 // Logger 记录 http 请求日志
 // 入参是忽略函数，返回 true 则忽略，比如网页请求可以忽略
-func Logger(ignoreFn ...func(*gin.Context) bool) gin.HandlerFunc {
+func Logger(ignoreFn ...IngoreOption) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		traceID := uuid.NewString()
 		c.Request = c.Request.WithContext(logger.WithAttr(c.Request.Context(), slog.String("trace_id", traceID)))
@@ -121,7 +121,7 @@ func Logger(ignoreFn ...func(*gin.Context) bool) gin.HandlerFunc {
 // LoggerWithBody 记录请求体与响应体，通常用于开发调试
 // 日志级别是 debug，即没有忽略也可能因为日志级别不打印内容
 // limit 用于限制打印数据的大小，防止超大请求体或响应体
-func LoggerWithBody(limit int, ignoreFn ...func(*gin.Context) bool) gin.HandlerFunc {
+func LoggerWithBody(limit int, ignoreFn ...IngoreOption) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		for _, fn := range ignoreFn {
 			if fn(c) {
@@ -155,7 +155,7 @@ func LoggerWithBody(limit int, ignoreFn ...func(*gin.Context) bool) gin.HandlerF
 
 // LoggerWithUseTime 记录请求用时
 // >= maxLimit 时，记录 warn 级别日志
-func LoggerWithUseTime(maxLimit time.Duration, ignoreFn ...func(*gin.Context) bool) gin.HandlerFunc {
+func LoggerWithUseTime(maxLimit time.Duration, ignoreFn ...IngoreOption) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		for _, fn := range ignoreFn {
 			if fn(c) {

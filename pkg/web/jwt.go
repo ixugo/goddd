@@ -131,9 +131,11 @@ func GetLevel(c *gin.Context) int {
 	return GetInt(c, KeyLevel)
 }
 
+type IngoreOption func(*gin.Context) bool
+
 // AuthLevel 类似日志，可以使用
 // IgnorePrefix,IgnoreMethod,IgnoreBool,IgoreContains 等方法
-func AuthLevel(level int, ignoreFn ...func(*gin.Context) bool) gin.HandlerFunc {
+func AuthLevel(level int, ignoreFn ...IngoreOption) gin.HandlerFunc {
 	// 等级从1开始，等级越小，权限越大
 	return func(c *gin.Context) {
 		for _, fn := range ignoreFn {
