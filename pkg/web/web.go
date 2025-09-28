@@ -137,8 +137,8 @@ func GetBaseURL(req *http.Request) string {
 
 // GetHost 提取主机 IP 或域名
 // 例如 http://127.0.0.1:8080/health 提取出 127.0.0.1
-func GetHost(c *http.Request) string {
-	host := c.Host
+func GetHost(req *http.Request) string {
+	host := req.Host
 	if l := strings.Split(host, ":"); len(l) == 2 {
 		host = l[0]
 	}
@@ -147,12 +147,17 @@ func GetHost(c *http.Request) string {
 
 // GetScheme 获取请求协议
 // 例如 http://127.0.0.1:8080/health 提取出 http
-func GetScheme(c *http.Request) string {
-	if c.URL.Scheme != "" {
-		return c.URL.Scheme
+func GetScheme(req *http.Request) string {
+	if req.URL.Scheme != "" {
+		return req.URL.Scheme
 	}
-	if c.TLS != nil {
+	if req.TLS != nil {
 		return "https"
 	}
 	return "http"
+}
+
+// XForwardedPrefix 解决反向代理路由问题
+func XForwardedPrefix(req *http.Request, path string) string {
+	return strings.TrimSuffix(req.Header.Get("X-Forwarded-Prefix"), "/") + path
 }

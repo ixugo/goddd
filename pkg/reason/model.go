@@ -26,10 +26,10 @@ type ErrorInfoer interface {
 var _ CustomError = &Error{}
 
 type Error struct {
-	Reason     string
-	Msg        string
-	Details    []string
-	HTTPStatus int
+	Reason     string   `json:"reason"`
+	Msg        string   `json:"msg"`
+	Details    []string `json:"details"`
+	HTTPStatus int      `json:"-"`
 }
 
 // SetHTTPStatus implements CustomError.
