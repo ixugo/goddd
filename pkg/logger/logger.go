@@ -1,6 +1,7 @@
 package logger
 
 import (
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -207,6 +208,11 @@ func SetupSlog(cfg Config) (*slog.Logger, func()) {
 
 	file, err := os.OpenFile(filepath.Join(cfg.Dir, "crash.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err == nil {
+		info, err := file.Stat()
+		if err == nil && info.Size() > 1 {
+			_, _ = fmt.Fprintf(file, "\n\n>>> %s\n\n", time.Now())
+		}
+
 		_ = SetCrashOutput(file)
 	}
 	return log, func() {

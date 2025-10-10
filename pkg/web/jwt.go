@@ -30,6 +30,15 @@ type Claims struct {
 
 type ClaimsData map[string]any
 
+type Geter interface {
+	GetString(key string) string
+	Get(key string) (value any, exists bool)
+}
+
+type IngoreOption func(*gin.Context) bool
+
+type TokenOptions func(*Claims)
+
 // NewClaimsData 提供了一些默认的设置，例如 SetUserID
 // 提供的不够用时，请使用 Set(k,v)，并实现对应的 GetK() 函数
 // 也可以匿名嵌套实现更多
@@ -94,26 +103,26 @@ func AuthMiddleware(secret string) gin.HandlerFunc {
 }
 
 // GetUID 获取用户 ID
-func GetUID(c *gin.Context) int {
+func GetUID(c Geter) int {
 	return GetInt(c, KeyUserID)
 }
 
 // GetUsername 获取用户名
-func GetUsername(c *gin.Context) string {
+func GetUsername(c Geter) string {
 	return c.GetString(KeyUsername)
 }
 
 // GetRole 获取用户角色
-func GetRoleID(c *gin.Context) int {
+func GetRoleID(c Geter) int {
 	return GetInt(c, KeyRoleID)
 }
 
 // GetToken 获取 token
-func GetToken(c *gin.Context) string {
+func GetToken(c Geter) string {
 	return c.GetString(KeyTokenString)
 }
 
-func GetInt(c *gin.Context, key string) int {
+func GetInt(c Geter, key string) int {
 	v, exist := c.Get(key)
 	if !exist {
 		return 0
@@ -127,11 +136,9 @@ func GetInt(c *gin.Context, key string) int {
 	return 0
 }
 
-func GetLevel(c *gin.Context) int {
+func GetLevel(c Geter) int {
 	return GetInt(c, KeyLevel)
 }
-
-type IngoreOption func(*gin.Context) bool
 
 // AuthLevel 类似日志，可以使用
 // IgnorePrefix,IgnoreMethod,IgnoreBool,IgoreContains 等方法
@@ -164,8 +171,6 @@ func ParseToken(tokenString string, secret string) (*Claims, error) {
 	}, jwt.WithoutClaimsValidation())
 	return &claims, err
 }
-
-type TokenOptions func(*Claims)
 
 // WithExpiresAt 设置指定过期时间
 func WithExpiresAt(expiresAt time.Time) TokenOptions {
@@ -204,6 +209,7 @@ func WithNotBefore(notBefore time.Time) TokenOptions {
 
 // NewToken 创建 token
 // 秘钥不能为空，默认过期时间是 6 个小时
+// WithExpires() 指定过期时间
 func NewToken(data map[string]any, secret string, opts ...TokenOptions) (string, error) {
 	if secret == "" {
 		return "", fmt.Errorf("secret is required")
