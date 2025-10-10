@@ -1,6 +1,6 @@
 module github.com/ixugo/goddd
 
-go 1.24
+go 1.24.0
 
 require (
 	github.com/gin-gonic/gin v1.10.1
@@ -31,8 +31,8 @@ require (
 	github.com/ncruces/go-strftime v0.1.9 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rogpeppe/go-internal v1.13.1 // indirect
-	golang.org/x/exp v0.0.0-20241217172543-b2144cdd0a67 // indirect
-	golang.org/x/sync v0.16.0 // indirect
+	golang.org/x/exp v0.0.0-20251009144603-d2f985daa21b // indirect
+	golang.org/x/sync v0.17.0 // indirect
 	golang.org/x/text v0.28.0 // indirect
 	modernc.org/libc v1.61.5 // indirect
 	modernc.org/mathutil v1.7.1 // indirect

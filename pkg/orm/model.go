@@ -1,6 +1,7 @@
 package orm
 
 import (
+	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
@@ -25,9 +26,14 @@ func GetEnabledAutoMigrate() bool {
 	return EnabledAutoMigrate
 }
 
+// Deprecated: 建议使用 JSONValueScanner
 // Scaner 所有模型内组合的结构体，必须满足该接口
-type Scaner interface {
-	Scan(input interface{}) error
+type Scaner sql.Scanner
+
+// JSONValueScanner 数据库类型定义为 json 的结构体应当实现此接口
+type JSONValueScanner interface {
+	sql.Scanner
+	driver.Valuer
 }
 
 // Model int id 模型
@@ -201,6 +207,7 @@ type Tabler interface {
 }
 
 // Deprecated: 请使用 JSONUnmarshal
+// 将在 20260101 清除该定义
 var JsonUnmarshal = JSONUnmarshal
 
 // JSONUnmarshal 将 input 反序列化到 obj 上
