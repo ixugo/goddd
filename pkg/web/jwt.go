@@ -31,8 +31,8 @@ type Claims struct {
 type ClaimsData map[string]any
 
 type Geter interface {
-	GetString(key string) string
-	Get(key string) (value any, exists bool)
+	GetString(key any) string
+	Get(key any) (value any, exists bool)
 }
 
 type IngoreOption func(*gin.Context) bool

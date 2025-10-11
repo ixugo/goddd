@@ -170,7 +170,7 @@ func ParseTimeToLayout(value string) string {
 }
 
 // Scan implements scaner
-func (t *Time) Scan(input interface{}) error {
+func (t *Time) Scan(input any) error {
 	var date time.Time
 	switch value := input.(type) {
 	case time.Time:

@@ -51,7 +51,7 @@ func NewLogger(l *slog.Logger, debug bool, slow time.Duration) *Logger {
 	return &Logger{l, debug, slow}
 }
 
-func (l *Logger) Printf(format string, v ...interface{}) {
+func (l *Logger) Printf(format string, v ...any) {
 	arr := strings.SplitN(fmt.Sprintf(format, v...), "\n", 2)
 	if len(arr) == 2 {
 		str := arr[1]

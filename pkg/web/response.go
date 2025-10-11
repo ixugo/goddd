@@ -37,11 +37,11 @@ func SetDebug() {
 
 // ResponseWriter ...
 type ResponseWriter interface {
-	JSON(code int, obj interface{})
+	JSON(code int, obj any)
 	File(filepath string)
-	Set(string, any)
+	Set(any, any)
 	context.Context
-	AbortWithStatusJSON(code int, obj interface{})
+	AbortWithStatusJSON(code int, obj any)
 }
 
 type HTTPContext interface {
