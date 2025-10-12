@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"slices"
 	"strings"
 	"time"
@@ -105,10 +106,16 @@ func Logger(ignoreFn ...IngoreOption) gin.HandlerFunc {
 		c.Next()
 
 		code := c.Writer.Status()
+
+		query, err := url.PathUnescape(c.Request.URL.RawQuery)
+		if err != nil {
+			query = c.Request.URL.RawQuery
+		}
+
 		out := []any{
 			"method", c.Request.Method,
 			"path", c.Request.URL.Path,
-			"query", c.Request.URL.RawQuery,
+			"query", query,
 			"remoteaddr", c.ClientIP(),
 			"statuscode", code,
 			"since", time.Since(now).Milliseconds(),
@@ -177,7 +184,10 @@ func LoggerWithUseTime(maxLimit time.Duration, ignoreFn ...IngoreOption) gin.Han
 		since := time.Since(now)
 
 		if since >= maxLimit {
-			slog.WarnContext(c.Request.Context(), "check use time", "since", since.Milliseconds())
+			slog.WarnContext(c.Request.Context(), "check for slow response",
+				"since", since.Milliseconds(),
+				"path", c.Request.URL.Path,
+			)
 		}
 	}
 }
