@@ -51,6 +51,9 @@ func NewHTTPHandler(uc *Usecase) http.Handler {
 	}
 
 	setupRouter(g, uc)
+	// 在确认所有表迁移完成后，再更新版本记录
+	// 防止更新中断的情况，后续启动中无法更新版本号
+	uc.Version.RecordVersion()
 	return g
 }
 
