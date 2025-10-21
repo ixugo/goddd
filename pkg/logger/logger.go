@@ -128,17 +128,16 @@ func rotatelog(dir string, maxAge, duration time.Duration, size int64) *rotatelo
 
 // Config ....
 type Config struct {
-	Dir          string
-	ID           string
-	Name         string
-	Version      string
-	Debug        bool
-	MaxAge       time.Duration
-	RotationTime time.Duration
-	RotationSize int64  // 单位字节
-	Level        string // debug/info/warn/error
-
-	Sampler Sampler // 采样器
+	Dir            string        // 日志写入目录
+	ServiceID      string        // 服务 ID(可选)
+	ServiceName    string        // 服务名称(可选)
+	ServiceVersion string        // 服务版本(可选)
+	Debug          bool          // 是否开启 debug，日志会同时写终端和文件
+	MaxAge         time.Duration // 日志保留时间
+	RotationTime   time.Duration // 日志分割时间
+	RotationSize   int64         // 日志分割大小，单位字节
+	Level          string        // debug/info/warn/error
+	Sampler        Sampler       // 采样器，用于控制日志写入频率(可选)
 }
 
 type Sampler struct {
@@ -165,13 +164,13 @@ type Sampler struct {
 // NewDefaultConfig 创建默认配置
 func NewDefaultConfig() Config {
 	return Config{
-		ID:           "test",
-		Dir:          "./logs",
-		Version:      "0.0.1",
-		Debug:        true,
-		MaxAge:       7 * 24 * time.Hour,
-		RotationTime: 1 * time.Hour,
-		RotationSize: 1 * 1024 * 1024,
+		ServiceID:      "",
+		Dir:            "./logs",
+		ServiceVersion: "v0.0.1",
+		Debug:          true,
+		MaxAge:         7 * 24 * time.Hour,
+		RotationTime:   1 * time.Hour,
+		RotationSize:   1 * 1024 * 1024,
 		Sampler: Sampler{
 			TickSec:    1,
 			First:      5,
@@ -180,7 +179,56 @@ func NewDefaultConfig() Config {
 	}
 }
 
-// SetupSlog 初始化日志
+// SetRotation 按照 size 分割日志文件，time 为分割时间间隔
+func (c Config) SetRotation(size int64, time time.Duration) Config {
+	c.RotationSize = size
+	c.RotationTime = time
+	return c
+}
+
+// SetMaxAge 设置日志保留时间
+func (c Config) SetMaxAge(maxAge time.Duration) Config {
+	c.MaxAge = maxAge
+	return c
+}
+
+// SetLevel 设置日志级别 debug/info/error
+func (c Config) SetLevel(level string) Config {
+	c.Level = level
+	return c
+}
+
+// SetSampler 设置采样器，用于控制日志写入频率(可选)
+func (c Config) SetSampler(sampler Sampler) Config {
+	c.Sampler = sampler
+	return c
+}
+
+// SetDebug 设置是否开启 debug，日志会同时写终端和文件
+func (c Config) SetDebug(debug bool) Config {
+	c.Debug = debug
+	return c
+}
+
+// SetDir 设置日志写入目录
+func (c Config) SetDir(dir string) Config {
+	c.Dir = dir
+	return c
+}
+
+// SetService 设置服务信息，可选
+// - 使用 id 作为服务唯一标识
+// - 使用 name 作为服务名称
+// - 使用 version 作为服务版本
+// id,name,version 空串时，将不记录到日志
+func (c Config) SetService(id, name, version string) Config {
+	c.ServiceID = id
+	c.ServiceName = name
+	c.ServiceVersion = version
+	return c
+}
+
+// SetupSlog 初始化日志，建议使用 NewDefaultConfig() 创建配置
 func SetupSlog(cfg Config) (*slog.Logger, func()) {
 	SetLevel(cfg.Level)
 
@@ -198,11 +246,14 @@ func SetupSlog(cfg Config) (*slog.Logger, func()) {
 		),
 	)
 
-	if cfg.ID != "" {
-		log = log.With("serviceID", cfg.ID)
+	if cfg.ServiceID != "" {
+		log = log.With("serviceID", cfg.ServiceID)
 	}
-	if cfg.Version != "" {
-		log = log.With("serviceVersion", cfg.Version)
+	if cfg.ServiceName != "" {
+		log = log.With("serviceName", cfg.ServiceName)
+	}
+	if cfg.ServiceVersion != "" {
+		log = log.With("serviceVersion", cfg.ServiceVersion)
 	}
 	slog.SetDefault(log)
 
