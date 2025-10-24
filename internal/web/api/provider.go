@@ -32,10 +32,6 @@ type Usecase struct {
 // NewHTTPHandler 生成Gin框架路由内容
 func NewHTTPHandler(uc *Usecase) http.Handler {
 	cfg := uc.Conf
-	// 检查是否设置了 JWT 密钥，如果未设置，则生成一个长度为 32 的随机字符串作为密钥
-	if cfg.Server.HTTP.JwtSecret == "" {
-		uc.Conf.Server.HTTP.JwtSecret = orm.GenerateRandomString(32)
-	}
 	// 如果不处于调试模式，将 Gin 设置为发布模式
 	if !uc.Conf.Debug {
 		gin.SetMode(gin.ReleaseMode)

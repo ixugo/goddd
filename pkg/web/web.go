@@ -100,10 +100,10 @@ func (f PagerFilter) Offset() int {
 	return (f.Page - 1) * f.Size
 }
 
-// Limit 每页 10~100 区间
+// Limit 每页 1~10000 区间
 func (f PagerFilter) Limit() int {
 	if f.Size <= 1 {
-		return 10
+		return 1
 	}
 	if f.Size > 10000 {
 		return 10000
