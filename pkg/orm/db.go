@@ -7,14 +7,13 @@ import (
 	"fmt"
 	"log/slog"
 	"math/big"
-	"regexp"
-	"strconv"
-	"strings"
 	"time"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
+
+var _ logger.Interface = (*Logger)(nil)
 
 type Config struct {
 	MaxIdleConns    int
@@ -23,82 +22,27 @@ type Config struct {
 	SlowThreshold   time.Duration
 }
 
-// type ORMLog struct {
-// 	*slog.Logger
-// }
+type GormOption func(*gorm.Config)
 
-// func (o *ORMLog) LogMode(level logger.LogLevel) logger.Interface {
-// 	return o
-// }
-
-// func (o *ORMLog) Info(context.Context, string, ...interface{}) {
-// }
-// func (o *ORMLog) Warn(context.Context, string, ...interface{}) {
-// }
-// func (o *ORMLog) Error(context.Context, string, ...interface{}) {
-// }
-// func (o *ORMLog) Trace(ctx context.Context, begin time.Time, fc func() (sql string, rowsAffected int64), err error) {
-// }
-
-type Logger struct {
-	*slog.Logger
-	debug bool
-	slog  time.Duration
-}
-
-// NewLogger 封装日志
-func NewLogger(l *slog.Logger, debug bool, slow time.Duration) *Logger {
-	return &Logger{l, debug, slow}
-}
-
-func (l *Logger) Printf(format string, v ...any) {
-	arr := strings.SplitN(fmt.Sprintf(format, v...), "\n", 2)
-	if len(arr) == 2 {
-		str := arr[1]
-		match := regexp.MustCompile(`\[(.*?)\]`).FindStringSubmatch(str)
-		var ms string
-		var sql string
-		if len(match) > 1 {
-			ms = match[1]
-			sql = strings.ReplaceAll(str, `\"`, `"`)
-		}
-
-		v, _ := strconv.ParseFloat(strings.TrimRight(ms, "ms"), 64)
-		if int64(v) >= l.slog.Milliseconds() {
-			l.Logger.Warn("gorm slow sql",
-				"file", arr[0],
-				"sql", sql,
-				"since", ms,
-			)
-		} else if l.debug {
-			l.Logger.Debug("gorm",
-				"file", arr[0],
-				"sql", sql,
-				"since", ms,
-			)
-		}
-
-		return
+// WithGormLogger 如果需要自定义 logger 的创建，仅供参考
+func WithGormLogger(l *slog.Logger, slow time.Duration) GormOption {
+	return func(c *gorm.Config) {
+		c.Logger = NewLogger(l, slow)
 	}
-	l.Logger.Warn("gorm", "detail", fmt.Sprintf(format, v...))
 }
 
 // New ...
-func New(debug bool, dialector gorm.Dialector, cfg Config, w logger.Writer) (*gorm.DB, error) {
-	level := logger.Error
-	if debug {
-		level = logger.Info
-	}
-
-	l := logger.New(w, logger.Config{
-		SlowThreshold: cfg.SlowThreshold,
-		LogLevel:      level,
-	})
-
-	db, err := gorm.Open(dialector, &gorm.Config{
-		Logger:         l,
+// 默认采用 slog.Default() 记录日志，如果日志是 debug 级别会输出所有 sql
+// warn 级别用于记录慢 sql
+func New(dialector gorm.Dialector, cfg Config, opts ...GormOption) (*gorm.DB, error) {
+	c := gorm.Config{
+		Logger:         NewLogger(slog.Default(), cfg.SlowThreshold),
 		TranslateError: true,
-	})
+	}
+	for i := range opts {
+		opts[i](&c)
+	}
+	db, err := gorm.Open(dialector, &c)
 	if err != nil {
 		return nil, err
 	}
