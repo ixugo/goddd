@@ -70,12 +70,13 @@ func (l *Logger) Trace(ctx context.Context, begin time.Time, fc func() (sql stri
 	elapsed := time.Since(begin)
 	sql, rows := fc()
 
-	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+	// 在业务里通常应该主动处理 ErrDuplicatedKey 错误，这里应该忽略掉
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) && !errors.Is(err, gorm.ErrDuplicatedKey) {
 		l.Error(ctx, "gorm error", "err", err, "sql", sql, "rows", rows)
 		return
 	}
 
-	if elapsed > l.slow {
+	if elapsed > l.slow && l.slow > 0 {
 		l.Warn(ctx, "gorm sql slow", "elapsed", elapsed, "sql", sql, "rows", rows)
 		return
 	}
