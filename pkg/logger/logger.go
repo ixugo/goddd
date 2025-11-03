@@ -162,6 +162,10 @@ type Sampler struct {
 // }
 
 // NewDefaultConfig 创建默认配置
+// 默认行为
+// - 最大 50MB 的文件即创建新文件
+// - 12 小时分割一个新的日志文件
+// - 仅保留最近 7 天的文件
 func NewDefaultConfig() Config {
 	return Config{
 		ServiceID:      "",
@@ -169,8 +173,8 @@ func NewDefaultConfig() Config {
 		ServiceVersion: "v0.0.1",
 		Debug:          true,
 		MaxAge:         7 * 24 * time.Hour,
-		RotationTime:   1 * time.Hour,
-		RotationSize:   1 * 1024 * 1024,
+		RotationTime:   12 * time.Hour,
+		RotationSize:   50 * 1024 * 1024,
 		Sampler: Sampler{
 			TickSec:    1,
 			First:      5,
@@ -179,10 +183,18 @@ func NewDefaultConfig() Config {
 	}
 }
 
-// SetRotation 按照 size 分割日志文件，time 为分割时间间隔
-func (c Config) SetRotation(size int64, time time.Duration) Config {
-	c.RotationSize = size
-	c.RotationTime = time
+// SetRotationMB 按照 MB 分割日志文件，time 为分割时间间隔
+func (c Config) SetRotationKB(kb int64, duration time.Duration) Config {
+	c.RotationSize = kb * 1024
+	c.RotationTime = duration
+	return c
+}
+
+// SetRotation 注意单位是 b
+// Deprecated: 建议使用 SetRotationKB
+func (c Config) SetRotation(b int64, duration time.Duration) Config {
+	c.RotationSize = b
+	c.RotationTime = duration
 	return c
 }
 

@@ -2,6 +2,7 @@ package web
 
 import (
 	"bytes"
+	"encoding/hex"
 	"io"
 	"log/slog"
 	"net/http"
@@ -91,7 +92,8 @@ func IgoreContains(substrs ...string) IngoreOption {
 // 入参是忽略函数，返回 true 则忽略，比如网页请求可以忽略
 func Logger(ignoreFn ...IngoreOption) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		traceID := uuid.NewString()
+		guid := uuid.New()
+		traceID := hex.EncodeToString(guid[:])
 		c.Request = c.Request.WithContext(logger.WithAttr(c.Request.Context(), slog.String("trace_id", traceID)))
 		SetTraceID(c, traceID)
 
