@@ -206,10 +206,6 @@ type Tabler interface {
 	TableName() string
 }
 
-// Deprecated: 请使用 JSONUnmarshal
-// 将在 20260101 清除该定义
-var JsonUnmarshal = JSONUnmarshal
-
 // JSONUnmarshal 将 input 反序列化到 obj 上
 func JSONUnmarshal(input, obj any) error {
 	if v, ok := input.([]byte); ok {

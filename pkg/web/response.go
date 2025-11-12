@@ -116,16 +116,6 @@ func AbortWithStatusJSON(c ResponseWriter, err error, fn ...WithData) {
 	c.Set(ResponseErr, err.Error())
 }
 
-// Deprecated: 请使用 WrapHs
-func WarpHs[I any, O any](fn func(*gin.Context, *I) (O, error), mid ...gin.HandlerFunc) []gin.HandlerFunc {
-	return WrapHs(fn, mid...)
-}
-
-// Deprecated: 请使用 WrapH
-func WarpH[I any, O any](fn func(*gin.Context, *I) (O, error)) gin.HandlerFunc {
-	return WrapH(fn)
-}
-
 // WrapHs 包装业务处理函数的同时，支持多个中间件
 func WrapHs[I any, O any](fn func(*gin.Context, *I) (O, error), mid ...gin.HandlerFunc) []gin.HandlerFunc {
 	return slices.Concat(mid, []gin.HandlerFunc{WrapH(fn)})
