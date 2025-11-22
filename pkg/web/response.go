@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"slices"
+	"strings"
 	"unsafe"
 
 	"github.com/gin-gonic/gin"
@@ -198,4 +199,34 @@ func HanddleJSONErr(err error) error {
 	default:
 		return err
 	}
+}
+
+// CustomMethods 自定义行为封装，其实现方式建议使用在叶子节点的路由上
+// 一个最佳实践是 2~3 层路由上，例如 /rooms/:name/sound
+//
+// 设计参考谷歌 restful 设计指南:
+// https://google-cloud.gitbook.io/api-design-guide/custom_methods#http-ying-she
+//
+// 示例：
+// group := r.Group("/rooms", auth)
+// CustomMethods(group, "/:name/sound", map[string]func(*gin.Context){
+// "muted":   web.WrapH(api.muteRoom),
+// "unmuted": web.WrapH(api.unmuteRoom),
+// })
+// 当找不到对应定义时，会响应 404 状态码
+func CustomMethods(g gin.IRouter, relativePath string, data map[string]func(*gin.Context)) {
+	for k, v := range data {
+		k, _ := strings.CutPrefix(k, ":")
+		data[k] = v
+	}
+
+	g.POST(relativePath+":method", func(c *gin.Context) {
+		active := strings.TrimPrefix(c.Param("method"), ":")
+		fn, ok := data[active]
+		if ok {
+			fn(c)
+			return
+		}
+		c.AbortWithStatus(404)
+	})
 }

@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -39,6 +41,9 @@ type SSE struct {
 	stream  chan Event
 	timeout time.Duration
 	cancel  context.CancelFunc
+
+	m      sync.Mutex
+	closed bool
 }
 
 type Event struct {
@@ -54,18 +59,34 @@ func NewSSE(length int, timeout time.Duration) *SSE {
 	return &SSE{
 		stream:  make(chan Event, length),
 		timeout: timeout,
+		closed:  false,
 	}
 }
 
 func (s *SSE) Publish(v Event) {
+	s.m.Lock()
+	defer s.m.Unlock()
+	if s.closed {
+		return
+	}
 	s.stream <- v
 }
 
-func (s *SSE) Close() {
-	cancel := s.cancel
-	if cancel != nil {
+// Stop 会立即停止发送事件，stop 后应该调用 Close()
+func (s *SSE) Stop() {
+	if s.cancel != nil {
 		s.cancel()
 	}
+}
+
+// Close 会确保所有事件被发送完毕
+func (s *SSE) Close() {
+	s.m.Lock()
+	defer s.m.Unlock()
+	if s.closed {
+		return
+	}
+	s.closed = true
 	close(s.stream)
 }
 
@@ -90,18 +111,23 @@ func (s *SSE) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		case <-ctx.Done():
 			return
 		case ev := <-s.stream:
-			if len(ev.Data) == 0 {
-				continue
+			if ev.ID == "" && ev.Event == "" && len(ev.Data) == 0 {
+				return
 			}
 			if len(ev.ID) > 0 {
-				fmt.Fprintf(w, "id: %s\n", ev.ID)
+				_, _ = fmt.Fprintf(w, "id: %s\n", ev.ID)
 			}
 			if len(ev.Event) > 0 {
-				fmt.Fprintf(w, "event: %s\n", ev.Event)
+				_, _ = fmt.Fprintf(w, "event: %s\n", ev.Event)
 			}
-			fmt.Fprintf(w, "data: %s\n", ev.Data)
-			fmt.Fprint(w, "\n")
-			rc.Flush()
+			if len(ev.Data) > 0 {
+				_, _ = fmt.Fprintf(w, "data: %s\n", ev.Data)
+			}
+			_, _ = fmt.Fprint(w, "\n")
+			if err := rc.Flush(); err != nil {
+				slog.ErrorContext(req.Context(), "flush", "err", err)
+				return
+			}
 		}
 	}
 }

@@ -45,12 +45,13 @@ func udpPortUsed(port int) bool {
 	return false
 }
 
-// Deprecated: 使用 github.com/ixugo/netpulse 替代
+// Deprecated: 使用 github.com/ixugo/netpulse/ip 替代
 func ExternalIP() (string, error) {
-	return "", nil
+	panic("deprecated")
 }
 
-// Deprecated: 使用 github.com/ixugo/netpulse 替代
+// Deprecated: 使用 github.com/ixugo/netpulse/ip 替代
+// ip.InternalIP()
 func LocalIP() string {
-	return ""
+	panic("deprecated")
 }
