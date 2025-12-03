@@ -77,10 +77,10 @@ func (l *Logger) Trace(ctx context.Context, begin time.Time, fc func() (sql stri
 	}
 
 	if elapsed > l.slow && l.slow > 0 {
-		l.Warn(ctx, "gorm sql slow", "elapsed", elapsed, "sql", sql, "rows", rows)
+		l.Warn(ctx, "gorm sql slow", "duration_ms", elapsed.Milliseconds(), "sql", sql, "rows", rows)
 		return
 	}
 
 	// 仅 debug 状态会打印所有 sql
-	l.DebugContext(ctx, "gorm trace", "elapsed", elapsed, "sql", sql, "rows", rows)
+	l.DebugContext(ctx, "gorm trace", "duration_ms", elapsed.Milliseconds(), "sql", sql, "rows", rows)
 }

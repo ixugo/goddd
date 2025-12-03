@@ -120,7 +120,7 @@ func Logger(ignoreFn ...IngoreOption) gin.HandlerFunc {
 			"query", query,
 			"remoteaddr", c.ClientIP(),
 			"statuscode", code,
-			"since", time.Since(now).Milliseconds(),
+			"duration_ms", time.Since(now).Milliseconds(),
 		}
 		if code >= 200 && code < 400 {
 			slog.InfoContext(c.Request.Context(), "OK", out...)
