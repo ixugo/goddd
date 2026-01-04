@@ -58,7 +58,7 @@ func assignByReflect(src any, dest any) error {
 	srcVal := reflect.ValueOf(src)
 	destVal := reflect.ValueOf(dest)
 
-	if destVal.Kind() != reflect.Ptr {
+	if destVal.Kind() != reflect.Pointer {
 		return errors.New("dest must be a pointer")
 	}
 

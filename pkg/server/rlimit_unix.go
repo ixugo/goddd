@@ -1,5 +1,4 @@
 //go:build !windows
-// +build !windows
 
 // Package rlimit contains a function to raise rlimit.
 package server
@@ -16,10 +15,7 @@ func Raise(limit uint64) error {
 		return err
 	}
 
-	rlim.Cur = limit
-	if rlim.Cur < 4096 {
-		rlim.Cur = 4096
-	}
+	rlim.Cur = max(limit, 4096)
 	err = syscall.Setrlimit(syscall.RLIMIT_NOFILE, &rlim)
 	if err != nil {
 		return err

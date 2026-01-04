@@ -25,12 +25,7 @@ func Unique[T comparable](values []T) bool {
 
 // Any 存在指定的值即返回 true
 func Any[T comparable](items []T, callback func(T) bool) bool {
-	for _, item := range items {
-		if callback(item) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(items, callback)
 }
 
 // DeduplicationFunc 自定义条件去重

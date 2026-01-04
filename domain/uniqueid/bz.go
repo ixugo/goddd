@@ -75,7 +75,7 @@ func (m *IDManager) UndoUniqueID(id string) error {
 func GenerateRandomString(letterBytes string, length int) string {
 	lettersLength := big.NewInt(int64(len(letterBytes)))
 	result := make([]byte, length)
-	for i := 0; i < length; i++ {
+	for i := range length {
 		idx, _ := rand.Int(rand.Reader, lettersLength)
 		result[i] = letterBytes[idx.Int64()]
 	}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http/pprof"
 	"runtime"
+	"slices"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -18,17 +19,15 @@ func debugAccess(ips *[]string) gin.HandlerFunc {
 			c.Next()
 			return
 		}
-		for _, v := range lips {
-			if c.ClientIP() == v {
-				c.Next()
-				return
-			}
+		if slices.Contains(lips, c.ClientIP()) {
+			c.Next()
+			return
 		}
 		c.AbortWithStatusJSON(400, gin.H{"msg": fmt.Sprintf("%s 无权访问", c.ClientIP())})
 	}
 }
 
-func SetupPProf(r *gin.Engine, ips *[]string) {
+func SetupPProf(r gin.IRouter, ips *[]string) {
 	debug := r.Group("/debug", debugAccess(ips))
 	debug.GET("/pprof/", gin.WrapF(pprof.Index))
 	debug.GET("/pprof/cmdline", gin.WrapF(pprof.Cmdline))
@@ -42,6 +41,7 @@ func SetupPProf(r *gin.Engine, ips *[]string) {
 	debug.GET("/pprof/heap", gin.WrapH(pprof.Handler("heap")))
 	debug.GET("/pprof/mutex", gin.WrapH(pprof.Handler("mutex")))
 	debug.GET("/pprof/threadcreate", gin.WrapH(pprof.Handler("threadcreate")))
+	debug.GET("/pprof/goroutineleak", gin.WrapH(pprof.Handler("goroutineleak")))
 	debug.GET("/vars", gin.WrapH(expvar.Handler()))
 }
 

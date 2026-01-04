@@ -17,8 +17,8 @@ func CompareVersionFunc(a, b string, f func(a, b string) bool) bool {
 
 func versionToStr(str string) string {
 	var result strings.Builder
-	arr := strings.Split(str, ".")
-	for _, item := range arr {
+	arr := strings.SplitSeq(str, ".")
+	for item := range arr {
 		if idx := strings.Index(item, "-"); idx != -1 {
 			item = item[0:idx]
 		}

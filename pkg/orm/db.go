@@ -171,7 +171,7 @@ func GenerateRandomString(length int) string {
 	const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890"
 	lettersLength := big.NewInt(int64(len(letterBytes)))
 	result := make([]byte, length)
-	for i := 0; i < length; i++ {
+	for i := range length {
 		idx, _ := rand.Int(rand.Reader, lettersLength)
 		result[i] = letterBytes[idx.Int64()]
 	}

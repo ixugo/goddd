@@ -38,7 +38,7 @@ func BenchmarkRemoveEmptyDirs(b *testing.B) {
 	mkTestDirs := func() {
 		os.RemoveAll(base)
 		os.MkdirAll(base, 0o755)
-		for i := 0; i < 100; i++ {
+		for i := range 100 {
 			lvl1 := filepath.Join(base, fmt.Sprintf("d1_%d", i))
 			os.MkdirAll(lvl1, 0o755)
 		}
@@ -62,13 +62,13 @@ func TestRemoveEmptyDirsV2(t *testing.T) {
 	mkTestDirs := func() {
 		os.RemoveAll(base)
 		os.MkdirAll(base, 0o755)
-		for i := 0; i < 100; i++ {
+		for i := range 100 {
 			lvl1 := filepath.Join(base, fmt.Sprintf("d1_%d", i))
 			os.MkdirAll(lvl1, 0o755)
-			for j := 0; j < 10; j++ {
+			for j := range 10 {
 				lvl2 := filepath.Join(lvl1, fmt.Sprintf("d2_%d", j))
 				os.MkdirAll(lvl2, 0o755)
-				for k := 0; k < 10; k++ {
+				for k := range 10 {
 					lvl3 := filepath.Join(lvl2, fmt.Sprintf("d3_%d", k))
 					os.MkdirAll(lvl3, 0o755)
 					// 随机生成部分文件
