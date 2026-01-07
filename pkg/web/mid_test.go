@@ -22,7 +22,7 @@ func TestLimiter(t *testing.T) {
 		ctx.String(200, "OK")
 	})
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		w := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
 		r.ServeHTTP(w, req)
@@ -51,7 +51,7 @@ func BenchmarkResponse(b *testing.B) {
 func BenchmarkMap(b *testing.B) {
 	b.Run("ip limiter", func(b *testing.B) {
 		r := rand.New(rand.NewSource(1))
-		ipRateLimiter := IPRateLimiter(10, 10)
+		ipRateLimiter := IDRateLimiter(10, 10, 3*time.Minute)
 		b.ResetTimer()
 		b.ReportAllocs()
 		b.RunParallel(func(pb *testing.PB) {

@@ -38,18 +38,16 @@ func RateLimiter(r rate.Limit, b int, ignoreFn ...IngoreOption) gin.HandlerFunc 
 //
 //	IPRateLimiterForGin(1, 10, IgnorePrefix("/api/v1/login"))
 func IPRateLimiterForGin(r rate.Limit, b int, ignoreFn ...IngoreOption) gin.HandlerFunc {
-	limiter := IPRateLimiter(r, b)
+	limiter := IDRateLimiter(r, b, 3*time.Minute)
 
 	return func(c *gin.Context) {
 		if !limiter(c.RemoteIP()) {
-
 			for _, fn := range ignoreFn {
 				if fn(c) {
 					c.Next()
 					return
 				}
 			}
-
 			AbortWithStatusJSON(c, reason.ErrRateLimit)
 			return
 		}
@@ -57,13 +55,16 @@ func IPRateLimiterForGin(r rate.Limit, b int, ignoreFn ...IngoreOption) gin.Hand
 	}
 }
 
-// IPRateLimiter IP 限流器
-func IPRateLimiter(r rate.Limit, b int) func(ip string) bool {
+// IDRateLimiter 限流器
+func IDRateLimiter(r rate.Limit, b int, ttl time.Duration) func(identifier string) bool {
+	if ttl == 0 {
+		ttl = 3 * time.Minute
+	}
 	cache := conc.NewTTLMap[string, *rate.Limiter]()
-	return func(ip string) bool {
-		v, ok := cache.Load(ip)
+	return func(identifier string) bool {
+		v, ok := cache.Load(identifier)
 		if !ok {
-			v, _ = cache.LoadOrStore(ip, rate.NewLimiter(r, b), 3*time.Minute)
+			v, _ = cache.LoadOrStore(identifier, rate.NewLimiter(r, b), ttl)
 		}
 		return v.Allow()
 	}
