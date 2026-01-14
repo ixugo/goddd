@@ -206,6 +206,12 @@ func Find[T any](db *gorm.DB, out *[]*T, p Pager, opts ...QueryOption) (int64, e
 }
 
 func FindWithContext[T any](ctx context.Context, db *gorm.DB, out *[]*T, p Pager, opts ...QueryOption) (int64, error) {
+	limit := 9999
+	offset := 0
+	if p != nil {
+		limit = p.Limit()
+		offset = p.Offset()
+	}
 	db = db.Model(new(T)).WithContext(ctx)
 	for _, opt := range opts {
 		db = opt(db)
@@ -214,5 +220,5 @@ func FindWithContext[T any](ctx context.Context, db *gorm.DB, out *[]*T, p Pager
 	if err := db.Count(&total).Error; err != nil || total <= 0 {
 		return total, err
 	}
-	return total, db.Limit(p.Limit()).Offset(p.Offset()).Find(out).Error
+	return total, db.Limit(limit).Offset(offset).Find(out).Error
 }

@@ -138,8 +138,15 @@ func Logger(ignoreFn ...IngoreOption) gin.HandlerFunc {
 // LoggerWithBody 记录请求体与响应体，通常用于开发调试
 // 日志级别是 debug，即没有忽略也可能因为日志级别不打印内容
 // limit 用于限制打印数据的大小，防止超大请求体或响应体
+// 如果 content-length 超过 limit 3 倍会忽略读取
+// 谨慎使用!!
 func LoggerWithBody(limit int, ignoreFn ...IngoreOption) gin.HandlerFunc {
+	maxSize := int64(limit * 3)
 	return func(c *gin.Context) {
+		if c.Request.ContentLength > maxSize {
+			c.Next()
+			return
+		}
 		for _, fn := range ignoreFn {
 			if fn(c) {
 				c.Next()

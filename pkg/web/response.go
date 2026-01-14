@@ -134,7 +134,26 @@ func WrapH[I any, O any](fn func(*gin.Context, *I) (O, error)) gin.HandlerFunc {
 					Fail(c, reason.ErrBadRequest.With(HanddleJSONErr(err).Error()))
 					return
 				}
-			case http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodPatch:
+			case http.MethodDelete:
+				// https://google-cloud.gitbook.io/api-design-guide/standard_methods?q=delete#delete
+				// delete 禁用 body 子句
+				if c.Request.ContentLength > 0 {
+					contentType := c.Request.Header.Get("Content-Type")
+					if contentType == "" {
+						Fail(c, reason.ErrBadRequest.With("Content-Type 不能为空"))
+						return
+					}
+					if err := c.ShouldBind(&in); err != nil {
+						Fail(c, reason.ErrBadRequest.With(HanddleJSONErr(err).Error()))
+						return
+					}
+				} else {
+					if err := c.ShouldBindQuery(&in); err != nil {
+						Fail(c, reason.ErrBadRequest.With(HanddleJSONErr(err).Error()))
+						return
+					}
+				}
+			case http.MethodPost, http.MethodPut, http.MethodPatch:
 				if c.Request.ContentLength > 0 {
 					contentType := c.Request.Header.Get("Content-Type")
 					if contentType == "" {

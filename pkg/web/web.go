@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/gin-gonic/gin"
 )
 
 // ScrollPageOutput 滚动翻页
@@ -160,4 +162,14 @@ func GetScheme(req *http.Request) string {
 // XForwardedPrefix 解决反向代理路由问题
 func XForwardedPrefix(req *http.Request, path string) string {
 	return strings.TrimSuffix(req.Header.Get("X-Forwarded-Prefix"), "/") + path
+}
+
+func SetDeadline(dura time.Duration) func(c *gin.Context) {
+	return func(c *gin.Context) {
+		rc := http.NewResponseController(c.Writer)
+		deadline := time.Now().Add(dura)
+		_ = rc.SetWriteDeadline(deadline)
+		_ = rc.SetReadDeadline(deadline)
+		c.Next()
+	}
 }

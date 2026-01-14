@@ -35,7 +35,7 @@ func (c Core) IsAutoMigrate(currentVer string) bool {
 		*c.IsMigrate = isMigrate
 		return isMigrate
 	}
-	isMigrate := compareVersionFunc(currentVer, ver.Version, func(a, b string) bool {
+	isMigrate := CompareVersionFunc(currentVer, ver.Version, func(a, b string) bool {
 		return a > b
 	})
 	*c.IsMigrate = isMigrate
@@ -50,7 +50,8 @@ func (c Core) RecordVersion(currentVer, remark string) error {
 	return c.store.Add(&ver)
 }
 
-func compareVersionFunc(a, b string, f func(a, b string) bool) bool {
+// CompareVersionFunc 比较版本号
+func CompareVersionFunc(a, b string, f func(a, b string) bool) bool {
 	s1 := versionToStr(a)
 	s2 := versionToStr(b)
 	if len(s1) != len(s2) {
