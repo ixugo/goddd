@@ -1,0 +1,10 @@
+{
+	"mcpServers": {
+		"godddx": {
+			"command": "godddx",
+			"args": [
+				"-mcp"
+			]
+		}
+	}
+}
