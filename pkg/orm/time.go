@@ -19,9 +19,14 @@ var _ json.Unmarshaler = &Time{}
 // UnmarshalJSON implements json.Unmarshaler.
 func (t *Time) UnmarshalJSON(b []byte) error {
 	l := len(b)
-	s := unsafe.String(unsafe.SliceData(b), l)
+	s := strings.Trim(unsafe.String(unsafe.SliceData(b), l), `"`)
+	if s == "" {
+		*t = Time{}
+		return nil
+	}
+
 	if v, err := strconv.Atoi(s); err == nil {
-		switch l {
+		switch len(s) {
 		case 1:
 			*t = Time{}
 		case 10:
@@ -34,13 +39,7 @@ func (t *Time) UnmarshalJSON(b []byte) error {
 		return nil
 	}
 
-	str := strings.Trim(s, `"`)
-	if str == "" {
-		*t = Time{}
-		return nil
-	}
-
-	date, err := time.ParseInLocation(time.DateTime, str, time.Local)
+	date, err := time.ParseInLocation(time.DateTime, s, time.Local)
 	if err == nil {
 		t.Time = date
 		return nil
