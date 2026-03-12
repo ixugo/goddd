@@ -35,7 +35,10 @@ type Geter interface {
 	Get(key any) (value any, exists bool)
 }
 
-type IngoreOption func(*gin.Context) bool
+type (
+	HandlerOption func(*gin.Context) bool
+	IngoreOption  func(*gin.Context) bool
+)
 
 type TokenOptions func(*Claims)
 
@@ -72,8 +75,16 @@ func (c ClaimsData) Set(key string, value any) ClaimsData {
 }
 
 // AuthMiddleware 鉴权
-func AuthMiddleware(secret string) gin.HandlerFunc {
+// handler 可以拦截请求，返回 true 则跳过默认鉴权行为，可以通过此参数自定义鉴权方案
+func AuthMiddleware(secret string, handler ...HandlerOption) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		for _, h := range handler {
+			if h(c) {
+				c.Next()
+				return
+			}
+		}
+
 		auth := c.Request.Header.Get("Authorization")
 		// header 中没有时，尝试从 query 参数中取
 		if auth == "" {

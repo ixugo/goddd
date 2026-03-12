@@ -362,8 +362,57 @@ func scheduleTaskWithFirstRun(ctx context.Context) {
 
 **更多 hook 直接看 pkg/hook 源码吧**
 
+### web.WithContext 无耦合地向 Core 层传递 HTTP 元信息
 
+在六边形架构中，Core 层不应依赖 HTTP 框架（如 `gin.Context`），但某些场景需要 HTTP 请求元信息来构造动态数据（如完整的图片 URL、当前请求的基地址等）。
 
+常见方案各有缺陷：
+
+| 方案 | 问题 |
+|------|------|
+| API 层逐个字段后处理 | 每个接口都要重复写，散落在各处 |
+| 函数签名传入 `*http.Request` | 侵入性强，所有调用链都要改签名 |
+| 函数签名传入 `baseURL string` | 每多一个需求就多加一个参数 |
+| 直接传入 `gin.Context` | Core 层对 HTTP 框架产生耦合 |
+
+`web.WithContext` 通过扩展 `context.Context` 接口来携带 HTTP 请求信息，解决了这个问题：
+
+```go
+type Context interface {
+    context.Context
+    Request() *http.Request
+    GetBaseURL() string
+    GetScheme() string
+    GetHost() string
+}
+```
+
+**API 层使用** — 只需将 `c.Request.Context()` 替换为 `web.WithContext`：
+
+```go
+ctx := web.WithContext(c.Request)
+out, err := core.DoSomething(ctx, input)
+```
+
+**Adapter 层使用** — 通过类型断言按需获取 HTTP 元信息：
+
+```go
+if wc, ok := ctx.(web.Context); ok {
+    baseURL := wc.GetBaseURL()
+    // 使用 baseURL 拼接完整 URL
+}
+```
+
+Core 层只是透传 `ctx`，完全不需要感知 HTTP。
+
+**设计亮点：**
+
++ **零破坏性** — `web.Context` 实现了 `context.Context` 接口，所有现有函数签名 `func(ctx context.Context, ...)` 无需修改即可接收。
++ **优雅降级** — 类型断言失败时（如定时任务、单元测试、CLI 工具场景）自动回退到默认值，不影响正常运行。
++ **渐进式采用** — 只需修改两处：调用处（API 层）和使用处（Adapter 层），中间层完全不需要改动。
++ **可扩展** — `web.Context` 是接口，可以定义子接口按需扩展更多元信息（如租户 ID）。
+
+**适用场景：** 动态 URL 拼接、请求级元信息透传（IP、User-Agent 等）、跨领域数据组装需要 HTTP 上下文辅助的场景。
 
 ## 快速开始
 

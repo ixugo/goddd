@@ -35,6 +35,13 @@ func (q *Query) Encode() []QueryOption {
 	return q.data
 }
 
+// Unscoped 查询时忽略软删除
+func Unscoped() QueryOption {
+	return func(d *gorm.DB) *gorm.DB {
+		return d.Unscoped()
+	}
+}
+
 // Where 查询条件
 func Where(query any, args ...any) QueryOption {
 	return func(d *gorm.DB) *gorm.DB {

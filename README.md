@@ -313,7 +313,57 @@ func scheduleTaskWithFirstRun(ctx context.Context) {
 
 **Check out the source code in pkg/hook for more hooks.**
 
+### web.WithContext Pass HTTP metadata to the Core layer without coupling
 
+In a hexagonal architecture, the Core layer should not depend on HTTP frameworks (e.g. `gin.Context`). However, some scenarios require HTTP request metadata to construct dynamic data (such as full image URLs or the current request's base address).
+
+Common approaches each have drawbacks:
+
+| Approach | Problem |
+|----------|---------|
+| Post-process each field in the API layer | Repetitive code scattered across handlers |
+| Pass `*http.Request` in function signatures | Invasive, requires changing the entire call chain |
+| Pass `baseURL string` as a parameter | Every new requirement adds another parameter |
+| Pass `gin.Context` directly | Core layer becomes coupled to the HTTP framework |
+
+`web.WithContext` solves this by extending `context.Context` with an interface that carries HTTP request information:
+
+```go
+type Context interface {
+    context.Context
+    Request() *http.Request
+    GetBaseURL() string
+    GetScheme() string
+    GetHost() string
+}
+```
+
+**Usage in the API layer** — just replace `c.Request.Context()` with `web.WithContext`:
+
+```go
+ctx := web.WithContext(c.Request)
+out, err := core.DoSomething(ctx, input)
+```
+
+**Usage in the Adapter layer** — type-assert to access HTTP metadata on demand:
+
+```go
+if wc, ok := ctx.(web.Context); ok {
+    baseURL := wc.GetBaseURL()
+    // Use baseURL to build the full URL
+}
+```
+
+The Core layer passes `ctx` through transparently, with zero awareness of HTTP.
+
+**Design highlights:**
+
++ **Zero breaking changes** — `web.Context` implements `context.Context`, so existing `func(ctx context.Context, ...)` signatures work as-is.
++ **Graceful degradation** — When the type assertion fails (e.g. in cron jobs, unit tests, CLI tools), the code falls back to default values.
++ **Progressive adoption** — Only two places need modification: the call site (API layer) and the usage site (Adapter layer). Everything in between is untouched.
++ **Extensible** — `web.Context` is an interface. You can define sub-interfaces to carry additional metadata such as tenant ID.
+
+**Applicable scenarios:** dynamic URL construction, request-level metadata passing (IP, User-Agent, etc.), cross-domain data assembly requiring HTTP context.
 
 ## Quick Start
 
