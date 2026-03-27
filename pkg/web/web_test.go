@@ -30,3 +30,36 @@ func TestLogger(t *testing.T) {
 	rec := httptest.NewRecorder()
 	g.ServeHTTP(rec, req)
 }
+
+func TestBaseURLJoin(t *testing.T) {
+	req, _ := http.NewRequest("GET", "http://127.0.0.1:8080", nil)
+	s := BaseURLJoin(req, "/a/b/", "/c/d")
+	if s != "http://127.0.0.1:8080/a/b/c/d" {
+		t.Errorf("BaseURLJoin() = %s, want %s", s, "http://127.0.0.1:8080/a/b/c/d")
+	}
+
+	s = BaseURLJoin(req, "a/b/", "c/d")
+	if s != "http://127.0.0.1:8080/a/b/c/d" {
+		t.Errorf("BaseURLJoin() = %s, want %s", s, "http://127.0.0.1:8080/a/b/c/d")
+	}
+
+	s = BaseURLJoin(req, "a/b", "c/d")
+	if s != "http://127.0.0.1:8080/a/b/c/d" {
+		t.Errorf("BaseURLJoin() = %s, want %s", s, "http://127.0.0.1:8080/a/b/c/d")
+	}
+
+	s = BaseURLJoin(req, "/a/b", "/c/d")
+	if s != "http://127.0.0.1:8080/a/b/c/d" {
+		t.Errorf("BaseURLJoin() = %s, want %s", s, "http://127.0.0.1:8080/a/b/c/d")
+	}
+
+	s = BaseURLJoin(req, "//a/b", "//c/d")
+	if s != "http://127.0.0.1:8080/a/b/c/d" {
+		t.Errorf("BaseURLJoin() = %s, want %s", s, "http://127.0.0.1:8080/a/b/c/d")
+	}
+
+	s = BaseURLJoin(req, "/a/b", "c//d")
+	if s != "http://127.0.0.1:8080/a/b/c/d" {
+		t.Errorf("BaseURLJoin() = %s, want %s", s, "http://127.0.0.1:8080/a/b/c/d")
+	}
+}

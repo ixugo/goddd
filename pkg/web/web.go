@@ -3,6 +3,7 @@ package web
 import (
 	"fmt"
 	"net/http"
+	"path"
 	"slices"
 	"strings"
 	"time"
@@ -134,12 +135,24 @@ func Offset(page, size int) int {
 // GetBaseURL 提取请求地址
 // 例如 http://127.0.0.1:8080/health 提取出 http://127.0.0.1:8080
 func GetBaseURL(req *http.Request) string {
+	if v := req.Header.Get("X-Forwarded-Prefix"); v != "" {
+		return v
+	}
 	return fmt.Sprintf("%s://%s", GetScheme(req), req.Host)
+}
+
+// BaseURLJoin 拼接 base URL
+func BaseURLJoin(req *http.Request, paths ...string) string {
+	baseURL := GetBaseURL(req)
+	return baseURL + "/" + strings.TrimPrefix(path.Join(paths...), "/")
 }
 
 // GetHost 提取主机 IP 或域名
 // 例如 http://127.0.0.1:8080/health 提取出 127.0.0.1
 func GetHost(req *http.Request) string {
+	if v := req.Header.Get("X-Forwarded-Host"); v != "" {
+		return v
+	}
 	host := req.Host
 	if l := strings.Split(host, ":"); len(l) == 2 {
 		host = l[0]
@@ -150,6 +163,9 @@ func GetHost(req *http.Request) string {
 // GetScheme 获取请求协议
 // 例如 http://127.0.0.1:8080/health 提取出 http
 func GetScheme(req *http.Request) string {
+	if v := req.Header.Get("X-Forwarded-Scheme"); v != "" {
+		return v
+	}
 	if req.URL.Scheme != "" {
 		return req.URL.Scheme
 	}

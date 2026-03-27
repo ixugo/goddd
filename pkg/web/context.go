@@ -31,10 +31,11 @@ func SetTraceID(ctx *gin.Context, id string) {
 // 断言失败时应优雅降级（返回原始值），保证非 HTTP 场景和单元测试正常工作。
 type Context interface {
 	context.Context
-	Request() *http.Request // 原始 HTTP 请求
-	GetBaseURL() string     // 如 "http://127.0.0.1:8080"
-	GetScheme() string      // "http" | "https"
-	GetHost() string        // 如 "127.0.0.1"
+	Request() *http.Request       // 原始 HTTP 请求
+	GetBaseURL() string           // 如 "http://127.0.0.1:8080"
+	GetScheme() string            // "http" | "https"
+	GetHost() string              // 如 "127.0.0.1"
+	BaseURLJoin(...string) string // 拼接 base URL
 }
 
 type httpRequestContext struct {
@@ -48,7 +49,8 @@ func WithContext(r *http.Request) Context {
 	return &httpRequestContext{Context: r.Context(), req: r}
 }
 
-func (c *httpRequestContext) Request() *http.Request { return c.req }
-func (c *httpRequestContext) GetBaseURL() string     { return GetBaseURL(c.req) }
-func (c *httpRequestContext) GetScheme() string      { return GetScheme(c.req) }
-func (c *httpRequestContext) GetHost() string        { return GetHost(c.req) }
+func (c *httpRequestContext) Request() *http.Request             { return c.req }
+func (c *httpRequestContext) GetBaseURL() string                 { return GetBaseURL(c.req) }
+func (c *httpRequestContext) GetScheme() string                  { return GetScheme(c.req) }
+func (c *httpRequestContext) GetHost() string                    { return GetHost(c.req) }
+func (c *httpRequestContext) BaseURLJoin(paths ...string) string { return BaseURLJoin(c.req, paths...) }

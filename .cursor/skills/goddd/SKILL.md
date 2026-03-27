@@ -307,6 +307,7 @@ func (p *impl) resolveCover(ctx context.Context, cover string) string {
 |----------|------|
 | `WithContext(r)` | `*http.Request` → `web.Context`，携带 HTTP 元信息 |
 | `GetBaseURL(r)` | 提取 `scheme://host` |
+| `BaseURLJoin(r,...string)` | 拼接 `scheme://host/fullpath`|
 | `GetHost(r)` / `GetScheme(r)` | 提取 host / scheme |
 | `XForwardedPrefix(r, path)` | 处理反向代理前缀 |
 | `TraceID(ctx)` / `MustTraceID(ctx)` | 获取请求追踪 ID |
