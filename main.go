@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/ixugo/goddd/domain/version/versionapi"
 	"github.com/ixugo/goddd/internal/app"
 	"github.com/ixugo/goddd/internal/conf"
 	"github.com/ixugo/goddd/pkg/system"
@@ -55,6 +56,12 @@ func main() {
 			return time.Now().Format(time.DateTime)
 		}))
 	}
+
+	// 设置数据库版本号，用于驱动 orm 的 AutoMigrate
+	// 如果表没有执行迁移，找不到数据库表，可以手动更新更大的版本号，或以下解开注释
+	// orm.SetEnabledAutoMigrate(true)
+	versionapi.DBVersion = buildVersion
+	versionapi.DBRemark = gitBranch + "_" + gitHash
 
 	app.Run(&bc)
 }

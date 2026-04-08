@@ -9,35 +9,51 @@ import (
 )
 
 func TestSlog(t *testing.T) {
-	log, _ := SetupSlog(Config{
+	dir := t.TempDir()
+	log, cleanup := SetupSlog(Config{
+		Dir:   dir,
 		Debug: true,
 	})
+	defer cleanup()
 
 	ctx := WithAttr(context.Background(), slog.String("key", "value"))
 	log.InfoContext(ctx, "Hello World")
 }
 
 func TestLog(t *testing.T) {
-	SetupSlog(Config{
-		Dir:            "./log",
+	dir := t.TempDir()
+	os.MkdirAll(dir, 0o755)
+
+	_, cleanup := SetupSlog(Config{
+		Dir:            dir,
 		ServiceID:      "test",
 		ServiceName:    "test",
 		ServiceVersion: "1.0.0",
 		Debug:          true,
 		MaxAge:         7 * 24 * time.Hour,
 	})
-	os.MkdirAll("./log", 0o755)
+	defer cleanup()
+
 	for range 10 {
-		go SetupSlog(Config{
-			Dir:            "./log",
-			ServiceID:      "test",
-			ServiceName:    "test",
-			ServiceVersion: "1.0.0",
-			Debug:          true,
-			MaxAge:         time.Second,
-		})
 		slog.Info("test")
 	}
+}
 
-	time.Sleep(5 * time.Second)
+func TestRotation(t *testing.T) {
+	log, cleanup := SetupSlog(Config{
+		Dir:            "./logs",
+		ServiceID:      "test",
+		ServiceName:    "test",
+		ServiceVersion: "1.0.0",
+		Debug:          false,
+		MaxAge:         24 * time.Hour,
+		RotationTime:   5 * time.Second,
+		RotationSize:   100,
+	})
+	defer cleanup()
+
+	for range 30 {
+		log.Info("test rotation message with enough content to trigger size-based rotation")
+		time.Sleep(200 * time.Millisecond)
+	}
 }

@@ -10,8 +10,7 @@ import (
 	"strings"
 	"time"
 
-	// "github.com/go-kratos/kratos/v2/log"
-	rotatelogs "github.com/lestrrat-go/file-rotatelogs"
+	"github.com/DeRuina/timberjack"
 	"go.uber.org/zap"
 	"go.uber.org/zap/exp/zapslog"
 	"go.uber.org/zap/zapcore"
@@ -54,7 +53,8 @@ func NewJSONLogger(debug bool, w io.Writer, sampler Sampler) *zap.Logger {
 	return zap.New(core, zap.AddCaller())
 }
 
-func rotatelog(dir string, maxAge, duration time.Duration, size int64) *rotatelogs.RotateLogs {
+// newRotateWriter 创建日志轮转写入器，支持大小+时间双重轮转，启动时自动清理过期日志
+func newRotateWriter(dir string, maxAge, duration time.Duration, size int64) *timberjack.Logger {
 	if maxAge <= 0 {
 		maxAge = 7 * 24 * time.Hour
 	}
@@ -64,13 +64,16 @@ func rotatelog(dir string, maxAge, duration time.Duration, size int64) *rotatelo
 	if size <= 0 {
 		size = 10 * 1024 * 1024
 	}
-	r, _ := rotatelogs.New(
-		filepath.Join(dir, "%Y%m%d_%H_%M_%S.log"),
-		rotatelogs.WithMaxAge(maxAge),
-		rotatelogs.WithRotationTime(duration),
-		rotatelogs.WithRotationSize(size),
-	)
-	return r
+	maxSizeMB := min(int(size/(1024*1024)), 1)
+	maxAgeDays := min(int(maxAge/(24*time.Hour)), 1)
+	return &timberjack.Logger{
+		Filename:         filepath.Join(dir, "app.log"),
+		MaxSize:          maxSizeMB,
+		MaxAge:           maxAgeDays,
+		MaxBackups:       0,
+		Compression:      "",
+		RotationInterval: duration,
+	}
 }
 
 // func TracingValue(key string, lo log.Valuer) slog.Attr {
@@ -250,7 +253,7 @@ func SetupSlog(cfg Config) (*slog.Logger, func()) {
 		cfg.Sampler.Thereafter = 5
 	}
 
-	r := rotatelog(cfg.Dir, cfg.MaxAge, cfg.RotationTime, cfg.RotationSize)
+	r := newRotateWriter(cfg.Dir, cfg.MaxAge, cfg.RotationTime, cfg.RotationSize)
 	log := slog.New(
 		newSlog(
 			NewJSONLogger(cfg.Debug, r, cfg.Sampler).Core(),
@@ -279,6 +282,7 @@ func SetupSlog(cfg Config) (*slog.Logger, func()) {
 		_ = SetCrashOutput(file)
 	}
 	return log, func() {
+		r.Close()
 		if file != nil {
 			file.Close()
 		}
