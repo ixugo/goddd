@@ -64,8 +64,8 @@ func newRotateWriter(dir string, maxAge, duration time.Duration, size int64) *ti
 	if size <= 0 {
 		size = 10 * 1024 * 1024
 	}
-	maxSizeMB := min(int(size/(1024*1024)), 1)
-	maxAgeDays := min(int(maxAge/(24*time.Hour)), 1)
+	maxSizeMB := max(int(size/(1024*1024)), 1)
+	maxAgeDays := max(int(maxAge/(24*time.Hour)), 1)
 	return &timberjack.Logger{
 		Filename:         filepath.Join(dir, "app.log"),
 		MaxSize:          maxSizeMB,

@@ -141,8 +141,12 @@ info:
 # ==================================================================================== #
 
 BUILD_DIR_ROOT := ./build
+# 常量定义，如需修改，请修改命令内的变量
 GOOS = $(shell go env GOOS)
 GOARCH = $(shell go env GOARCH)
+# cgo 默认跟随环境变量，如果明确不用 cgo，可以设置为 0
+CGO_ENABLED = $(shell go env CGO_ENABLED)
+
 IMAGE_NAME := $(MODULE_NAME):latest
 
 ## build/clean: 清理构建缓存目录
@@ -156,7 +160,7 @@ build/local:
 	$(eval dir := $(BUILD_DIR_ROOT)/$(GOOS)_$(GOARCH))
 	@echo 'Building $(VERSION) $(dir)...'
 	@rm -rf $(dir)
-	@GOOS=$(GOOS) GOARCH=$(GOARCH) go build \
+	@CGO_ENABLED=$(CGO_ENABLED) GOOS=$(GOOS) GOARCH=$(GOARCH) go build \
 		-trimpath \
 		-ldflags="-s -w \
 			-X main.buildVersion=$(VERSION) \
