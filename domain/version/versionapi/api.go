@@ -23,7 +23,7 @@ func NewVersionCore(db *gorm.DB) version.Core {
 	vdb.AutoMigrate(isOK)
 	if isOK {
 		slog.Info("更新数据库表结构")
+		orm.SetEnabledAutoMigrate(true)
 	}
-	orm.SetEnabledAutoMigrate(isOK)
 	return core
 }

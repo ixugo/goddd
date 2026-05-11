@@ -73,6 +73,7 @@ func newRotateWriter(dir string, maxAge, duration time.Duration, size int64) *ti
 		MaxBackups:       0,
 		Compression:      "",
 		RotationInterval: duration,
+		FileMode:         0o644,
 	}
 }
 
