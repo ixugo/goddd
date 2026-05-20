@@ -22,6 +22,7 @@ func Getwd() string {
 }
 
 // GetDirSize 获取目录大小，单位 Bit
+// 此操作根据目录大小，会占用较多内存，慎用
 func GetDirSize(path string) (int64, error) {
 	var size int64
 	err := filepath.Walk(path, func(_ string, info os.FileInfo, err error) error {

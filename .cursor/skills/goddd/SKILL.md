@@ -1,6 +1,6 @@
 ---
 name: goddd
-description: GoDDD 六边形架构开发指南。当使用 goddd 架构实现代码、创建新领域、新增 CRUD、数据库表定义、领域间依赖解耦、排序功能、Core 层需要 HTTP 请求信息时使用此技能。也应在以下隐含场景主动触发：新增业务模块、讨论 Core/Store/API 分层、使用 godddx 生成代码、实现适配器模式、添加 Wire provider、使用 web.WrapH/PagerFilter/DateFilter/WithContext 等框架工具。即使用户没有提到"goddd"，只要涉及六边形架构、领域驱动、依赖倒置、CRUD 生成等概念，都应使用此技能。
+description: GoDDD 六边形架构开发指南。当使用 goddd 架构实现代码、创建新领域、新增 CRUD、数据库表定义、领域间依赖解耦、排序功能、Core 层需要 HTTP 请求信息时使用此技能。也应在以下隐含场景主动触发：新增业务模块、讨论 Core/Store/API 分层、使用 godddx 生成代码、实现适配器模式、添加 Wire provider、使用 web.WrapH/PagerFilter/DateFilter/WithContext 等框架工具、Core 需要后台任务/定时任务/心跳检测/goroutine、优雅停机、Wire 循环依赖、Core 生命周期分离、SessionHandler。即使用户没有提到"goddd"，只要涉及六边形架构、领域驱动、依赖倒置、CRUD 生成、Core 职责过重等概念，都应使用此技能。
 ---
 
 # GoDDD 六边形架构开发指南
@@ -17,14 +17,16 @@ description: GoDDD 六边形架构开发指南。当使用 goddd 架构实现代
 4. [领域间解耦（适配器模式）](#领域间解耦)
 5. [排序功能实现](#排序功能实现)
 6. [WithContext：Core 层获取 HTTP 信息](#withcontext)
-7. [Web 工具函数速查](#web-工具函数速查)
-8. [API 层规范](#api-层规范)
+7. [Core 生命周期分离](#core-生命周期分离)
+8. [Web 工具函数速查](#web-工具函数速查)
+9. [API 层规范](#api-层规范)
 
-详细参考文档在 `references/` 目录下，按需阅读：
-- `references/sort.md` — 排序功能完整实现方案
-- `references/with-context.md` — WithContext 架构设计详解
-- `references/adapter-pattern.md` — 适配器模式与 Option 注入完整示例
-- `references/web-toolkit.md` — Web 工具函数完整参考（含签名和用法示例）
+详细参考文档在 `references/` 目录下，实现对应功能时**必须**先阅读：
+- `references/sort.md` — 实现拖拽排序时阅读（接收有序 ID 数组、重分配 sort 值）
+- `references/with-context.md` — Core/Adapter 需要 HTTP 请求信息（scheme、host、IP）时阅读
+- `references/adapter-pattern.md` — 新增领域间依赖、实现 Port/Adapter/Option 注入时阅读
+- `references/web-toolkit.md` — 使用 WrapH、PagerFilter、DateFilter、SSE 等 web 包工具时阅读
+- `references/lifecycle-split.md` — Core 需要后台 goroutine（定时任务、心跳检测）且遇到 Wire 循环依赖时阅读；体现 SRP：Core 值类型专注业务，生命周期委托给独立 Handler，避免 Core 职责过重
 
 ---
 
@@ -55,6 +57,8 @@ description: GoDDD 六边形架构开发指南。当使用 goddd 架构实现代
 ```
 
 **依赖方向**：API → Core ← Store/Adapter（外层依赖内层，内层通过接口反转依赖）
+
+> **Core 值类型选项**：当 Core 需要后台 goroutine 且出现 Wire 循环依赖时，可将生命周期剥离到独立的 `Handler` 结构体，Core 内嵌其指针作为字段。Core 保持值类型，职责仅为业务逻辑；Handler 负责 goroutine、ctx、cancel、优雅停机。详见 `references/lifecycle-split.md`。
 
 ---
 
@@ -88,7 +92,6 @@ type Task struct {
     ID        uniqueid.Core `gorm:"primaryKey"`
     Name      string
     Status    int
-    TenantID  string
     CreatedBy string
     Sort      int64  `gorm:"autoIncrement"`
     CreatedAt time.Time
@@ -273,6 +276,46 @@ func (p *impl) resolveCover(ctx context.Context, cover string) string {
 
 ---
 
+## Core 生命周期分离
+
+**触发条件**：Core 需要后台 goroutine，且 Wire 注入因值/指针类型冲突产生循环依赖。
+**设计原则**：代码可读性第一，避免 Core 职责过重（SRP）。
+
+### 核心思想
+
+将 goroutine、ctx、cancel、quit 等生命周期逻辑从 Core 中剥离，委托给独立的 `Handler` 结构体：
+
+| 结构体 | 类型 | 职责 |
+|--------|------|------|
+| `Core` | 值类型 | 纯业务逻辑（查询 DB、计算、编排） |
+| `XxxHandler` | 指针类型，Core 内嵌 | goroutine 启动/停止、ctx 管理、优雅停机 |
+
+### 方法分配原则
+
+- **Core 方法**：查询 DB、纯业务计算（直接实现）
+- **Core 委托方法**：需要转发给 Handler 的公开方法（一行转发，不含业务逻辑）
+- **Handler 方法**：goroutine 内部调用的私有逻辑
+
+```go
+// Core 委托方法：只转发，不含业务逻辑
+func (c Core) TrackHeartbeat(mediaID, sessionID, userID string, t int) {
+    c.ss.TrackHeartbeat(mediaID, sessionID, userID, t)
+}
+func (c Core) Close() { c.ss.Close() }
+```
+
+### Wire 注入
+
+`NewCore` 返回值类型 `Core` + 清理函数 `func()`，Wire 无需处理指针：
+
+```go
+func NewXxxCore(...) (xxx.Core, func()) { ... }
+```
+
+> 完整结构、构造函数、注意事项请阅读 `references/lifecycle-split.md`
+
+---
+
 ## Web 工具函数速查
 
 `github.com/ixugo/goddd/pkg/web` 提供 HTTP 开发基础设施。
@@ -287,9 +330,11 @@ func (p *impl) resolveCover(ctx context.Context, cover string) string {
 | `WrapHs(fn, mid...)` | 同 WrapH，附加前置中间件 |
 | `PagerFilter` | 分页参数（Page, Size, Sort, SortSafelist），含 `Offset()`, `Limit()`, `SortColumn()` |
 | `NewPagerFilterMaxSize()` | 不分页查询（Size=99999） |
-| `DateFilter` | 日期范围（StartMs, EndMs 毫秒时间戳），含 `StartAt()`, `EndAt()`, `DefaultStartAt()` |
+| `DateFilter` | 日期范围（StartMs, EndMs 毫秒时间戳），含 `StartAt()`, `EndAt()`, `DefaultStartAt()`, `DefaultEndAt()` |
 | `Validator` | 参数校验，`Check(ok, key, msg)`, `AddError(key, msg)`, `Valid()`, `List()` |
 | `CustomMethods` | 自定义方法路由 |
+| `Limit(v, minV, maxV)` | 将整数值限制在 [minV, maxV] 区间内 |
+| `Offset(page, size)` | 计算分页偏移量（page 从 1 开始） |
 
 ### 响应处理
 
@@ -298,7 +343,8 @@ func (p *impl) resolveCover(ctx context.Context, cover string) string {
 | `PageOutput[T]` | 分页响应 `{Items, Total}` |
 | `ScrollPageOutput[T]` | 滚动分页 `{Items, Next}` |
 | `Success(c, data)` | 统一成功响应 |
-| `Fail(c, err)` | 统一错误响应，自动映射 HTTP 状态码 |
+| `Fail(c, err)` | 统一错误响应，自动映射 HTTP 状态码，**不打断**后续 handler |
+| `AbortWithStatusJSON(c, err)` | 错误响应并 **Abort**，打断后续 handler（用于中间件） |
 | `ResponseMsg` | 通用消息响应 `{Msg}` |
 
 ### Context 与 URL
@@ -323,6 +369,11 @@ func (p *impl) resolveCover(ctx context.Context, cover string) string {
 | `AuthLevel(level)` | 等级鉴权中间件（等级越小权限越大） |
 | `NewClaimsData()` | 创建 Claims 数据，链式 `SetUserID/SetUsername/SetRoleID/SetLevel/Set` |
 | `GetUID/GetUsername/GetRoleID/GetLevel/GetToken/GetInt` | 从上下文获取用户信息 |
+| `WithExpires(duration)` | Token Option：设置相对过期时长 |
+| `WithExpiresAt(time.Time)` | Token Option：设置绝对过期时间 |
+| `WithIssuedAt(time.Time)` | Token Option：设置签发时间 |
+| `WithIssuer(issuer)` | Token Option：设置签发人 |
+| `WithNotBefore(time.Time)` | Token Option：设置生效时间 |
 
 ### 中间件
 
