@@ -22,8 +22,12 @@
   # 记录级别 debug/info/warn/error
   Level = 'debug'
   # 保留日志多久，超过时间自动删除
-  MaxAge = '744h0m0s'
+  MaxAge = 7
   # 多久时间，分割一个新的日志文件
   RotationTime = '8h0m0s'
   # 多大文件，分割一个新的日志文件(MB)
-  RotationSize = 50
+  MaxSize = 50
+  # 是否压缩日志
+  Compress = true
+  # 保留的旧日志归档文件最大数量，超出的自动删除
+  MaxBackups = 10

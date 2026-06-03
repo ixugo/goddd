@@ -3,28 +3,7 @@ package web
 import (
 	"context"
 	"net/http"
-
-	"github.com/gin-gonic/gin"
 )
-
-const traceIDKey = "TRACE_ID_KEY"
-
-func MustTraceID(ctx context.Context) string {
-	v := ctx.Value(traceIDKey)
-	return v.(string)
-}
-
-func TraceID(ctx context.Context) (string, bool) {
-	v := ctx.Value(traceIDKey)
-	if v == nil {
-		return "", false
-	}
-	return v.(string), true
-}
-
-func SetTraceID(ctx *gin.Context, id string) {
-	ctx.Set(traceIDKey, id)
-}
 
 // Context 扩展 context.Context，携带 HTTP 请求的元信息。
 // 下游通过 ctx.(web.Context) 类型断言按需使用，不破坏函数签名。
