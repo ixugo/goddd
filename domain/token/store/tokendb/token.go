@@ -39,7 +39,7 @@ func NewToken(db *gorm.DB) Token {
 }
 
 // Find implements token.TokenStorer.
-func (d Token) Find(ctx context.Context, bs *[]*token.Token, page orm.Pager, opts ...orm.QueryOption) (int64, error) {
+func (d Token) List(ctx context.Context, bs *[]*token.Token, page orm.Pager, opts ...orm.QueryOption) (int64, error) {
 	return orm.FindWithContext(ctx, d.db, bs, page, opts...)
 }
 
@@ -49,17 +49,17 @@ func (d Token) Get(ctx context.Context, model *token.Token, opts ...orm.QueryOpt
 }
 
 // Add implements token.TokenStorer.
-func (d Token) Add(ctx context.Context, model *token.Token) error {
+func (d Token) Create(ctx context.Context, model *token.Token) error {
 	return d.db.WithContext(ctx).Create(model).Error
 }
 
 // Edit implements token.TokenStorer.
-func (d Token) Edit(ctx context.Context, model *token.Token, changeFn func(*token.Token), opts ...orm.QueryOption) error {
+func (d Token) Update(ctx context.Context, model *token.Token, changeFn func(*token.Token), opts ...orm.QueryOption) error {
 	return orm.UpdateWithContext(ctx, d.db, model, changeFn, opts...)
 }
 
-// Del implements token.TokenStorer.
-func (d Token) Del(ctx context.Context, model *token.Token, opts ...orm.QueryOption) error {
+// Delete implements token.TokenStorer.
+func (d Token) Delete(ctx context.Context, model *token.Token, opts ...orm.QueryOption) error {
 	return orm.DeleteWithContext(ctx, d.db, model, opts...)
 }
 
@@ -80,8 +80,8 @@ func (d Token) EditWithSession(tx *gorm.DB, model *token.Token, changeFn func(b 
 	return orm.UpdateWithSession(tx, model, changeFn, opts...)
 }
 
-// DelAllForUser 删除用户的 token
-func (d Token) DelAllForUser(ctx context.Context, scope, userID string) ([]string, error) {
+// DeleteAllForUser 删除用户的 token
+func (d Token) DeleteAllForUser(ctx context.Context, scope, userID string) ([]string, error) {
 	var deletedTokens []token.Token
 	result := d.db.WithContext(ctx).Clauses(clause.Returning{Columns: []clause.Column{{Name: "id"}, {Name: "hash"}}}).
 		Where("scope = ? AND user_id = ?", scope, userID).Delete(&deletedTokens)
@@ -96,8 +96,8 @@ func (d Token) DelAllForUser(ctx context.Context, scope, userID string) ([]strin
 	return hashes, nil
 }
 
-// DelExpired 删除过期的 token
-func (d Token) DelExpired(ctx context.Context, before time.Time) ([]string, error) {
+// DeleteExpired 删除过期的 token
+func (d Token) DeleteExpired(ctx context.Context, before time.Time) ([]string, error) {
 	var deletedTokens []token.Token
 	result := d.db.WithContext(ctx).Clauses(clause.Returning{Columns: []clause.Column{{Name: "id"}, {Name: "hash"}}}).
 		Where("expired_at < ?", before).Delete(&deletedTokens)

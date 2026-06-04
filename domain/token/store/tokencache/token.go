@@ -28,9 +28,9 @@ func (c *Token) Expire(ctx context.Context, scope string, userID string, reason 
 	return keys, nil
 }
 
-// DelAllForUser implements token.TokenStorer.
-func (c *Token) DelAllForUser(ctx context.Context, scope string, userID string) ([]string, error) {
-	keys, err := c.store.Token().DelAllForUser(ctx, scope, userID)
+// DeleteAllForUser implements token.TokenStorer.
+func (c *Token) DeleteAllForUser(ctx context.Context, scope string, userID string) ([]string, error) {
+	keys, err := c.store.Token().DeleteAllForUser(ctx, scope, userID)
 	if err != nil {
 		return keys, err
 	}
@@ -44,9 +44,9 @@ func (c *Token) cacheKey(key any) string {
 	return fmt.Sprintf("TOKEN:%v", key)
 }
 
-// DelExpired implements token.TokenStorer.
-func (c *Token) DelExpired(ctx context.Context, before time.Time) ([]string, error) {
-	ids, err := c.store.Token().DelExpired(ctx, before)
+// DeleteExpired implements token.TokenStorer.
+func (c *Token) DeleteExpired(ctx context.Context, before time.Time) ([]string, error) {
+	ids, err := c.store.Token().DeleteExpired(ctx, before)
 	if err != nil {
 		return ids, err
 	}
@@ -57,8 +57,8 @@ func (c *Token) DelExpired(ctx context.Context, before time.Time) ([]string, err
 }
 
 // Find implements token.TokenStorer.
-func (c *Token) Find(ctx context.Context, bs *[]*token.Token, page orm.Pager, opts ...orm.QueryOption) (int64, error) {
-	return c.store.Token().Find(ctx, bs, page, opts...)
+func (c *Token) List(ctx context.Context, bs *[]*token.Token, page orm.Pager, opts ...orm.QueryOption) (int64, error) {
+	return c.store.Token().List(ctx, bs, page, opts...)
 }
 
 // Get implements token.TokenStorer.
@@ -78,27 +78,27 @@ func (c *Token) Get(ctx context.Context, model *token.Token, opts ...orm.QueryOp
 	return nil
 }
 
-// Add implements token.TokenStorer.
-func (c *Token) Add(ctx context.Context, model *token.Token) error {
-	if err := c.store.Token().Add(ctx, model); err != nil {
+// Create implements token.TokenStorer.
+func (c *Token) Create(ctx context.Context, model *token.Token) error {
+	if err := c.store.Token().Create(ctx, model); err != nil {
 		return err
 	}
 	c.token.Set(ctx, c.cacheKey(model.CacheKey()), model)
 	return nil
 }
 
-// Edit implements token.TokenStorer.
-func (c *Token) Edit(ctx context.Context, model *token.Token, changeFn func(*token.Token), opts ...orm.QueryOption) error {
-	if err := c.store.Token().Edit(ctx, model, changeFn, opts...); err != nil {
+// Update implements token.TokenStorer.
+func (c *Token) Update(ctx context.Context, model *token.Token, changeFn func(*token.Token), opts ...orm.QueryOption) error {
+	if err := c.store.Token().Update(ctx, model, changeFn, opts...); err != nil {
 		return err
 	}
 	c.token.Set(ctx, c.cacheKey(model.CacheKey()), model)
 	return nil
 }
 
-// Del implements token.TokenStorer.
-func (c *Token) Del(ctx context.Context, model *token.Token, opts ...orm.QueryOption) error {
-	if err := c.store.Token().Del(ctx, model, opts...); err != nil {
+// Delete implements token.TokenStorer.x
+func (c *Token) Delete(ctx context.Context, model *token.Token, opts ...orm.QueryOption) error {
+	if err := c.store.Token().Delete(ctx, model, opts...); err != nil {
 		return err
 	}
 	c.token.Del(ctx, c.cacheKey(model.CacheKey()))
@@ -111,7 +111,7 @@ func (c *Token) Session(ctx context.Context, changeFns ...func(*gorm.DB) error) 
 	return nil
 }
 
-// EditWithSession 修改事务
+// UpdateWithSession 修改事务
 func (c *Token) EditWithSession(tx *gorm.DB, model *token.Token, changeFn func(b *token.Token) error, opts ...orm.QueryOption) error {
 	//	if err := c.store.Token().EditWithSession(ctx,model, changeFn,opts...);err!=nil{
 	// return err

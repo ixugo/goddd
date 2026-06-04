@@ -32,8 +32,8 @@ func NewTokenAPI(db *gorm.DB) TokenAPI {
 func Register(g gin.IRouter, api TokenAPI, handler ...gin.HandlerFunc) {
 	{
 		group := g.Group("/tokens", handler...)
-		group.GET("", web.WrapH(api.findTokens))
-		group.DELETE("/:id", web.WrapH(api.delToken))
+		group.GET("", web.WrapH(api.listTokens))
+		group.DELETE("/:id", web.WrapH(api.deleteToken))
 		// group.GET("/:id", web.WrapH(api.getToken))
 		// group.PUT("/:id", web.WrapH(api.editToken))
 		// group.POST("", web.WrapH(api.addToken))
@@ -42,8 +42,8 @@ func Register(g gin.IRouter, api TokenAPI, handler ...gin.HandlerFunc) {
 
 // >>> token >>>>>>>>>>>>>>>>>>>>
 
-func (a TokenAPI) findTokens(c *gin.Context, in *token.FindTokenInput) (any, error) {
-	items, total, err := a.TokenCore.FindTokens(c.Request.Context(), in)
+func (a TokenAPI) listTokens(c *gin.Context, in *token.FindTokenInput) (any, error) {
+	items, total, err := a.TokenCore.ListTokens(c.Request.Context(), in)
 	return gin.H{"items": items, "total": total}, err
 }
 
@@ -61,7 +61,7 @@ func (a TokenAPI) findTokens(c *gin.Context, in *token.FindTokenInput) (any, err
 // 	return a.TokenCore.AddToken(c.Request.Context(), in)
 // }
 
-func (a TokenAPI) delToken(c *gin.Context, _ *struct{}) (any, error) {
+func (a TokenAPI) deleteToken(c *gin.Context, _ *struct{}) (any, error) {
 	tokenID, _ := strconv.Atoi(c.Param("id"))
-	return a.TokenCore.DelToken(c.Request.Context(), tokenID)
+	return a.TokenCore.DeleteToken(c.Request.Context(), tokenID)
 }

@@ -50,7 +50,7 @@ description: GoDDD 六边形架构开发指南。当使用 goddd 架构实现代
 │  ├─ model.go           非 GORM 类型定义                   │
 │  ├─ <entity>.go        业务方法 + EntityStorer 接口        │
 │  ├─ <entity>.model.go  领域模型 (GORM 映射)               │
-│  ├─ <entity>.param.go  Find/Add/Edit Input 参数           │
+│  ├─ <entity>.param.go  List/Create/Update Input 参数           │
 │  ├─ <provider>adapter/ 对外提供的适配器实现                 │
 │  └─ store/<domain>db/  数据库实现 (被动适配器)             │
 └──────────────────────────────────────────────────────────┘
@@ -123,10 +123,10 @@ func NewTaskCore(db *gorm.DB) task.Core {
 
 **核心原则**：归属字段（TenantID、CreatedBy）由 API 层填充，编辑时不可修改。
 
-### FindInput — 查询参数
+### ListInput — 查询参数
 
 ```go
-type FindEntityInput struct {
+type ListEntityInput struct {
     web.PagerFilter                          // 分页
     web.DateFilter                           // 日期范围（start_ms, end_ms 毫秒时间戳）
     Name string `form:"name"`               // 模糊查询字段
@@ -136,10 +136,10 @@ type FindEntityInput struct {
 }
 ```
 
-### AddInput — 新增参数
+### CreateInput — 新增参数
 
 ```go
-type AddEntityInput struct {
+type CreateEntityInput struct {
     Name string `json:"name"`
 
     TenantID  string `json:"-"`             // API 层填充
@@ -147,10 +147,10 @@ type AddEntityInput struct {
 }
 ```
 
-### EditInput — 编辑参数
+### UpdateInput — 编辑参数
 
 ```go
-type EditEntityInput struct {
+type UpdateEntityInput struct {
     Name string `json:"name"`
     // 不包含 TenantID、CreatedBy 等归属字段
 }
@@ -455,10 +455,10 @@ return nil, reason.ErrUnauthorized.SetMsg("未登录")       // → 401
 ```go
 func registerTask(r gin.IRouter, api TaskAPI, handler ...gin.HandlerFunc) {
     g := r.Group("/tasks", handler...)
-    g.GET("", web.WrapH(api.findTasks))
-    g.POST("", web.WrapH(api.addTask))
+    g.GET("", web.WrapH(api.listTasks))
+    g.POST("", web.WrapH(api.createTask))
     g.GET("/:id", web.WrapH(api.getTask))
-    g.PUT("/:id", web.WrapH(api.editTask))
+    g.PUT("/:id", web.WrapH(api.updateTask))
     g.DELETE("/:id", web.WrapH(api.deleteTask))
     g.PUT("/sort", web.WrapH(api.sortTasks))
 }

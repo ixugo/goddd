@@ -9,9 +9,9 @@ import (
 
 // UniqueIDStorer Instantiation interface
 type UniqueIDStorer interface {
-	Find(context.Context, *[]*UniqueID, orm.Pager, ...orm.QueryOption) (int64, error)
+	List(context.Context, *[]*UniqueID, orm.Pager, ...orm.QueryOption) (int64, error)
 	Get(context.Context, *UniqueID, ...orm.QueryOption) error
-	Add(context.Context, *UniqueID) error
-	Edit(context.Context, *UniqueID, func(*UniqueID), ...orm.QueryOption) error
-	Del(context.Context, *UniqueID, ...orm.QueryOption) error
+	Create(context.Context, *UniqueID) error
+	Update(context.Context, *UniqueID, func(*UniqueID), ...orm.QueryOption) error
+	Delete(context.Context, *UniqueID, ...orm.QueryOption) error
 }

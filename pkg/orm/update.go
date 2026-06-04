@@ -57,12 +57,20 @@ func OrderBy(value any) QueryOption {
 }
 
 // Universal 通用增删改查
+// Deprecated: 建议使用 godddx 生成代码，而非内嵌此接口
 type Universal[T any] interface {
 	Get(context.Context, *T, ...QueryOption) error
+	// olw
 	Edit(context.Context, *T, func(*T) error, ...QueryOption) error
 	Del(context.Context, *T, ...QueryOption) error
 	Add(context.Context, *T) error
 	Find(context.Context, *[]*T, Pager, ...QueryOption) (int64, error)
+
+	// new
+	Delete(context.Context, *T, ...QueryOption) error
+	Create(context.Context, *T) error
+	List(context.Context, *[]*T, Pager, ...QueryOption) (int64, error)
+	Update(context.Context, *T, func(*T) error, ...QueryOption) error
 }
 
 // UniversalSession 通用事务
@@ -99,11 +107,11 @@ func FirstWithContext(ctx context.Context, db *gorm.DB, out any, opts ...QueryOp
 }
 
 // Update 通用更新
-func (t Type[T]) Edit(ctx context.Context, model *T, changeFn func(*T) error, opts ...QueryOption) error {
+func (t Type[T]) Update(ctx context.Context, model *T, changeFn func(*T) error, opts ...QueryOption) error {
 	return UpdateWithContext2(ctx, t.db, model, changeFn, opts...)
 }
 
-func (t Type[T]) Add(ctx context.Context, model *T) error {
+func (t Type[T]) Create(ctx context.Context, model *T) error {
 	return t.db.WithContext(ctx).Create(model).Error
 }
 
@@ -180,7 +188,7 @@ func UpdateWithSession[T any](tx *gorm.DB, model *T, fn func(*T) error, opts ...
 }
 
 // Delete 通用删除
-func (t Type[T]) Del(ctx context.Context, model *T, opts ...QueryOption) error {
+func (t Type[T]) Delete(ctx context.Context, model *T, opts ...QueryOption) error {
 	return DeleteWithContext(ctx, t.db, model, opts...)
 }
 
@@ -204,15 +212,15 @@ type Pager interface {
 	Offset() int
 }
 
-func (t Type[T]) Find(ctx context.Context, out *[]*T, p Pager, opts ...QueryOption) (int64, error) {
+func (t Type[T]) List(ctx context.Context, out *[]*T, p Pager, opts ...QueryOption) (int64, error) {
 	return FindWithContext(ctx, t.db, out, p, opts...)
 }
 
-func Find[T any](db *gorm.DB, out *[]*T, p Pager, opts ...QueryOption) (int64, error) {
+func List[T any](db *gorm.DB, out *[]*T, p Pager, opts ...QueryOption) (int64, error) {
 	return FindWithContext(context.TODO(), db, out, p, opts...)
 }
 
-func FindWithContext[T any](ctx context.Context, db *gorm.DB, out *[]*T, p Pager, opts ...QueryOption) (int64, error) {
+func ListWithContext[T any](ctx context.Context, db *gorm.DB, out *[]*T, p Pager, opts ...QueryOption) (int64, error) {
 	limit := 9999
 	offset := 0
 	if p != nil {

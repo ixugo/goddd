@@ -13,23 +13,23 @@ import (
 
 // TokenStorer Instantiation interface
 type TokenStorer interface {
-	Find(context.Context, *[]*Token, orm.Pager, ...orm.QueryOption) (int64, error)
+	List(context.Context, *[]*Token, orm.Pager, ...orm.QueryOption) (int64, error)
 	Get(context.Context, *Token, ...orm.QueryOption) error
-	Add(context.Context, *Token) error
-	Edit(context.Context, *Token, func(*Token), ...orm.QueryOption) error
-	Del(context.Context, *Token, ...orm.QueryOption) error
-	DelExpired(ctx context.Context, before time.Time) ([]string, error)
-	DelAllForUser(ctx context.Context, scope, userID string) ([]string, error)
+	Create(context.Context, *Token) error
+	Update(context.Context, *Token, func(*Token), ...orm.QueryOption) error
+	Delete(context.Context, *Token, ...orm.QueryOption) error
+	DeleteExpired(ctx context.Context, before time.Time) ([]string, error)
+	DeleteAllForUser(ctx context.Context, scope, userID string) ([]string, error)
 	// 主动过期的函数，记录过期的原因，对用户友好
 	Expire(ctx context.Context, scope, userID, reason string) ([]string, error)
 }
 
 // FindToken Paginated search
-func (c Core) FindTokens(ctx context.Context, in *FindTokenInput) ([]*Token, int64, error) {
+func (c Core) ListTokens(ctx context.Context, in *FindTokenInput) ([]*Token, int64, error) {
 	query := orm.NewQuery(1).OrderBy("created_at DESC")
 
 	items := make([]*Token, 0, in.Limit())
-	total, err := c.store.Token().Find(ctx, &items, in, query.Encode()...)
+	total, err := c.store.Token().List(ctx, &items, in, query.Encode()...)
 	if err != nil {
 		return nil, 0, reason.ErrDB.Withf(`Find err[%s]`, err.Error())
 	}
@@ -48,23 +48,23 @@ func (c Core) GetToken(ctx context.Context, id int) (*Token, error) {
 	return &out, nil
 }
 
-// AddToken Insert into database
-func (c Core) AddToken(ctx context.Context, in *AddTokenInput) (*Token, error) {
+// Create Token Insert into database
+func (c Core) CreateToken(ctx context.Context, in *AddTokenInput) (*Token, error) {
 	var out Token
 	if err := copier.Copy(&out, in); err != nil {
 		slog.ErrorContext(ctx, "Copy", "err", err)
 	}
 	out.UpdatedAt = orm.Now()
-	if err := c.store.Token().Add(ctx, &out); err != nil {
+	if err := c.store.Token().Create(ctx, &out); err != nil {
 		return nil, reason.ErrDB.Withf(`Add err[%s]`, err.Error())
 	}
 	return &out, nil
 }
 
-// EditToken Update object information
-func (c Core) EditToken(ctx context.Context, in *EditTokenInput, id int) (*Token, error) {
+// UpdateToken Update object information
+func (c Core) UpdateToken(ctx context.Context, in *EditTokenInput, id int) (*Token, error) {
 	var out Token
-	if err := c.store.Token().Edit(ctx, &out, func(b *Token) {
+	if err := c.store.Token().Update(ctx, &out, func(b *Token) {
 		if err := copier.Copy(b, in); err != nil {
 			slog.ErrorContext(ctx, "Copy", "err", err)
 		}
@@ -74,10 +74,10 @@ func (c Core) EditToken(ctx context.Context, in *EditTokenInput, id int) (*Token
 	return &out, nil
 }
 
-// DelToken Delete object
-func (c Core) DelToken(ctx context.Context, id int) (*Token, error) {
+// DeleteToken Delete object
+func (c Core) DeleteToken(ctx context.Context, id int) (*Token, error) {
 	var out Token
-	if err := c.store.Token().Del(ctx, &out, orm.Where("id=?", id)); err != nil {
+	if err := c.store.Token().Delete(ctx, &out, orm.Where("id=?", id)); err != nil {
 		return nil, reason.ErrDB.Withf(`Del err[%s]`, err.Error())
 	}
 	return &out, nil

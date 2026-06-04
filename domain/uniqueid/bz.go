@@ -54,7 +54,7 @@ func (m *IDManager) UniqueID(prefix string, length int) string {
 		// 生成自定义长度随机数，通过数据库主键来防止碰撞，碰撞后再次尝试
 		for range 36 {
 			id := prefix + GenerateRandomString(m.letterBytes, length+i)
-			if err := m.store.Add(context.Background(), &UniqueID{ID: id}); err != nil {
+			if err := m.store.Create(context.Background(), &UniqueID{ID: id}); err != nil {
 				slog.Error("UniqueID", "err", err)
 				continue
 			}
@@ -68,7 +68,7 @@ func (m *IDManager) UniqueID(prefix string, length int) string {
 // UndoUniqueID 删除唯一 id
 func (m *IDManager) UndoUniqueID(id string) error {
 	var uni UniqueID
-	return m.store.Del(context.Background(), &uni, orm.Where("id=?", id))
+	return m.store.Delete(context.Background(), &uni, orm.Where("id=?", id))
 }
 
 // GenerateRandomString 生成随机字符串

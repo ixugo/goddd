@@ -20,7 +20,7 @@ func NewUniqueID(db *gorm.DB) UniqueID {
 }
 
 // Find implements uniqueid.UniqueIDStorer.
-func (d UniqueID) Find(ctx context.Context, bs *[]*uniqueid.UniqueID, page orm.Pager, opts ...orm.QueryOption) (int64, error) {
+func (d UniqueID) List(ctx context.Context, bs *[]*uniqueid.UniqueID, page orm.Pager, opts ...orm.QueryOption) (int64, error) {
 	return orm.FindWithContext(ctx, d.db, bs, page, opts...)
 }
 
@@ -30,17 +30,17 @@ func (d UniqueID) Get(ctx context.Context, model *uniqueid.UniqueID, opts ...orm
 }
 
 // Add implements uniqueid.UniqueIDStorer.
-func (d UniqueID) Add(ctx context.Context, model *uniqueid.UniqueID) error {
+func (d UniqueID) Create(ctx context.Context, model *uniqueid.UniqueID) error {
 	return d.db.WithContext(ctx).Create(model).Error
 }
 
 // Edit implements uniqueid.UniqueIDStorer.
-func (d UniqueID) Edit(ctx context.Context, model *uniqueid.UniqueID, changeFn func(*uniqueid.UniqueID), opts ...orm.QueryOption) error {
+func (d UniqueID) Update(ctx context.Context, model *uniqueid.UniqueID, changeFn func(*uniqueid.UniqueID), opts ...orm.QueryOption) error {
 	return orm.UpdateWithContext(ctx, d.db, model, changeFn, opts...)
 }
 
 // Del implements uniqueid.UniqueIDStorer.
-func (d UniqueID) Del(ctx context.Context, model *uniqueid.UniqueID, opts ...orm.QueryOption) error {
+func (d UniqueID) Delete(ctx context.Context, model *uniqueid.UniqueID, opts ...orm.QueryOption) error {
 	return orm.DeleteWithContext(ctx, d.db, model, opts...)
 }
 

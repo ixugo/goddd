@@ -22,14 +22,14 @@ func (c Core) DelayToken(ctx context.Context, token string, expire time.Time) er
 func (c Core) DelayTokenNow(ctx context.Context, token string, expire time.Time) error {
 	hash := sha256.Sum256([]byte(token))
 	var to Token
-	return c.store.Token().Edit(ctx, &to, func(t *Token) {
+	return c.store.Token().Update(ctx, &to, func(t *Token) {
 		t.ExpiredAt.Time = expire
 	}, orm.Where("hash = ?", hash[:]))
 }
 
-// DelExpired 删除过期的 token
-func (c Core) DelExpired(ctx context.Context, before time.Time) ([]string, error) {
-	return c.store.Token().DelExpired(ctx, before)
+// DeleteExpired 删除过期的 token
+func (c Core) DeleteExpired(ctx context.Context, before time.Time) ([]string, error) {
+	return c.store.Token().DeleteExpired(ctx, before)
 }
 
 // Valid 验证 token 是否过期
@@ -52,9 +52,9 @@ func (c Core) Valid(ctx context.Context, token string) error {
 	return nil
 }
 
-// DelAllForUser 删除用户的所有 token
-func (c Core) DelAllForUser(ctx context.Context, scope, userID string) ([]string, error) {
-	return c.store.Token().DelAllForUser(ctx, scope, userID)
+// DeleteAllForUser 删除用户的所有 token
+func (c Core) DeleteAllForUser(ctx context.Context, scope, userID string) ([]string, error) {
+	return c.store.Token().DeleteAllForUser(ctx, scope, userID)
 }
 
 // Expire 主动过期
