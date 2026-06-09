@@ -1,0 +1,10 @@
+├── internal					私有业务
+│   ├── core					业务领域
+│   │   └── user				实际业务领域名
+│   │       └── core.go			业务核心
+│   │       └── user.model.go	业务模型
+│   │       └── user.param.go	业务参数
+|	|	    └── doc.go			业务说明
+│   │       └── store
+│   │           └── userdb
+│   │               └── db.go 	数据库操作

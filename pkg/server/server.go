@@ -51,6 +51,7 @@ func New(handler http.Handler, opts ...Option) *Server {
 	return s
 }
 
+// Start 启动 HTTP 服务
 func (s *Server) Start() {
 	s.once.Do(func() {
 		if s.lis != nil {
@@ -62,6 +63,7 @@ func (s *Server) Start() {
 	})
 }
 
+// StartTLS 启动 HTTPS 服务
 func (s *Server) StartTLS(certFile, keyFile string) {
 	s.once.Do(func() {
 		if s.lis != nil {

@@ -23,7 +23,9 @@ title:
 
 .PHONY: rename
 ## rename: clone 后的模板，需要更新 module 名
+# 例如: make rename name=github.com/name/project
 rename:
+	@rm -rf .git ./docs/* ./changelog
 	@if [ -z "$(name)" ]; then \
 		echo "错误: 请提供 name 参数，例如: make rename name=github.com/name/project"; \
 		exit 1; \
@@ -34,7 +36,8 @@ rename:
 	@sed -i.bak 's|github\.com/ixugo/goddd|$(name)|g' go.mod
 	@find . -name "*.bak" -delete
 	@go mod tidy
-	@echo -e "\n模块名替换完成"
+	@git init
+	@make title content="\n模块名替换完成"
 
 # ==================================================================================== #
 # DEVELOPMENT
@@ -133,7 +136,6 @@ info:
 	@echo "version: $(VERSION)"
 	@echo "branch $(BRANCH)"
 	@echo "hash: $(HASH_AND_DATE)"
-	@echo "support $$(go tool dist list | grep amd64 | grep linux)"
 
 
 # ==================================================================================== #
@@ -164,7 +166,7 @@ build/local:
 		-trimpath \
 		-ldflags="-s -w \
 			-X main.buildVersion=$(VERSION) \
-			-X main.gitBranch=$(BRANCH_NAME) \
+			-X main.gitBranch=$(BRANCH) \
 			-X main.gitHash=$(HASH_AND_DATE) \
 			-X main.buildTimeAt=$(shell date +%s) \
 			-X main.release=true \
@@ -196,7 +198,7 @@ docker/save:
 docker/push:
 	@docker push $(IMAGE_NAME)
 
-docker/deploy: build/clean
+docker/publish: build/clean
 	$(eval GOARCH := amd64)
 	$(eval GOOS := linux)
 	$(eval dir := $(BUILD_DIR_ROOT)/$(GOOS)_$(GOARCH))
