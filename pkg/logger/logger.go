@@ -38,15 +38,18 @@ func NewJSONLogger(debug bool, w io.Writer, sampler Sampler) *zap.Logger {
 func newRotateWriter(cfg FileConfig) *timberjack.Logger {
 	cfg = cfg.ensureNonZero()
 
+	compression := "none"
+	if cfg.Compress {
+		compression = "gzip"
+	}
 	return &timberjack.Logger{
 		Filename:         filepath.Join(cfg.Dir, cfg.Name),
 		MaxSize:          cfg.MaxSize,
 		MaxAge:           cfg.MaxAge,
 		MaxBackups:       cfg.MaxBackups,
-		Compression:      "gzip",
+		Compression:      compression,
 		RotationInterval: cfg.RotationTime,
 		FileMode:         0o644,
-		Compress:         cfg.Compress,
 	}
 }
 
