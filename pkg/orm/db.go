@@ -19,6 +19,7 @@ type Config struct {
 	MaxIdleConns    int
 	MaxOpenConns    int
 	ConnMaxLifetime time.Duration
+	ConnMaxIdleTime time.Duration
 	SlowThreshold   time.Duration
 }
 
@@ -36,8 +37,9 @@ func WithGormLogger(l *slog.Logger, slow time.Duration) GormOption {
 // warn 级别用于记录慢 sql
 func New(dialector gorm.Dialector, cfg Config, opts ...GormOption) (*gorm.DB, error) {
 	c := gorm.Config{
-		Logger:         NewLogger(slog.Default(), cfg.SlowThreshold),
-		TranslateError: true,
+		Logger:                 NewLogger(slog.Default(), cfg.SlowThreshold),
+		TranslateError:         true,
+		SkipDefaultTransaction: true,
 	}
 	for i := range opts {
 		opts[i](&c)
@@ -61,6 +63,9 @@ func New(dialector gorm.Dialector, cfg Config, opts ...GormOption) (*gorm.DB, er
 	sqlDB.SetMaxIdleConns(cfg.MaxIdleConns)
 	sqlDB.SetMaxOpenConns(cfg.MaxOpenConns)
 	sqlDB.SetConnMaxLifetime(cfg.ConnMaxLifetime)
+	if cfg.ConnMaxIdleTime > 0 {
+		sqlDB.SetConnMaxIdleTime(cfg.ConnMaxIdleTime)
+	}
 	return db, nil
 }
 

@@ -1,6 +1,6 @@
 ---
 name: goddd
-description: GoDDD 六边形架构开发指南。当使用 goddd 架构实现代码、创建新领域、新增 CRUD、数据库表定义、领域间依赖解耦、排序功能、Core 层需要 HTTP 请求信息时使用此技能。也应在以下隐含场景主动触发：新增业务模块、讨论 Core/Store/API 分层、使用 godddx 生成代码、实现适配器模式、添加 Wire provider、使用 web.WrapH/PagerFilter/DateFilter/WithContext 等框架工具、Core 需要后台任务/定时任务/心跳检测/goroutine、优雅停机、Wire 循环依赖、Core 生命周期分离、SessionHandler。即使用户没有提到"goddd"，只要涉及六边形架构、领域驱动、依赖倒置、CRUD 生成、Core 职责过重等概念，都应使用此技能。
+description: GoDDD 六边形架构开发指南。当使用 goddd 架构实现代码、创建新领域、新增 CRUD、数据库表定义、领域间依赖解耦、领域内子包拆分与依赖、排序功能、Core 层需要 HTTP 请求信息时使用此技能。也应在以下隐含场景主动触发：新增业务模块、讨论 Core/Store/API 分层、使用 godddx 生成代码、实现适配器模式、添加 Wire provider、使用 web.WrapH/PagerFilter/DateFilter/WithContext 等框架工具、Core 需要后台任务/定时任务/心跳检测/goroutine、优雅停机、Wire 循环依赖、Core 生命周期分离、SessionHandler、修改 store/xxxcache 缓存层（判断内存缓存 vs Redis 缓存、SETNX/SETEX 防竞态、WarmUp 预热）、领域内子包间依赖方向、子包是否需要接口隔离、子包循环依赖处理。即使用户没有提到"goddd"，只要涉及六边形架构、领域驱动、依赖倒置、CRUD 生成、Core 职责过重、缓存层改造、子包拆分依赖等概念，都应使用此技能。
 ---
 
 # GoDDD 六边形架构开发指南
@@ -15,11 +15,13 @@ description: GoDDD 六边形架构开发指南。当使用 goddd 架构实现代
 2. [godddx 代码生成](#godddx-代码生成)
 3. [参数定义规范](#参数定义规范)
 4. [领域间解耦（适配器模式）](#领域间解耦)
-5. [排序功能实现](#排序功能实现)
-6. [WithContext：Core 层获取 HTTP 信息](#withcontext)
-7. [Core 生命周期分离](#core-生命周期分离)
-8. [Web 工具函数速查](#web-工具函数速查)
-9. [API 层规范](#api-层规范)
+5. [领域内子包依赖](#领域内子包依赖)
+6. [排序功能实现](#排序功能实现)
+7. [WithContext：Core 层获取 HTTP 信息](#withcontext)
+8. [Core 生命周期分离](#core-生命周期分离)
+9. [Web 工具函数速查](#web-工具函数速查)
+10. [Store 缓存层规范](#store-缓存层规范)
+11. [API 层规范](#api-层规范)
 
 详细参考文档在 `references/` 目录下，实现对应功能时**必须**先阅读：
 - `references/sort.md` — 实现拖拽排序时阅读（接收有序 ID 数组、重分配 sort 值）
@@ -27,6 +29,7 @@ description: GoDDD 六边形架构开发指南。当使用 goddd 架构实现代
 - `references/adapter-pattern.md` — 新增领域间依赖、实现 Port/Adapter/Option 注入时阅读
 - `references/web-toolkit.md` — 使用 WrapH、PagerFilter、DateFilter、SSE 等 web 包工具时阅读
 - `references/lifecycle-split.md` — Core 需要后台 goroutine（定时任务、心跳检测）且遇到 Wire 循环依赖时阅读；体现 SRP：Core 值类型专注业务，生命周期委托给独立 Handler，避免 Core 职责过重
+- `references/cache-layer.md` — 修改 store/xxxcache 时阅读；判断内存/Redis 缓存、SETNX/SETEX 防竞态、WarmUp 预热、API 层装配
 
 ---
 
@@ -205,6 +208,47 @@ func NewMessageCore(db *gorm.DB, briefProvider useradapter.BriefProvider) messag
 ```
 
 > 详细示例和完整代码请阅读 `references/adapter-pattern.md`
+
+---
+
+## 领域内子包依赖
+
+同一领域目录下（如 `internal/core/sms/`）可能存在多个子包（如 scheduler、store、adapter 等），它们共同组成该领域的完整实现。与跨领域解耦规则不同，领域内子包间的依赖更直接灵活。
+
+### 核心规则
+
+| 规则 | 说明 |
+|------|------|
+| 子包单向依赖根包 | 所有子包都可以 import 领域根包（如 `sms`），根包不感知子包 |
+| 子包间可直接依赖 | 子包 A 可直接 import 子包 B，无需通过接口隔离 |
+| 禁止循环依赖 | 若子包 A 和 B 需要双向引用，一方直接依赖，另一方通过接口依赖 |
+| 基础设施仍需接口 | 隔离 MQ 客户端、数据库驱动等外部依赖的接口仍定义在根包（一般在 `port.go` 中） |
+
+### 判断是否需要接口
+
+```
+需要接口的场景：
+├── 实现方在领域外（MQ 客户端、DB 驱动、跨领域适配器）
+├── 子包间存在双向依赖（一方用接口打破循环）
+└── 需要可测试性（mock 外部服务）
+
+不需要接口的场景：
+├── 子包 A 单向依赖子包 B（直接 import）
+├── 子包依赖根包的类型/常量（直接引用）
+└── 子包内部的辅助函数/工具类型
+```
+
+### 示例拓扑
+
+```
+domain/                 ← 领域根包（定义端口接口、模型、共享类型）
+├── sub-a/              ← 单向依赖 domain（import domain 根包）
+├── sub-b/              ← 单向依赖 domain
+├── sub-infra/          ← 单向依赖 domain（实现 domain.Publisher 等接口）
+└── store/domaindb/     ← 单向依赖 domain（实现 domain.Storer）
+```
+
+子包之间若无交叉依赖，全部通过根包共享类型和接口定义。若未来 sub-a 需要调用 sub-b 的某个方法，可直接 import sub-b；若反向也需要，则一方定义 narrow interface 打破循环。
 
 ---
 
@@ -442,6 +486,24 @@ return nil, reason.ErrUnauthorized.SetMsg("未登录")       // → 401
 
 ---
 
+## Store 缓存层规范
+
+修改 `store/<domain>cache/` 时，**首先**判断是内存缓存（`conc.Cacher`）还是 Redis 缓存（`*redis.Client`）。
+若为 Redis 缓存：删除 `conc.Cacher` 依赖，换 `*redis.Client`，使用 SETNX/SETEX 防竞态。
+
+### 核心规则
+
+| 操作 | Redis 命令 | 理由 |
+|------|-----------|------|
+| 读穿透回填 | `singleflight.Do` + `SetNX` | 合并并发穿透 + 不覆盖写入的新值 |
+| Create / Update | `Set(ctx, key, val, ttl)` | 写完 DB 后用最新值覆盖缓存 |
+| Delete | `Expire(key, 3s)` | 墓碑保护期 3s，防 SetNX 回填已删记录 |
+| WarmUp | `SetNX` | 不覆盖运行期间已更新的缓存 |
+
+> 完整改造步骤、代码模板和 key 命名规范请阅读 `references/cache-layer.md`
+
+---
+
 ## API 层规范
 
 1. **只做 HTTP 协议转换**：参数绑定 → 填充归属字段 → 调用 Core → 返回响应
@@ -462,16 +524,4 @@ func registerTask(r gin.IRouter, api TaskAPI, handler ...gin.HandlerFunc) {
     g.DELETE("/:id", web.WrapH(api.deleteTask))
     g.PUT("/sort", web.WrapH(api.sortTasks))
 }
-```
-
-### 常用导入
-
-```go
-import (
-    "github.com/ixugo/goddd/pkg/orm"
-    "github.com/ixugo/goddd/pkg/reason"
-    "github.com/ixugo/goddd/pkg/web"
-    "github.com/ixugo/goddd/domain/uniqueid"
-    "github.com/jinzhu/copier"
-)
 ```
