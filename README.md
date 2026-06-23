@@ -19,7 +19,7 @@ This is a complete CRUD solution focused on REST API.
 
 The goal of GoDDD is to:
 
-+ Provide a clean architecture suitable for small and medium-sized projects.
++ Provide a clean architecture suitable for projects of any size.
 + Provide a modular structure for quickly starting a project, focusing on business development.
 + Simplify projects, making development more efficient and enjoyable.
 

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"slices"
 	"strings"
@@ -128,6 +129,12 @@ func WrapH[I any, O any](fn func(*gin.Context, *I) (O, error)) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var in I
 		if unsafe.Sizeof(in) > 0 { // nolint
+			if len(c.Params) > 0 {
+				if err := c.ShouldBindUri(&in); err != nil {
+					slog.Error("should bind uri", "err", err, "params", c.Params)
+					return
+				}
+			}
 			switch c.Request.Method {
 			case http.MethodGet:
 				if err := c.ShouldBindQuery(&in); err != nil {

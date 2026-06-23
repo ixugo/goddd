@@ -31,7 +31,7 @@ func setupRouter(r *gin.Engine, uc *Usecase) {
 		web.LoggerWithBody(web.DefaultBodyLimit, func(_ *gin.Context) bool {
 			// true: 表示忽略记录日志
 			// !debug 表示非调试环境不记录
-			return !uc.Conf.Debug
+			return !uc.Conf.Runtime.Debug
 		}),
 	)
 	go web.CountGoroutines(10*time.Minute, 20)
@@ -52,7 +52,7 @@ type getHealthOutput struct {
 
 func (uc *Usecase) getHealth(_ *gin.Context, _ *struct{}) (getHealthOutput, error) {
 	return getHealthOutput{
-		Version:   uc.Conf.BuildVersion,
+		Version:   uc.Conf.Runtime.BuildVersion,
 		GitBranch: strings.Trim(expvar.Get("git_branch").String(), `"`),
 		GitHash:   strings.Trim(expvar.Get("git_hash").String(), `"`),
 		StartAt:   startRuntime,

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
@@ -38,6 +39,11 @@ func Run(bc *conf.Bootstrap) {
 	}
 	defer cleanUp()
 
+	// 启动配置文件热重载
+	watchCtx, watchCancel := context.WithCancel(context.Background())
+	defer watchCancel()
+	go conf.WatchConfig(watchCtx, bc, webhookWorkersReloader())
+
 	svc := server.New(handler,
 		server.Port(strconv.Itoa(bc.Server.HTTP.Port)),
 		server.ReadTimeout(bc.Server.HTTP.Timeout.Duration()),
@@ -73,7 +79,14 @@ func SetupLog(bc *conf.Bootstrap) (*slog.Logger, func()) {
 			Compress:     bc.Log.Compress,                // 是否压缩日志
 			MaxBackups:   bc.Log.MaxBackups,              // 保留的旧日志归档文件最大数量，超出的自动删除
 		},
-		Debug: bc.Debug,     // 服务级别Debug/Release
-		Level: bc.Log.Level, // 日志级别
+		Debug: bc.Runtime.Debug, // 服务级别Debug/Release
+		Level: bc.Log.Level,     // 日志级别
 	})
+}
+
+func webhookWorkersReloader() conf.ReloadCallback {
+	return func(old, new *conf.Bootstrap) error {
+		slog.Info("配置变更")
+		return nil
+	}
 }

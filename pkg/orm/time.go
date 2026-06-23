@@ -103,11 +103,14 @@ func (t *Time) Scan(input any) error {
 }
 
 func (t Time) MarshalJSON() ([]byte, error) {
-	return []byte(`"` + t.Time.Format(time.DateTime) + `"`), nil
+	if t.IsZero() || t.Year() <= 1 {
+		return []byte(`""`), nil
+	}
+	return []byte(`"` + t.Format(time.DateTime) + `"`), nil
 }
 
 func (t Time) Value() (driver.Value, error) {
-	if t.Time.IsZero() {
+	if t.IsZero() || t.Year() <= 1 {
 		return nil, nil // nolint
 	}
 	return t.Time, nil

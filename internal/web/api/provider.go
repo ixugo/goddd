@@ -33,7 +33,7 @@ type Usecase struct {
 func NewHTTPHandler(uc *Usecase) http.Handler {
 	cfg := uc.Conf
 	// 如果不处于调试模式，将 Gin 设置为发布模式
-	if !uc.Conf.Debug {
+	if !uc.Conf.Runtime.Debug {
 		gin.SetMode(gin.ReleaseMode)
 	}
 	g := gin.New()

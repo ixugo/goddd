@@ -3,14 +3,17 @@ package conf
 import "time"
 
 type Bootstrap struct {
+	Runtime Runtime // 运行时
+	Server  Server  // 服务器
+	Data    Data    // 数据
+	Log     Log     // 日志
+}
+
+type Runtime struct {
 	Debug        bool   `toml:"-" json:"-"`
 	BuildVersion string `toml:"-" json:"-"`
 	ConfigDir    string `toml:"-" json:"-"`
 	ConfigPath   string `toml:"-" json:"-"`
-
-	Server Server // 服务器
-	Data   Data   // 数据
-	Log    Log    // 日志
 }
 
 type Server struct {
