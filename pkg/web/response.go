@@ -6,13 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"slices"
 	"strings"
 	"unsafe"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 	"github.com/ixugo/goddd/pkg/reason"
 )
 
@@ -130,8 +130,12 @@ func WrapH[I any, O any](fn func(*gin.Context, *I) (O, error)) gin.HandlerFunc {
 		var in I
 		if unsafe.Sizeof(in) > 0 { // nolint
 			if len(c.Params) > 0 {
-				if err := c.ShouldBindUri(&in); err != nil {
-					slog.Error("should bind uri", "err", err, "params", c.Params)
+				m := make(map[string][]string, len(c.Params))
+				for _, v := range c.Params {
+					m[v.Key] = []string{v.Value}
+				}
+				if err := binding.MapFormWithTag(&in, m, "uri"); err != nil {
+					Fail(c, reason.ErrBadRequest.With(HanddleJSONErr(err).Error()))
 					return
 				}
 			}
@@ -143,7 +147,7 @@ func WrapH[I any, O any](fn func(*gin.Context, *I) (O, error)) gin.HandlerFunc {
 				}
 			case http.MethodDelete:
 				// https://google-cloud.gitbook.io/api-design-guide/standard_methods?q=delete#delete
-				// delete 禁用 body 子句
+				// delete 禁用 body 子句，建议用 query 参数
 				if c.Request.ContentLength > 0 {
 					contentType := c.Request.Header.Get("Content-Type")
 					if contentType == "" {

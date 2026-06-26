@@ -42,10 +42,10 @@ func main() {
 	if err := conf.SetupConfig(&bc, filePath); err != nil {
 		panic(err)
 	}
-	bc.Debug = !getBuildRelease()
-	bc.BuildVersion = buildVersion
-	bc.ConfigDir = fileDir
-	bc.ConfigPath = filePath
+	bc.Runtime.Debug = !getBuildRelease()
+	bc.Runtime.BuildVersion = buildVersion
+	bc.Runtime.ConfigDir = fileDir
+	bc.Runtime.ConfigPath = filePath
 
 	{
 		expvar.NewString("version").Set(buildVersion)
