@@ -7,6 +7,45 @@ import (
 	"maps"
 )
 
+// StructMap 其目的是将已知的参数作为结构体调用，未知的参数不动
+// 例如 s.Data.Username
+type StructMap[T any] struct {
+	Data T
+	Map
+}
+
+// UnmarshalJSON implements [json.Unmarshaler].
+func (s *StructMap[T]) UnmarshalJSON(b []byte) error {
+	if err := json.Unmarshal(b, &s.Map); err != nil {
+		return err
+	}
+	return json.Unmarshal(b, &s.Data)
+}
+
+// MarshalJSON implements [json.Marshaler].
+func (s StructMap[T]) MarshalJSON() ([]byte, error) {
+	if s.Map == nil {
+		return json.Marshal(s.Data)
+	}
+
+	cache := make(map[string]any)
+	{
+		b, _ := json.Marshal(s.Data)
+		_ = json.Unmarshal(b, &cache)
+	}
+	maps.Copy(s.Map, cache)
+	return json.Marshal(s.Map)
+}
+
+func (i *StructMap[T]) Scan(input any) error {
+	return JSONUnmarshal(input, i)
+}
+
+func (i StructMap[T]) Value() (driver.Value, error) {
+	return json.Marshal(i)
+}
+
+// Map 因值是 any 类型，封装一些快速提取的函数
 type Map map[string]any
 
 // UnmarshalJSON implements json.Unmarshaler.
@@ -15,7 +54,13 @@ func (i *Map) UnmarshalJSON(in []byte) error {
 	if len(in) > 4096 {
 		return errors.New("info is too large")
 	}
-	return json.Unmarshal(in, i)
+	// 先反序列化到普通 map，避免 *Map 实现了 Unmarshaler 导致递归调用
+	m := make(map[string]any)
+	if err := json.Unmarshal(in, &m); err != nil {
+		return err
+	}
+	*i = m
+	return nil
 }
 
 func (i *Map) Scan(input any) error {
