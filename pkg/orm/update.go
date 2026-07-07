@@ -31,6 +31,11 @@ func (q *Query) OrderBy(value any) *Query {
 	return q
 }
 
+func (q *Query) Select(columns any) *Query {
+	q.data = append(q.data, Select(columns))
+	return q
+}
+
 func (q *Query) Encode() []QueryOption {
 	return q.data
 }
@@ -46,6 +51,13 @@ func Unscoped() QueryOption {
 func Where(query any, args ...any) QueryOption {
 	return func(d *gorm.DB) *gorm.DB {
 		return d.Where(query, args...)
+	}
+}
+
+// Select 指定查询列
+func Select(columns any) QueryOption {
+	return func(d *gorm.DB) *gorm.DB {
+		return d.Select(columns)
 	}
 }
 
