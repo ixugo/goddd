@@ -30,6 +30,7 @@ description: GoDDD 六边形架构开发指南。当使用 goddd 架构实现代
 - `references/web-toolkit.md` — 使用 WrapH、PagerFilter、DateFilter、SSE 等 web 包工具时阅读
 - `references/lifecycle-split.md` — Core 需要后台 goroutine（定时任务、心跳检测）且遇到 Wire 循环依赖时阅读；体现 SRP：Core 值类型专注业务，生命周期委托给独立 Handler，避免 Core 职责过重
 - `references/cache-layer.md` — 修改 store/xxxcache 时阅读；判断内存/Redis 缓存、SETNX/SETEX 防竞态、WarmUp 预热、API 层装配
+- `references/api-design-patterns.md` — 设计新接口或审查接口规范时阅读；资源命名、HTTP 方法、状态码、分页、归属字段、版本控制、限流
 
 ---
 
@@ -469,7 +470,7 @@ func NewXxxCore(...) (xxx.Core, func()) { ... }
 - POST/PUT/DELETE/PATCH → 绑定 Request Body（`json` tag）
 - GET → 绑定 URL Query（`form` tag）
 - 入参第二个参数必须是指针，`*struct{}` 表示无参数
-- 路由参数用 `c.Param()` 获取，不走自动绑定
+- 路由参数通过 `uri` tag 自动绑定：`struct{ ID string \`uri:"id"\` }`
 
 ### 错误处理
 
@@ -508,7 +509,7 @@ return nil, reason.ErrUnauthorized.SetMsg("未登录")       // → 401
 
 1. **只做 HTTP 协议转换**：参数绑定 → 填充归属字段 → 调用 Core → 返回响应
 2. **归属字段在 API 层填充**：TenantID、CreatedBy 等通过 `json:"-"` / `form:"-"` 标记
-3. **路由参数用 `c.Param`**：不走自动绑定，仅路由参数时入参用 `_ *struct{}`
+3. **路由参数用 `uri` tag**：通过 `struct{ ID string \`uri:"id"\` }` 自动绑定，仅无参数时入参用 `_ *struct{}`
 4. **适配器不定义在 API 层**：统一放在领域的 `<provider>adapter/` 目录
 5. **Handler 若需访问后续赋值字段**：使用指针接收者
 
