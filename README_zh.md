@@ -18,7 +18,26 @@
 
 # 企业 REST API 模板
 
-这是一个专注于 REST API 的完整 CURD 解决方案。
+- [设计说明](#设计说明)
+- [快速开始](#快速开始)
+- [业务实践](#业务实践)
+- [团队规范](#团队规范)
+- [接口文档](#接口文档)
+- [命名规范](#命名规范)
+- [安全规范](#安全规范)
+- [单元测试](#单元测试)
+- [跨领域聚合](#跨领域聚合)
+- [目录说明](#目录说明)
+- [项目说明](#项目说明)
+- [请求入参封装](#请求入参封装)
+- [响应出参封装](#响应出参封装)
+- [错误处理](#错误处理)
+- [Makefile](#makefile)
+- [库如何使用](#库如何使用)
+- [性能优化](#性能优化)
+- [常见问题](#常见问题)
+
+这是一个专注于 REST API 的完整 CRUD 解决方案。
 
 GoDDD 目标是:
 
@@ -28,9 +47,8 @@ GoDDD 目标是:
 
 如果你觉得以上描述符合你的需求，那就快速开始吧。
 
-支持[代码自动生成](github.com/ixugo/godddx)
+支持[代码自动生成](https://github.com/ixugo/godddx)
 
-支持[事件总线/事务消息](github.com/ixugo/nsqite)
 
 ## 设计说明
 
@@ -51,376 +69,54 @@ GoDDD 目标是:
 
 ## 快速开始
 
-1. Golang 版本 >= 1.23.0
-2. `git clone github.com/ixugo/goddd`
-3. `cd goddd && go build -o goddd ./cmd/server && ./goddd`
-4. 新开一个终端访问 `curl http://localhost:8080/health`
-
-5. 修改模块包名
-`make rename name=github.com/name/project`
-将 name 替换成实际的模块名
-
-
-
-## 引用文章
-
-[Google API Design Guide](https://google-cloud.gitbook.io/api-design-guide)
-
-此项目的最佳实践: https://github.com/gowvp/gb28181
-
-## 目录说明
-
-
-```bash
-.
-├── main.go					主函数入口
-├── cmd						更多可执行程序
-├── configs					配置文件
-├── docs					设计文档/用户文档
-├── domain 					提供一些通用模型
-│   ├── token 				token 过期与延迟，权限管理
-│   ├── version 			数据库版本控制，避免每次启动执行 gorm 迁移
-│   └── uniqueid			全局唯一 id 生成器
-├── internal					私有业务
-│   ├── conf					配置模型
-│   ├── core					业务领域
-│   │   └── version				实际业务
-│   │       └── store
-│   │           └── versiondb 		数据库操作
-│   ├── data					数据库初始化
-│   └── web
-│       └── api					RESTful API
-└── pkg						依赖库
-```
-
-
-## 项目说明
-
-1. 程序启动强依赖的组件，发生异常时主动 panic，尽快崩溃尽快解决错误。
-
-2. core 为业务领域，包含领域模型，领域业务功能
-
-3. store 为数据库操作模块，需要依赖模型，此处依赖反转 core，避免每一层都定义模型。
-
-4. api 层的入参/出参，可以正向依赖 core 层定义模型，参数模型以 `Input/Output` 来简单区分入参出数。
-
-
-## 请求入参封装
-
-本项目使用 GIN 作为 web 处理框架，路由函数需要实现 `gin.HandlerFunc`，在实现 API 层函数时，遇到的第一个问题是绑定参数，几乎每个函数都会涉及到反序列化，函数开头都充斥了 `ctx.ShouldBindJSON` 之类的代码。
-
-根据 DRY（Don't Repeat Yourself）设计原则，通过减少重复代码来提高代码的可维护性和可重用性。该项目封装了 `web.WrapH` 其返回 `gin.HandlerFunc`，`web.WrapH` 的参数类似 GRPC，`func(ctx *gin.Context, in *struct{}) (*Output, error)`。
-
-WrapH 内部识别 POST/PUT/DELETE/PATCH 请求则绑定 Request Body，Get 请求则绑定 Request URL params。
-
-入参第二个参数类型必须是指针，使用 `*struct{}` 表示没有参数，不需要绑定。在定义结构体时，尤其要注意结构体的 tag 应该是 `json` 或者 `form`，更多细节参考 GIN 框架参数绑定。
-
-+ `json` 可绑定 request body 参数
-+ `form` 可绑定 params 参数
-
-返回值第一个参数是具体的 response body 内容，建议避免使用 any，其类型即可以是值，也可以是指针，赋予了更多灵活性。
-
-当参数在多个位置时，即路由参数/查询参数/请求体参数同时存在，可以实现新的 web.WrapH2 或直接实现 `gin.HandlerFunc`。
-
-以下是两种代码的示例:
-
-```go
-func findUser(ctx *gin.Context) {
-	var in findUserInput
-	if err := ctx.ShouldBindQuery(&in);err!=nil {
-		ctx.JSON(...)
-		return
-	}
-	out,err := serviceFunc(in)
-	// ....
-}
-```
-
-```go
-func findUsers(ctx *gin.Context, in *Input) (*Output, error) {
-	return serviceFunc(in)
-}
-```
-
-## 响应出参封装
-
-明确的定义出参类型，可以使代码更容易读懂，我希望通过更多细节提升代码的可读性，可维护性。
-
-`web.Warh` 的封装默认是响应 application/json 类型。
-
-在开发过程中，新同事实现 `gin.HandlerFunc` 时更容易遗忘 `return` 语句。使用 `web.WrapH` 能确保不遗落 `return`。
-
-以下是两种代码的示例
-
-```go
-func findUsers(ctx *gin.Context) {
-	// 可能 out 是从业务层获取的
-	// 此时想知道 response body 需要往函数内部找
-	out,err := serviceFunc()
-	if err != nil {
-		ctx.JSON(...)
-		return
-	}
-	ctx.JSON(out)
-}
-```
-
-```go
-func findUsers(ctx *gin.Context, in *Input) (*Output, error) {
-	return serviceFunc(in)
-}
-```
-
-## 错误处理
-
-通过上面的代码了解到，错误是直接 return 的，难倒不担心底层的错误信息暴露给用户吗? 还有错误的 http statusCode 又是多少呢?
-
-其实在 `web.Warn` 中还做了一些事情，比如在绑定过程中出错，可以定位到具体的错误原因，是类型不对? 错在哪个属性上? 比如响应的时候，通过 err 提取出信息，返回对应的 HTTP 状态码，接下来详细介绍错误处理。
-
-`pkg/web` 是 HTTP 相关的处理包，包含中间件，响应，错误处理，鉴权，日志，限流，指标，性能分析，入参校验等等。
-
-我们自定义一个 Error 类型， `reason` 是错误原因，有些第三方 API 也会用 Code。
-
-该项目在设计的时候，考虑到状态码不易读，比如错误 `10020`，请问是什么错误? 所以定义了 `reason`，应该用大驼峰英语简略描述错误原因。那如果就是想用状态码表示呢? 请用 HTTP StatusCode。
-
-msg 应当是开发者母语的错误描述，`reason` 用于程序内部判定，`msg` 用于友好提示给用户。`details` 是错误的扩展，提供给开发者，可以描述错误的解决方案，提供文档，错误的更细节详情，甚至暴露更底层的错误信息。
-
-通常在前后端分离项目中，前端遇到一些错误，都需要询问后端发生了什么情况，通过 `details` 前端可以减少更多提问。
-
-在 `web.WrapH` 的封装中，错误实际是调用的 `web.Fail(err)`，此方法会判断 `reason` 应该返回怎样的 http statusCode，开发者可以在 `pkg/web/error.go` 中 `HTTPCode()` 函数实现更多 http statusCode 扩展，默认提供了 200/400/401 三种状态码。
-
-details 应该仅开发模式可见，`web.SetRelease()` 可以设置为生产发布模式，此时 details 将不会写入 http response body。
-
-
-core 层导出的函数或 API 层返回的错误，应该返回 reason.Error 类型的错误。
-
-在封装的 web.WrapH 中，会正确记录错误到日志并返回给前端。
-
-```go
-func findUser(in *Input)  (*Output,error){
-	// 数据库操作发生错误
-	if err != nil {
-		return nil, reason.ErrDB.SetMsg() // 错误的 respon 类型是 db 层错误，Msg 函数可以更改给用户的友好提示
-	}
-	// 业务发生错误
-	if err != nil {
-		return nil, reason.ErrServer.Withf("err[%s] ....",err) // Withf 可以写入 details 给开发者更多提示
-	}
-}
-```
-
-
-## Makefile
-
-Windows 系统使用 makefile 时，请使用 git bash 终端，不要使用系统默认的 cmd/powershell 终端，否则可能会出现异常情况。
-
-执行 `make` 或 `make help` 来获取更多帮助
-
-在编写 makefile 时，应主动在命令上面增加注释，以 `## <命令>: <描述>` 格式书写，具体参数 Makefile 文件已有命令。其目的是 `make help` 时提供更多信息。
-
-makefile 中提供了一些默认的操作便于快速编写
-
-`make confirm` 用于确认下一步
-
-`make title content=标题`  用于重点突出输出标题
-
-`make info` 获取构建版本相关信息
-
-**makefile 构建的版本号规则说明**
-
-1. 版本号使用 Git tag，格式为 v1.0.0。
-
-2. 如果当前提交没有 tag，找到最近的 tag，计算从该 tag 到当前提交的提交次数。例如，最近的 tag 为 v1.0.1，当前提交距离它有 10 次提交，则版本号为 v1.0.11（v1.0.1 + 10 次提交）。
-
-3. 如果没有任何 tag，则默认版本号为 v0.0.0，后续提交次数作为版本号的次版本号。
-
-## 库如何使用?
-
-### hook.UseCache 临时缓存
-
-old
-
-```go
-cache := make(map[string]string)
-for i := range 10 {
-	v, ok := cache[i]
-	if ok {
-		// 业务处理
-		continue
-	}
-	v,err := fn()
-	if err == nil {
-		cache[v.ID] = v
-	}
-	// 业务处理
-}
-```
-
-new
-
-```go
-	cacheFn :=  hook.UseCache(fn)
-	for i := range 10 {
-		v,_,err :=  cacheFn(i)
-		if err == nil {
-			// 业务处理
-		}
-	}
-```
-
-### hook.UseTiming 计算函数花销写日志
-
-old
-
-```go
-	now := time.Now()
-	// 业务处理夹杂在时间计算中
-	if sub :=time.Since(now); sub > time.Second {
-		slog.Error("函数名", "cost", cost)
-	}else {
-		slog.Debug("函数名", "cost", cost)
-	}
-```
-
-new
-
-```go
-	cost := hook.UseTiming(time.Second)
-	defer cost()
-
-	// 业务处理
-```
-
-### hook.UseMemoryUsage 计算函数内存花销写日志
-
-old
-
-```go
-	var m1, m2 runtime.MemStats
-	runtime.GC()
-	runtime.ReadMemStats(&m1)
-	// 业务处理夹杂在时间计算中
-	runtime.ReadMemStats(&m2)
-	memUsed := m2.Alloc - m1.Alloc
-	slog.Info("函数内存占用: ", "KB", float32(memUsed)/1024)
-```
-
-new
-```go
-	cost := hook.UseMemoryUsage(time.Second)
-	defer cost()
-
-	// 业务处理
-
-```
-
-### hook.FileMD5 计算文件的 md5
-
-避免将文件全部读取到内存，按照 8k 缓存分块计算文件的 md5
-
-### hook.UseTimer 灵活间隔的定时器
-
-old
-
-```go
-func scheduleTask() {
-	for {
-		// 业务处理
-		processTask()
-
-		// 复杂的时间计算逻辑夹杂在业务中
-		now := time.Now()
-		nextRun := time.Date(now.Year(), now.Month(), now.Day()+1, 2, 0, 0, 0, now.Location()) // 明天凌晨2点执行
-		if nextRun.Before(now) {
-			nextRun = nextRun.Add(24 * time.Hour)
-		}
-		time.Sleep(nextRun.Sub(now))
-	}
-}
-```
-
-new
-
-```go
-func scheduleTask(ctx context.Context) {
-	hook.UseTimer(ctx, processTask, func() time.Duration {
-		return hook.NextTimeTomorrow(2, 0, 0) // 每天凌晨2点执行
-	})
-}
-
-// 或者立即执行一次，然后按不同间隔执行
-func scheduleTaskWithFirstRun(ctx context.Context) {
-	nextTime := hook.NextTimeWithFirst(
-		time.Second,        // 立即执行（1秒后）
-		func() time.Duration {
-			return 10 * time.Minute // 之后每10分钟执行一次
-		},
-	)
-	hook.UseTimer(ctx, processTask, nextTime)
-}
-```
-
-**更多 hook 直接看 pkg/hook 源码吧**
-
-### web.WithContext 无耦合地向 Core 层传递 HTTP 元信息
-
-在六边形架构中，Core 层不应依赖 HTTP 框架（如 `gin.Context`），但某些场景需要 HTTP 请求元信息来构造动态数据（如完整的图片 URL、当前请求的基地址等）。
-
-常见方案各有缺陷：
-
-| 方案 | 问题 |
-|------|------|
-| API 层逐个字段后处理 | 每个接口都要重复写，散落在各处 |
-| 函数签名传入 `*http.Request` | 侵入性强，所有调用链都要改签名 |
-| 函数签名传入 `baseURL string` | 每多一个需求就多加一个参数 |
-| 直接传入 `gin.Context` | Core 层对 HTTP 框架产生耦合 |
-
-`web.WithContext` 通过扩展 `context.Context` 接口来携带 HTTP 请求信息，解决了这个问题：
-
-```go
-type Context interface {
-    context.Context
-    Request() *http.Request
-    GetBaseURL() string
-    GetScheme() string
-    GetHost() string
-}
-```
-
-**API 层使用** — 只需将 `c.Request.Context()` 替换为 `web.WithContext`：
-
-```go
-ctx := web.WithContext(c.Request)
-out, err := core.DoSomething(ctx, input)
-```
-
-**Adapter 层使用** — 通过类型断言按需获取 HTTP 元信息：
-
-```go
-if wc, ok := ctx.(web.Context); ok {
-    baseURL := wc.GetBaseURL()
-    // 使用 baseURL 拼接完整 URL
-}
-```
-
-Core 层只是透传 `ctx`，完全不需要感知 HTTP。
-
-**设计亮点：**
-
-+ **零破坏性** — `web.Context` 实现了 `context.Context` 接口，所有现有函数签名 `func(ctx context.Context, ...)` 无需修改即可接收。
-+ **优雅降级** — 类型断言失败时（如定时任务、单元测试、CLI 工具场景）自动回退到默认值，不影响正常运行。
-+ **渐进式采用** — 只需修改两处：调用处（API 层）和使用处（Adapter 层），中间层完全不需要改动。
-+ **可扩展** — `web.Context` 是接口，可以定义子接口按需扩展更多元信息（如租户 ID）。
-
-**适用场景：** 动态 URL 拼接、请求级元信息透传（IP、User-Agent 等）、跨领域数据组装需要 HTTP 上下文辅助的场景。
-
-## 快速开始
+1. Golang 版本 >= 1.25.0（建议直接使用 Go 1.26）
+2. `git clone github.com/ixugo/goddd && cd goddd`
+3. 修改模块包名 `make rename name=github.com/name/project` 将 name 替换成实际的模块名
+4. `make init` 可选操作，安装开发环境工具
+5. `go build -o server ./main.go && ./server`
+6. 新开一个终端访问 `curl http://localhost:8080/health`
+
+## 业务实践
 
 业务说明:
 
-假设我们要做一个版本管理的业务，curd 步骤如下:
+假设我们要做一个数据库版本管理的业务，CRUD 步骤如下:
 
-在 「internal」-「core」 创建 「version」 目录，创建「model.go」写入领域模型，该模型为数据库表结构映射。
+```bash
+# 这里用 claude 演示，你可以用自己喜欢的 AI 编辑器
+# 可以用更具体的业务说明，安装有 goddd skills 时，会默认使用 godddx 生成代码
+claude -p "使用 godddx 创建一个新的领域 version，表结构包含 id,created_at,updated_at,version"
+```
+
+**业务完成**
+
+---
+
+### 不使用 godddx 时应该怎么做?
+
+以 godddx 生成效果为准，可以直接查看生成的相关代码。
+
+在 「internal」-「core」 创建 「version」 目录，创建「version.model.go」写入领域模型，该模型为数据库表结构映射。
+
+目录结构
+
+```bash
+├── internal                # 私有业务
+│   ├── core                # 业务领域
+│   │   └── version
+│   │       ├── model.go    # 通用模型
+│   │       ├── version.model.go   # 领域模型
+│   │       ├── version.param.go   # 入参/出参结构体定义
+│   │       ├── core.go     # 业务对象与接口
+│   │       └── store
+│   │           └── versiondb
+│   │               ├── db.go       # 数据库入口/迁移/业务实例工厂
+│   │               └── version.go  # 业务相关 CRUD 方法实现
+│   └── web
+│       └── api
+│           ├── provider.go # 依赖注入 provider
+│           └── version.go  # 路由注册
+```
 
 创建「core.go」 写入如下内容
 
@@ -570,6 +266,540 @@ func (v VersionAPI) getVersion(_ *gin.Context, _ *struct{}) (any, error) {
 ```
 
 
+## 团队规范
+
+| 规范 | 说明 | 文档 |
+|------|------|------|
+| API 设计 | 资源命名、HTTP 方法、状态码、分页、版本控制 | [api-design-patterns.md](.cursor/skills/goddd/references/api-design-patterns.md) |
+| Git 工作流 | 提交规范、分支策略、版本号、Changelog | [goddd-git-workflow](.cursor/skills/goddd-git-workflow/SKILL.md) |
+
+## 接口文档
+
+项目使用 AI 驱动的 code-first 方式生成 OpenAPI 3.1 文档，无需手写注释。当 API 层代码发生变动时，自动从路由注册（`web.WrapH`）、handler 签名、结构体 tag 中提取接口定义，生成 YAML 文档到 `docs/api/` 目录。
+
+详见 [goddd-api-doc 技能](.cursor/skills/goddd-api-doc/SKILL.md)。
+
+**Apifox 自动同步**
+
+生成的文档可自动推送到 Apifox。需配置：
+
+1. 设置环境变量 `APIFOX_TOKEN`（Apifox 个人访问令牌）
+2. 在项目根目录的 `CLAUDE.md` 或 `AGENTS.md` 中设置 `APIFOX_PROJECT_ID=<你的项目ID>`
+
+配置完成后，文档变更时会自动执行同步脚本。未配置时跳过同步，不影响文档生成。
+
+## 命名规范
+
+| 类别 | 规范 | 示例 |
+|------|------|------|
+| 领域目录 | 全小写无分隔 | `version`、`tenant` |
+| 领域文件 | `<领域名>.<用途>.go` | `version.model.go`、`version.param.go` |
+| Store 目录 | `store/<领域名>db` | `store/versiondb` |
+| Store 文件 | `db.go`(入口/迁移) + `<领域名>.go`(CRUD) | `db.go`、`version.go` |
+| 领域模型 | PascalCase | `Version`、`Tenant` |
+| 入参结构体 | `<操作><领域>Input` | `CreateVersionInput` |
+| 出参结构体 | `<操作><领域>Output` | `FindUserOutput` |
+| Core 对象 | 固定 `Core` | `type Core struct` |
+| Core 构造 | `NewCore(store Storer, opts ...Option)` | — |
+| Store 接口 | 固定 `Storer` | `type Storer interface` |
+| API 结构体 | `<领域>API` | `VersionAPI` |
+| 路由注册 | `Register<领域>(g gin.IRouter, api <领域>API, handler ...gin.HandlerFunc)` | `RegisterVersion(...)` |
+| JSON tag | snake_case | `json:"created_at"` |
+| 路由路径 | kebab-case + 复数名词 | `/api/v1/users` |
+| 数据库表名 | snake_case + 复数 | `versions` |
+
+## 安全规范
+
+**SQL 注入防范**
+
+所有数据库操作使用 GORM 参数化查询，禁止拼接 SQL 字符串：
+
+```go
+// 正确：参数化查询
+db.Where("name = ?", input.Name).First(&user)
+
+// 错误：字符串拼接
+db.Where("name = '" + input.Name + "'").First(&user)
+```
+
+**日志脱敏**
+
+日志输出中涉及用户敏感信息时必须脱敏处理：
+
+| 字段类型 | 脱敏规则 | 示例 |
+|----------|----------|------|
+| 手机号 | 中间 4 位替换为 `****` | `138****1234` |
+| 邮箱 | `@` 前仅保留首尾 | `a***z@example.com` |
+| 密码/Token | 禁止写入日志 | — |
+| 身份证 | 仅保留首 3 末 4 | `110***1234` |
+
+**敏感数据加密**
+
+- 密码必须使用 `bcrypt` 存储，禁止明文或 MD5
+- Token/密钥类配置通过环境变量注入，禁止硬编码在代码中
+- `.env`、`credentials.json` 等文件必须加入 `.gitignore`
+
+## 单元测试
+
+核心业务逻辑（Core 层导出函数）必须编写单元测试，确保关键路径有覆盖：
+
+- Store 接口天然支持 mock，测试时替换为 mock 实现
+- 测试文件与被测文件同目录，命名 `<file>_test.go`
+- 每个测试独立运行，不依赖其他测试的状态或执行顺序
+- 修复 bug 时先写复现测试，再修复
+
+## 跨领域聚合
+
+当业务涉及多个领域的数据时，根据性能要求和耦合度要求选择合适的方案：
+
+| 模式 | 耦合度 | 适用场景 |
+|------|--------|----------|
+| SQL 模式 | 高 | 查询聚合，Store 层直接连表查询其他领域的数据 |
+| 命令编程模式 | 中 | 写操作聚合，领域 A 直接依赖领域 B，通过 `tx` 保证事务一致 |
+| API 层聚合模式 | 中 | API 层协调多个 Core，各 Core 独立执行，结果在 API 层组装 |
+| 适配器模式 | 低 | 领域间通过 Option 注入接口解耦，各自管理事务 |
+
+**SQL 模式**
+
+在 Store 层直接编写连表 SQL，适用于只读查询聚合：
+
+```go
+func (d OrderDB) FindOrdersWithUser(ctx context.Context, userID string) ([]OrderWithUser, error) {
+    var result []OrderWithUser
+    return result, d.db.WithContext(ctx).
+        Table("orders").
+        Select("orders.*, users.name as user_name").
+        Joins("LEFT JOIN users ON users.id = orders.user_id").
+        Where("orders.user_id = ?", userID).
+        Find(&result).Error
+}
+```
+
+**命令编程模式**
+
+Store 接口扩展事务方法，`tx *gorm.DB` 作为参数传入：
+
+```go
+func (c *Core) CreateOrderAndDeduct(ctx context.Context, in CreateOrderInput) error {
+    return c.db.Transaction(func(tx *gorm.DB) error {
+        if err := c.store.CreateOrder(ctx, tx, in.Order); err != nil {
+            return err
+        }
+        return c.store.DeductStock(ctx, tx, in.ProductID, in.Quantity)
+    })
+}
+```
+
+**API 层聚合模式**
+
+API 层调用多个 Core 获取数据，在 API 层组装返回。列表场景下，将关联数据以 map 形式附在响应中，避免 N+1 查询：
+
+```go
+func (a OrderAPI) listOrders(c *gin.Context, in *ListOrderInput) (*ListOrderOutput, error) {
+    ctx := c.Request.Context()
+    orders, err := a.orderCore.ListOrders(ctx, in.Pager)
+    if err != nil {
+        return nil, err
+    }
+    userIDs := uniqueUserIDs(orders) // 提取去重的用户 ID 列表
+    users, _ := a.userCore.GetUserMap(ctx, userIDs)
+    return &ListOrderOutput{
+        Items: orders,
+        Users: users, // map[string]UserBrief{"user_xxx": {Name: "张三"}}
+		total: n,
+    }, nil
+}
+```
+
+**适配器模式**
+
+通过 Option 注入适配器接口，领域间完全解耦。
+
+> 详见 [adapter-pattern.md](.cursor/skills/goddd/references/adapter-pattern.md)
+
+## 引用文章
+
+[Google API 设计指南](https://google-cloud.gitbook.io/api-design-guide)
+
+此项目的最佳实践: https://github.com/gowvp/gb28181
+
+## 目录说明
+
+
+```bash
+.
+├── main.go                 # 主函数入口
+├── cmd                     # 可执行程序入口(一个入口时，不需要此目录)
+├── configs                 # 配置文件
+├── docs                    # 开发需求相关文档
+│   └── api					# 接口文档
+├── domain                  # 通用领域与基础业务
+│   ├── token               # JWT 令牌、权限相关
+│   ├── uniqueid            # 全局唯一 ID 生成器
+│   └── version             # 数据库版本控制，避免每次启动都执行 gorm 迁移
+│       ├── store/versiondb
+│       └── versionapi
+├── internal                # 私有业务
+│   ├── app                 # wire 依赖注入组装
+│   ├── conf                # 配置模型与默认值
+│   ├── core                # 业务领域（示例/预留）
+│   ├── data                # 数据库初始化
+│   └── web
+│       └── api             # RESTful API 路由注册
+└── pkg                     # 项目依赖库
+    ├── cmd                 # 命令行辅助
+    ├── conc                # 并发工具
+    ├── hook                # 常用函数钩子
+    ├── logger              # 日志封装
+    ├── orm                 # 数据库 ORM 封装
+    ├── queue               # 队列实现
+    ├── reason              # 错误原因定义
+    ├── server              # HTTP 服务封装
+    ├── system              # 系统工具
+    └── web                 # Web 中间件、响应、校验等
+```
+
+
+## 项目说明
+
+1. 程序启动强依赖的组件，发生异常时主动 panic，尽快崩溃尽快解决错误。
+
+2. core 为业务领域，包含领域模型，领域业务功能
+
+3. store 为数据库操作模块，需要依赖模型，此处依赖反转 core，避免每一层都定义模型。
+
+4. api 层的入参/出参，可以正向依赖 core 层定义模型，参数模型以 `Input/Output` 来简单区分入参出数。
+
+
+## 请求入参封装
+
+> 完整函数参考：[web-toolkit.md](.cursor/skills/goddd/references/web-toolkit.md)
+
+本项目使用 GIN 作为 web 处理框架，路由函数需要实现 `gin.HandlerFunc`，在实现 API 层函数时，遇到的第一个问题是绑定参数，几乎每个函数都会涉及到反序列化，函数开头都充斥了 `ctx.ShouldBindJSON` 之类的代码。
+
+根据 DRY（Don't Repeat Yourself）设计原则，通过减少重复代码来提高代码的可维护性和可重用性。该项目封装了 `web.WrapH` 其返回 `gin.HandlerFunc`，`web.WrapH` 的参数类似 GRPC，`func(ctx *gin.Context, in *struct{}) (*Output, error)`。
+
+WrapH 内部识别 POST/PUT/DELETE/PATCH 请求则绑定 Request Body，Get 请求则绑定 Request URL params。
+
+入参第二个参数类型必须是指针，使用 `*struct{}` 表示没有参数，不需要绑定。在定义结构体时，尤其要注意结构体的 tag 应该是 `json` 或者 `form`，更多细节参考 GIN 框架参数绑定。
+
++ `json` 可绑定 request body 参数
++ `form` 可绑定 params 参数
+
+返回值第一个参数是具体的 response body 内容，建议避免使用 any，其类型即可以是值，也可以是指针，赋予了更多灵活性。
+
+当参数在多个位置时，即路由参数/查询参数/请求体参数同时存在，可以实现新的 web.WrapH2 或直接实现 `gin.HandlerFunc`。
+
+以下是两种代码的示例:
+
+```go
+func findUser(ctx *gin.Context) {
+	var in findUserInput
+	if err := ctx.ShouldBindQuery(&in);err!=nil {
+		ctx.JSON(...)
+		return
+	}
+	out,err := serviceFunc(in)
+	// ....
+}
+```
+
+```go
+func findUsers(ctx *gin.Context, in *Input) (*Output, error) {
+	return serviceFunc(in)
+}
+```
+
+## 响应出参封装
+
+明确的定义出参类型，可以使代码更容易读懂，我希望通过更多细节提升代码的可读性，可维护性。
+
+`web.WrapH` 的封装默认是响应 application/json 类型。列表类接口返回空数据时应返回 `[]` 而非 `null`，避免前端解析异常。
+
+在开发过程中，新同事实现 `gin.HandlerFunc` 时更容易遗忘 `return` 语句。使用 `web.WrapH` 能确保不遗落 `return`。
+
+以下是两种代码的示例
+
+```go
+func findUsers(ctx *gin.Context) {
+	// 可能 out 是从业务层获取的
+	// 此时想知道 response body 需要往函数内部找
+	out,err := serviceFunc()
+	if err != nil {
+		ctx.JSON(...)
+		return
+	}
+	ctx.JSON(out)
+}
+```
+
+```go
+func findUsers(ctx *gin.Context, in *Input) (*Output, error) {
+	return serviceFunc(in)
+}
+```
+
+## 错误处理
+
+> 完整错误类型列表：[web-toolkit.md](.cursor/skills/goddd/references/web-toolkit.md)
+
+通过上面的代码了解到，错误是直接 return 的，难倒不担心底层的错误信息暴露给用户吗? 还有错误的 http statusCode 又是多少呢?
+
+其实在 `web.Warn` 中还做了一些事情，比如在绑定过程中出错，可以定位到具体的错误原因，是类型不对? 错在哪个属性上? 比如响应的时候，通过 err 提取出信息，返回对应的 HTTP 状态码，接下来详细介绍错误处理。
+
+`pkg/web` 是 HTTP 相关的处理包，包含中间件，响应，错误处理，鉴权，日志，限流，指标，性能分析，入参校验等等。
+
+我们自定义一个 Error 类型， `reason` 是错误原因，有些第三方 API 也会用 Code。
+
+该项目在设计的时候，考虑到状态码不易读，比如错误 `10020`，请问是什么错误? 所以定义了 `reason`，应该用大驼峰英语简略描述错误原因。那如果就是想用状态码表示呢? 请用 HTTP StatusCode。
+
+msg 应当是开发者母语的错误描述，`reason` 用于程序内部判定，`msg` 用于友好提示给用户。`details` 是错误的扩展，提供给开发者，可以描述错误的解决方案，提供文档，错误的更细节详情，甚至暴露更底层的错误信息。
+
+通常在前后端分离项目中，前端遇到一些错误，都需要询问后端发生了什么情况，通过 `details` 前端可以减少更多提问。
+
+在 `web.WrapH` 的封装中，错误实际是调用的 `web.Fail(err)`，此方法会判断 `reason` 应该返回怎样的 http statusCode，开发者可以在 `pkg/web/error.go` 中 `HTTPCode()` 函数实现更多 http statusCode 扩展，已支持 200/400/401/403/429/500 六种状态码。
+
+details 应该仅开发模式可见，`web.SetRelease()` 可以设置为生产发布模式，此时 details 将不会写入 http response body。
+
+
+core 层导出的函数或 API 层返回的错误，应该返回 reason.Error 类型的错误。
+
+在封装的 web.WrapH 中，会正确记录错误到日志并返回给前端。
+
+```go
+func findUser(in *Input)  (*Output,error){
+	// 数据库操作发生错误
+	if err != nil {
+		return nil, reason.ErrDB.SetMsg() // 错误的 respon 类型是 db 层错误，Msg 函数可以更改给用户的友好提示
+	}
+	// 业务发生错误
+	if err != nil {
+		return nil, reason.ErrServer.Withf("err[%s] ....",err) // Withf 可以写入 details 给开发者更多提示
+	}
+}
+```
+
+
+## Makefile
+
+**如何安装 make？** `claude -p "安装 make 工具"` 或自行搜索安装。Windows 为确保与 Linux 命令一致，请使用 Git Bash 终端，不要使用系统默认的 cmd/powershell 终端。
+
+执行 `make` 或 `make help` 来获取更多帮助
+
+在编写 makefile 时，应主动在命令上面增加注释，以 `## <命令>: <描述>` 格式书写，具体参数 Makefile 文件已有命令。其目的是 `make help` 时提供更多信息。
+
+makefile 中提供了一些默认的操作便于快速编写
+
+`make confirm` 用于确认下一步
+
+`make title content=标题`  用于重点突出输出标题
+
+`make info` 获取构建版本相关信息
+
+`make wire` 安装 wire 工具并重新生成依赖注入代码
+
+`make audit` 格式化、检查、测试一条龙
+
+`make build/local` 构建本地当前平台可执行文件，输出到 `build/<goos>_<goarch>/bin`
+
+`make build/linux` 交叉编译 linux/amd64 可执行文件
+
+`make build/windows` 交叉编译 windows/amd64 可执行文件
+
+`make docker/build` 构建 docker 镜像
+
+`make docker/publish` 构建 linux/amd64 与 linux/arm64 双平台镜像并推送仓库。**使用前先修改 Makefile 中 `IMAGE_NAME` 为你的镜像仓库地址**，例如 `IMAGE_NAME := hub.docker.com/name/project:latest`，存在多版本镜像时，可以修改 makefile 将 `IMAGE_NAME` 作为参数传入。
+
+**makefile 构建的版本号规则说明**
+
+1. 版本号使用 Git tag，格式为 v1.0.0。
+
+2. 如果当前提交没有 tag，找到最近的 tag，计算从该 tag 到当前提交的提交次数。例如，最近的 tag 为 v1.0.1，当前提交距离它有 10 次提交，则版本号为 v1.0.11（v1.0.1 + 10 次提交）。
+
+3. 如果没有任何 tag，则默认版本号为 v0.0.0，后续提交次数作为版本号的次版本号。
+
+## 库如何使用?
+
+### hook.UseCache 临时缓存
+
+old
+
+```go
+cache := make(map[string]string)
+for i := range 10 {
+	v, ok := cache[i]
+	if ok {
+		// 业务处理
+		continue
+	}
+	v,err := fn()
+	if err == nil {
+		cache[v.ID] = v
+	}
+	// 业务处理
+}
+```
+
+new
+
+```go
+	cacheFn :=  hook.UseCache(fn)
+	for i := range 10 {
+		v,_,err :=  cacheFn(i)
+		if err == nil {
+			// 业务处理
+		}
+	}
+```
+
+### hook.UseTiming 计算函数花销写日志
+
+old
+
+```go
+	now := time.Now()
+	// 业务处理夹杂在时间计算中
+	if sub :=time.Since(now); sub > time.Second {
+		slog.Error("函数名", "cost", cost)
+	}else {
+		slog.Debug("函数名", "cost", cost)
+	}
+```
+
+new
+
+```go
+	cost := hook.UseTiming(time.Second)
+	defer cost()
+
+	// 业务处理
+```
+
+### hook.UseMemoryUsage 计算函数内存花销写日志
+
+old
+
+```go
+	var m1, m2 runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&m1)
+	// 业务处理夹杂在时间计算中
+	runtime.ReadMemStats(&m2)
+	memUsed := m2.Alloc - m1.Alloc
+	slog.Info("函数内存占用: ", "KB", float32(memUsed)/1024)
+```
+
+new
+```go
+	cost := hook.UseMemoryUsage(time.Second)
+	defer cost()
+
+	// 业务处理
+
+```
+
+### hook.FileMD5 计算文件的 md5
+
+避免将文件全部读取到内存，按照 8k 缓存分块计算文件的 md5
+
+### hook.UseTimer 灵活间隔的定时器
+
+old
+
+```go
+func scheduleTask() {
+	for {
+		// 业务处理
+		processTask()
+
+		// 复杂的时间计算逻辑夹杂在业务中
+		now := time.Now()
+		nextRun := time.Date(now.Year(), now.Month(), now.Day()+1, 2, 0, 0, 0, now.Location()) // 明天凌晨2点执行
+		if nextRun.Before(now) {
+			nextRun = nextRun.Add(24 * time.Hour)
+		}
+		time.Sleep(nextRun.Sub(now))
+	}
+}
+```
+
+new
+
+```go
+func scheduleTask(ctx context.Context) {
+	hook.UseTimer(ctx, processTask, func() time.Duration {
+		return hook.NextTimeTomorrow(2, 0, 0) // 每天凌晨2点执行
+	})
+}
+
+// 或者立即执行一次，然后按不同间隔执行
+func scheduleTaskWithFirstRun(ctx context.Context) {
+	nextTime := hook.NextTimeWithFirst(
+		time.Second,        // 立即执行（1秒后）
+		func() time.Duration {
+			return 10 * time.Minute // 之后每10分钟执行一次
+		},
+	)
+	hook.UseTimer(ctx, processTask, nextTime)
+}
+```
+
+**更多 hook 直接看 pkg/hook 源码吧**
+
+### web.WithContext 无耦合地向 Core 层传递 HTTP 元信息
+
+> 详细设计：[with-context.md](.cursor/skills/goddd/references/with-context.md)
+
+在六边形架构中，Core 层不应依赖 HTTP 框架（如 `gin.Context`），但某些场景需要 HTTP 请求元信息来构造动态数据（如完整的图片 URL、当前请求的基地址等）。
+
+常见方案各有缺陷：
+
+| 方案 | 问题 |
+|------|------|
+| API 层逐个字段后处理 | 每个接口都要重复写，散落在各处 |
+| 函数签名传入 `*http.Request` | 侵入性强，所有调用链都要改签名 |
+| 函数签名传入 `baseURL string` | 每多一个需求就多加一个参数 |
+| 直接传入 `gin.Context` | Core 层对 HTTP 框架产生耦合 |
+
+`web.WithContext` 通过扩展 `context.Context` 接口来携带 HTTP 请求信息，解决了这个问题：
+
+```go
+type Context interface {
+    context.Context
+    Request() *http.Request
+    GetBaseURL() string
+    GetScheme() string
+    GetHost() string
+}
+```
+
+**API 层使用** — 只需将 `c.Request.Context()` 替换为 `web.WithContext`：
+
+```go
+ctx := web.WithContext(c.Request)
+out, err := core.DoSomething(ctx, input)
+```
+
+**Adapter 层使用** — 通过类型断言按需获取 HTTP 元信息：
+
+```go
+if wc, ok := ctx.(web.Context); ok {
+    baseURL := wc.GetBaseURL()
+    // 使用 baseURL 拼接完整 URL
+}
+```
+
+Core 层只是透传 `ctx`，完全不需要感知 HTTP。
+
+**设计亮点：**
+
++ **零破坏性** — `web.Context` 实现了 `context.Context` 接口，所有现有函数签名 `func(ctx context.Context, ...)` 无需修改即可接收。
++ **优雅降级** — 类型断言失败时（如定时任务、单元测试、CLI 工具场景）自动回退到默认值，不影响正常运行。
++ **渐进式采用** — 只需修改两处：调用处（API 层）和使用处（Adapter 层），中间层完全不需要改动。
++ **可扩展** — `web.Context` 是接口，可以定义子接口按需扩展更多元信息（如租户 ID）。
+
+**适用场景：** 动态 URL 拼接、请求级元信息透传（IP、User-Agent 等）、跨领域数据组装需要 HTTP 上下文辅助的场景。
+
 ## 常见问题
 
 > 为什么不在每一层分别定义模型?
@@ -614,13 +844,54 @@ func RegisterVersion(r gin.IRouter, verAPI VersionAPI, handler ...gin.HandlerFun
 }
 ```
 
+## 性能优化
+
+`pkg/orm` 的 `Update` 等通用封装为了兼容通用场景，会有一定性能损耗。**高频数据库更新操作应当在 `store/<xxx>db` 层直接实现具体 SQL，避免直接使用通用 `Update` 封装。** 例如:
+
+```go
+// 不推荐：高性能高频场景，避免使用 orm.UpdateWithContext
+func (d Version) UpdateStatus(ctx context.Context, id int, status int) error {
+    return orm.UpdateWithContext(ctx, d.db, &version.Version{}, func(v *version.Version) {
+        v.Status = status
+    }, orm.Where("id=?", id))
+}
+
+// 推荐：在 db 层用具体 SQL/Updates 直接更新目标字段
+func (d Version) UpdateStatus(ctx context.Context, id int, status int) error {
+    return d.db.WithContext(ctx).
+        Model(new(version.Version)).
+        Where("id = ?", id).
+        Update("status", status).Error
+}
+```
+
+核心原则:
+
++ 能用单条 SQL 完成的更新，不要先查询再保存。
++ 不需要回写全量字段时，用 `Update("column", value)` 或 `Updates(map[string]any{...})` 精确更新目标字段。
++ 批量更新优先用 `gorm` 原生 `Where(...).Update(...)`，而非循环调用通用接口。
+
+当架构设计者确认相关业务涉及高频访问时，应先做压力测试确定瓶颈，再有针对性地重构性能不足的代码。避免过早优化，也避免上线后才发现性能问题。
+
 ## 表迁移
 
-每次程序启动都执行一遍，太慢了。
+GORM 的 `AutoMigrate` 每次启动都执行一遍，对大表来说代价不低。项目通过 `versionapi` 包做版本控制，仅在版本号变更时才执行迁移。
 
-所以通过 version 表来控制，是否要进行表迁移操作。
+`main.go` 中的关键配置：
 
-当发现数据库表版本已经是最新时，即不执行。通过修改 api/db.go 文件中 dbVersion 控制版本号。
+```go
+// orm.SetEnabledAutoMigrate(true)  // 取消注释则每次启动都迁移
+versionapi.DBVersion = buildVersion  // 构建版本号，由 Makefile 注入
+versionapi.DBRemark = gitBranch + "_" + gitHash
+```
+
+**三种使用方式：**
+
+| 场景 | 做法 |
+|------|------|
+| 仅发布新版本时迁移 | 保持现状，`DBVersion` 随 git tag 自动变更，版本号不变则跳过迁移 |
+| 每次启动都强制迁移 | 取消注释 `orm.SetEnabledAutoMigrate(true)` |
+| 完全不需要版本控制 | 删除 `versionapi` 相关的所有代码 |
 
 ## 自定义配置目录
 
@@ -641,3 +912,4 @@ func RegisterVersion(r gin.IRouter, verAPI VersionAPI, handler ...gin.HandlerFun
 [github.com/ixugo/amap 高德地图 API](https://github.com/ixugo/amap)
 [github.com/ixugo/netpulse 免费API，查询IP信息](https://github.com/ixugo/netpulse)
 [github.com/ixugo/bytepool 带引用计数的内存池](https://github.com/ixugo/bytepool)
+[github.com/ixugo/nsqite 事件总线/事务消息](https://github.com/ixugo/nsqite)

@@ -42,3 +42,5 @@ tables/
 *.pprof
 *.test
 CLAUDE.local.md
+*.mp4
+*.mp3

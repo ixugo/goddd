@@ -1,11 +1,12 @@
 [Server]
   [Server.HTTP]
-    Port = 8082
+    Port = 8080
     JwtSecret = ""
     Timeout = "30s"
 
     [Server.HTTP.Pprof]
       Enabled = true
+      # pprof 访问 IP 白名单
       AccessIps = ['::1', '127.0.0.1']
 
 [Data]

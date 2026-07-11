@@ -1,6 +1,6 @@
 <p align="center">
-    <img src="./logo.png#gh-light-mode-only" alt="Goyave Logo" width="550"/>
-    <img src="./logo_dark.png#gh-dark-mode-only" alt="Goyave Logo" width="550"/>
+    <img src="./logo.png#gh-light-mode-only" alt="GoDDD Logo" width="550"/>
+    <img src="./logo_dark.png#gh-dark-mode-only" alt="GoDDD Logo" width="550"/>
 </p>
 
 <p align="center">
@@ -25,13 +25,29 @@ The goal of GoDDD is to:
 
 If you think the above description fits your needs, then let's get started quickly.
 
-Supports [code generation](github.com/ixugo/godddx).
+Supports [code generation](https://github.com/ixugo/godddx).
 
-Supports [event bus/transaction messages](github.com/ixugo/nsqite).
+Supports [event bus/transaction messages](https://github.com/ixugo/nsqite).
+
+## Design Description
+
+Traditional MVC monolithic architectures become increasingly difficult to develop as the business grows, and new team members struggle to understand the bloated monolith.
+
+A modular monolithic architecture retains many of the advantages and disadvantages of a monolith, while gaining most of the benefits and only a few of the drawbacks of microservices.
+
+The complete business is split into multiple domain modules, such as User Domain, Bank Domain, and Product Domain. Each domain has its own complete set of:
+
++ API (interfaces)
++ Core (business logic)
++ Store (cache / persistence)
+
+Different developers or teams can work on these domain modules independently, reducing confusion and conflicts caused by adding new features. Compared to microservices, modules organized this way are smaller, cleaner, and easier to test.
+
+When the program outgrows the domain-module scale, the team can easily extract a domain module into a microservice when needed.
 
 ## Quick start
 
-1. Golang version >= 1.23.0
+1. Golang version >= 1.25.0 (Go 1.26 is recommended)
 2. `git clone github.com/ixugo/goddd`
 3. `cd goddd && go build -o goddd ./cmd/server && ./goddd`
 4. Open a new terminal and access `curl http://localhost:8080/health`
@@ -42,6 +58,157 @@ Supports [event bus/transaction messages](github.com/ixugo/nsqite).
 
 
 
+
+## Team Standards
+
+| Standard | Description | Document |
+|----------|-------------|----------|
+| API Design | Resource naming, HTTP methods, status codes, pagination, versioning | [api-design-patterns.md](.cursor/skills/goddd/references/api-design-patterns.md) |
+| Git Workflow | Commit conventions, branching strategy, versioning, changelog | [goddd-git-workflow](.cursor/skills/goddd-git-workflow/SKILL.md) |
+
+## API Documentation
+
+The project uses an AI-driven code-first approach to generate OpenAPI 3.1 documentation without manual annotations. When API layer code changes, interface definitions are automatically extracted from route registration (`web.WrapH`), handler signatures, and struct tags, generating YAML documents to the `docs/api/` directory.
+
+See [goddd-api-doc skill](.cursor/skills/goddd-api-doc/SKILL.md) for details.
+
+**Apifox Auto-Sync**
+
+Generated documents can be automatically pushed to Apifox. Configuration required:
+
+1. Set environment variable `APIFOX_TOKEN` (Apifox personal access token)
+2. Set `APIFOX_PROJECT_ID=<your-project-id>` in `CLAUDE.md` or `AGENTS.md` at the project root
+
+Once configured, the sync script runs automatically on document changes. Skipped silently when unconfigured.
+
+## Naming Conventions
+
+| Category | Convention | Example |
+|----------|-----------|---------|
+| Domain directory | Lowercase, no separators | `version`, `tenant` |
+| Domain files | `<domain>.<purpose>.go` | `version.model.go`, `version.param.go` |
+| Store directory | `store/<domain>db` | `store/versiondb` |
+| Store files | `db.go` (entry/migration) + `<domain>.go` (CRUD) | `db.go`, `version.go` |
+| Domain model | PascalCase | `Version`, `Tenant` |
+| Input struct | `<Action><Domain>Input` | `CreateVersionInput` |
+| Output struct | `<Action><Domain>Output` | `FindUserOutput` |
+| Core object | Fixed `Core` | `type Core struct` |
+| Core constructor | `NewCore(store Storer, opts ...Option)` | — |
+| Store interface | Fixed `Storer` | `type Storer interface` |
+| API struct | `<Domain>API` | `VersionAPI` |
+| Route registration | `Register<Domain>(g gin.IRouter, api <Domain>API, handler ...gin.HandlerFunc)` | `RegisterVersion(...)` |
+| JSON tag | snake_case | `json:"created_at"` |
+| Route path | kebab-case + plural nouns | `/api/v1/users` |
+| Database table | snake_case + plural | `versions` |
+
+## Security
+
+**SQL Injection Prevention**
+
+All database operations must use GORM parameterized queries. String concatenation is prohibited:
+
+```go
+// Correct: parameterized query
+db.Where("name = ?", input.Name).First(&user)
+
+// Wrong: string concatenation
+db.Where("name = '" + input.Name + "'").First(&user)
+```
+
+**Log Sanitization**
+
+Sensitive user information in log output must be masked:
+
+| Field Type | Masking Rule | Example |
+|------------|-------------|---------|
+| Phone | Replace middle 4 digits with `****` | `138****1234` |
+| Email | Keep only first and last before `@` | `a***z@example.com` |
+| Password/Token | Never write to logs | — |
+| ID Number | Keep first 3 and last 4 | `110***1234` |
+
+**Sensitive Data Encryption**
+
+- Passwords must use `bcrypt`, no plaintext or MD5
+- Token/key configurations injected via environment variables, no hardcoding
+- `.env`, `credentials.json` etc. must be in `.gitignore`
+
+## Unit Testing
+
+Core business logic (exported Core functions) must have unit tests covering key paths:
+
+- Store interfaces naturally support mocking — replace with mock implementations in tests
+- Test files go in the same directory as the source, named `<file>_test.go`
+- Fix bugs by writing a reproduction test first, then fixing
+
+Not required for: pure DTO definitions, simple getters/setters, direct CRUD pass-through in Store.
+
+## Cross-Domain Aggregation
+
+When business logic involves data from multiple domains, choose the appropriate approach based on performance requirements and coupling constraints:
+
+| Pattern | Coupling | Use Case |
+|---------|----------|----------|
+| SQL Pattern | High | Query aggregation — Store layer writes JOIN queries across domain tables |
+| Command Pattern | Medium | Write aggregation — Domain A depends on Domain B directly, uses `tx` for transaction consistency |
+| API Layer Aggregation | Medium | API layer coordinates multiple Cores, each runs independently, results assembled in API layer |
+| Adapter Pattern | Low | Domains decoupled via Option-injected interfaces, each manages its own transactions |
+
+**SQL Pattern**
+
+Write JOIN queries directly in the Store layer for read-only query aggregation:
+
+```go
+func (d OrderDB) FindOrdersWithUser(ctx context.Context, userID string) ([]OrderWithUser, error) {
+    var result []OrderWithUser
+    return result, d.db.WithContext(ctx).
+        Table("orders").
+        Select("orders.*, users.name as user_name").
+        Joins("LEFT JOIN users ON users.id = orders.user_id").
+        Where("orders.user_id = ?", userID).
+        Find(&result).Error
+}
+```
+
+**Command Pattern**
+
+Store interface extends transactional methods with `tx *gorm.DB` parameter:
+
+```go
+func (c *Core) CreateOrderAndDeduct(ctx context.Context, in CreateOrderInput) error {
+    return c.db.Transaction(func(tx *gorm.DB) error {
+        if err := c.store.CreateOrder(ctx, tx, in.Order); err != nil {
+            return err
+        }
+        return c.store.DeductStock(ctx, tx, in.ProductID, in.Quantity)
+    })
+}
+```
+
+**API Layer Aggregation**
+
+API layer calls multiple Cores and assembles results. For lists, attach related data as a map to avoid N+1 queries:
+
+```go
+func (a OrderAPI) listOrders(c *gin.Context, in *ListOrderInput) (*ListOrderOutput, error) {
+    ctx := c.Request.Context()
+    orders, err := a.orderCore.ListOrders(ctx, in.Pager)
+    if err != nil {
+        return nil, err
+    }
+    userIDs := uniqueUserIDs(orders) // extract deduplicated user IDs
+    users, _ := a.userCore.GetUserMap(ctx, userIDs)
+    return &ListOrderOutput{
+        Items: orders,
+        Users: users, // map[string]UserBrief{"user_xxx": {Name: "Zhang San"}}
+    }, nil
+}
+```
+
+**Adapter Pattern**
+
+Domains fully decoupled via Option-injected adapter interfaces.
+
+> See [adapter-pattern.md](.cursor/skills/goddd/references/adapter-pattern.md) for details.
 
 ## References
 
@@ -54,20 +221,35 @@ Best Practices for This Project: https://github.com/gowvp/gb28181
 
 ```bash
 .
-├── cmd                     Executable program
-│   └── server
-├── configs                 Configuration files
-├── docs                    Design/User documentation
-├── internal                Private business
-│   ├── conf                Configuration models
-│   ├── core                Business domain
-│   │   └── version         Actual business
-│   │       └── store
-│   │           └── versiondb Database operations
-│   ├── data                Database initialization
+├── main.go                 # Main entry point
+├── cmd                     # Executable entry points
+├── configs                 # Configuration files
+├── docs                    # Design / user documentation
+├── domain                  # Common domains and basic business
+│   ├── token               # JWT tokens and permissions
+│   ├── uniqueid            # Global unique ID generator
+│   └── version             # DB schema version control to avoid gorm migration on every start
+│       ├── store/versiondb
+│       └── versionapi
+├── internal                # Private business code
+│   ├── app                 # Wire dependency-injection assembly
+│   ├── conf                # Configuration models and defaults
+│   ├── core                # Business domain (example / reserved)
+│   ├── data                # Database initialization
 │   └── web
-│       └── api             RESTful API
-└── pkg                     Dependencies
+│       └── api             # RESTful API route registration
+├── pkg                     # Project libraries
+│   ├── cmd                 # CLI helpers
+│   ├── conc                # Concurrency utilities
+│   ├── hook                # Common function hooks
+│   ├── logger              # Logging wrapper
+│   ├── orm                 # ORM wrapper
+│   ├── queue               # Queue implementations
+│   ├── reason              # Error reason definitions
+│   ├── server              # HTTP server wrapper
+│   ├── system              # System utilities
+│   └── web                 # Web middleware, responses, validation, etc.
+└── tables                  # Auto-generated business table models (example)
 ```
 
 ## Project Description
@@ -189,7 +371,7 @@ func findUser(in *Input) (*Output, error) {
 
 ## Makefile
 
-For Windows systems, please use the Git Bash terminal to run the Makefile instead of the default cmd/powershell terminal, as issues may arise.
+**How to install make?** `claude -p "install make tool"` or search online. On Windows, use Git Bash to ensure consistent behavior with Linux commands — do not use the default cmd/powershell terminal.
 
 Use `make` or `make help` to get more help.
 

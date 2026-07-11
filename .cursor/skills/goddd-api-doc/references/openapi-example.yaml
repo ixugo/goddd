@@ -1,0 +1,230 @@
+openapi: '3.1.0'
+info:
+  title: 示例项目 API
+  version: '1.0.0'
+  description: OpenAPI 3.1 接口文档示例
+
+paths:
+  /users:
+    get:
+      summary: 获取用户列表
+      tags:
+        - admin/用户管理
+      description: |
+        分页查询用户列表，支持按名称搜索
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+          description: 页码
+        - name: size
+          in: query
+          schema:
+            type: integer
+          description: 每页数量
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: 搜索关键词（按名称模糊匹配）
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total:
+                    type: integer
+                    description: 总数
+                  list:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/User'
+              example:
+                total: 42
+                list:
+                  - id: "01J5EXAMPLE"
+                    name: "张三"
+                    email: "zhangsan@example.com"
+                    role: "admin"
+                    created_at: 1720000000000
+
+    post:
+      summary: 创建用户
+      tags:
+        - admin/用户管理
+      description: 创建新用户
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+                - email
+              properties:
+                name:
+                  type: string
+                  description: 用户名
+                  maxLength: 50
+                email:
+                  type: string
+                  format: email
+                  description: 邮箱
+                role:
+                  type: string
+                  enum: [admin, user, viewer]
+                  description: 角色
+                  default: user
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: 参数校验失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 邮箱已存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /users/{id}:
+    get:
+      summary: 获取用户详情
+      tags:
+        - admin/用户管理
+      description: 根据 ID 获取单个用户信息
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: 用户 ID
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '404':
+          description: 用户不存在
+
+    patch:
+      summary: 更新用户
+      tags:
+        - admin/用户管理
+      description: |
+        部分更新用户信息
+
+        更新说明：
+        2026-07-10
+        - 新增 role 字段支持
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: 用户 ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: 用户名
+                email:
+                  type: string
+                  format: email
+                  description: 邮箱
+                role:
+                  type: string
+                  enum: [admin, user, viewer]
+                  description: 角色
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+
+    delete:
+      summary: 删除用户
+      tags:
+        - admin/用户管理
+      description: 删除指定用户
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: 用户 ID
+      responses:
+        '204':
+          description: 删除成功
+
+components:
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          description: 用户 ID（UUIDv7）
+        name:
+          type: string
+          description: 用户名
+        email:
+          type: string
+          format: email
+          description: 邮箱
+        role:
+          type: string
+          enum: [admin, user, viewer]
+          description: 角色
+        created_at:
+          type: integer
+          description: 创建时间（毫秒时间戳）
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              description: 错误码
+            message:
+              type: string
+              description: 错误信息
+            details:
+              type: array
+              items:
+                type: object
+                properties:
+                  field:
+                    type: string
+                    description: 出错字段
+                  message:
+                    type: string
+                    description: 字段错误描述

@@ -5,32 +5,103 @@ description: GoDDD 六边形架构开发指南。当使用 goddd 架构实现代
 
 # GoDDD 六边形架构开发指南
 
-本技能指导在 GoDDD 六边形架构下进行开发，覆盖代码生成、领域间解耦、排序方案、HTTP 上下文透传、Web 工具使用等核心场景。
-
 > **遇到不确定的写法时，优先参考项目中已有的符合规范的领域代码。**
 
-## 目录
+## references 索引
 
-1. [架构概览](#架构概览)
-2. [godddx 代码生成](#godddx-代码生成)
-3. [参数定义规范](#参数定义规范)
-4. [领域间解耦（适配器模式）](#领域间解耦)
-5. [领域内子包依赖](#领域内子包依赖)
-6. [排序功能实现](#排序功能实现)
-7. [WithContext：Core 层获取 HTTP 信息](#withcontext)
-8. [Core 生命周期分离](#core-生命周期分离)
-9. [Web 工具函数速查](#web-工具函数速查)
-10. [Store 缓存层规范](#store-缓存层规范)
-11. [API 层规范](#api-层规范)
+实现对应功能时**必须**先阅读对应文档：
 
-详细参考文档在 `references/` 目录下，实现对应功能时**必须**先阅读：
-- `references/sort.md` — 实现拖拽排序时阅读（接收有序 ID 数组、重分配 sort 值）
-- `references/with-context.md` — Core/Adapter 需要 HTTP 请求信息（scheme、host、IP）时阅读
-- `references/adapter-pattern.md` — 新增领域间依赖、实现 Port/Adapter/Option 注入时阅读
-- `references/web-toolkit.md` — 使用 WrapH、PagerFilter、DateFilter、SSE 等 web 包工具时阅读
-- `references/lifecycle-split.md` — Core 需要后台 goroutine（定时任务、心跳检测）且遇到 Wire 循环依赖时阅读；体现 SRP：Core 值类型专注业务，生命周期委托给独立 Handler，避免 Core 职责过重
-- `references/cache-layer.md` — 修改 store/xxxcache 时阅读；判断内存/Redis 缓存、SETNX/SETEX 防竞态、WarmUp 预热、API 层装配
-- `references/api-design-patterns.md` — 设计新接口或审查接口规范时阅读；资源命名、HTTP 方法、状态码、分页、归属字段、版本控制、限流
+| 文档 | 必读时机 | 核心内容 |
+|------|---------|---------|
+| `references/api-design-patterns.md` | 设计新接口、审查接口规范 | 资源命名、标准方法、自定义方法、错误处理、分页过滤、校验、限流、路由模板 |
+| `references/web-toolkit.md` | 使用 `pkg/web` 任意函数 | WrapH、PagerFilter/DateFilter、JWT、中间件、SSE、Validator、响应封装 |
+| `references/adapter-pattern.md` | 新增领域间依赖 | Port/Adapter 定义位置、Option 注入、Wire 装配、port.go/model.go 分工 |
+| `references/cache-layer.md` | 修改 `store/xxxcache/` | 内存 vs Redis、redis.Cmdable、SETNX 防竞态、singleflight、WarmUp、穿透防护 |
+| `references/lifecycle-split.md` | Core 需后台 goroutine 且 Wire 循环依赖 | Core 值类型 + SessionHandler、方法分配、`(Core, func())`、反模式 |
+| `references/sort.md` | 实现拖拽排序 | 有序 ID 数组 → 收集 sort 值 → 重分配 → 事务更新 |
+| `references/with-context.md` | Core/Adapter 需 HTTP 请求信息 | `web.WithContext` → Core 透传 → Adapter 类型断言 |
+
+---
+
+## 函数与类型速查索引
+
+### 请求处理（→ `web-toolkit.md`）
+
+| 函数/类型 | 用途 |
+|----------|------|
+| `web.WrapH(fn)` | `func(*gin.Context, *Input) (Output, error)` → `gin.HandlerFunc` |
+| `web.WrapHs(fn, mid...)` | 同 WrapH，附加前置中间件 |
+| `web.PagerFilter` | 分页（Page, Size, Sort），含 `Offset()`, `Limit()`, `SortColumn()` |
+| `web.NewPagerFilterMaxSize()` | 不分页全量查询 |
+| `web.DateFilter` | 日期范围（StartMs, EndMs），含 `StartAt()`, `EndAt()` |
+| `web.Validator` | 业务校验，`Check(ok, key, msg)`, `Valid() bool`, `List() []string` |
+
+### 响应与错误（→ `web-toolkit.md` + `api-design-patterns.md`）
+
+| 函数/类型 | 用途 |
+|----------|------|
+| `web.Success(c, data)` | 统一成功响应 |
+| `web.Fail(c, err)` | 统一错误响应，自动映射状态码 |
+| `web.AbortWithStatusJSON(c, err)` | 错误 + Abort（中间件用） |
+| `web.PageOutput[T]` | 分页响应 `{Items, Total}` |
+| `web.ScrollPageOutput[T]` | 滚动分页 `{Items, Next}` |
+
+### reason.Error 变量（→ `api-design-patterns.md`）
+
+| 变量 | 用途 | 状态码 |
+|------|------|-------|
+| `ErrBadRequest` | 请求参数有误 | 400 |
+| `ErrDB` | 数据库错误 | 400 |
+| `ErrNotFound` | 资源未找到 | 400 |
+| `ErrServer` | 服务器错误 | 400 |
+| `ErrJSON` / `ErrUsedLogic` / `ErrPermissionDenied` / `ErrTimeout` | 其它业务错误 | 400 |
+| `ErrFileUpload` / `ErrFileTooLarge` / `ErrContentTooLarge` | 文件相关 | 400 |
+| `ErrUnauthorizedToken` | 认证失败 | 401 |
+| `ErrRateLimit` | 限流 | 429 |
+
+方法：`SetMsg(msg)` 用户提示、`Withf(fmt, ...)` 开发 details、`SetHTTPStatus(code)` 覆盖状态码
+
+### Context 与 URL（→ `web-toolkit.md` + `with-context.md`）
+
+| 函数 | 用途 |
+|------|------|
+| `web.WithContext(r)` | `*http.Request` → `web.Context` |
+| `web.GetBaseURL(r)` / `web.BaseURLJoin(r, paths...)` | 提取/拼接 URL |
+| `web.TraceID(ctx)` / `web.MustTraceID(ctx)` | 请求追踪 ID |
+
+### JWT 鉴权（→ `web-toolkit.md`）
+
+| 函数 | 用途 |
+|------|------|
+| `web.NewToken(data, secret, opts...)` / `web.ParseToken(token, secret)` | 创建/解析 JWT |
+| `web.AuthMiddleware(secret)` / `web.AuthLevel(level)` | 鉴权中间件 |
+| `web.NewClaimsData()` | Claims 链式构建 |
+| `web.GetUID` / `GetUsername` / `GetRoleID` / `GetLevel` / `GetToken` | 获取用户信息 |
+
+### 中间件（→ `web-toolkit.md`）
+
+| 函数 | 用途 |
+|------|------|
+| `web.Logger` / `LoggerWithBody` / `LoggerWithUseTime` | 请求日志 |
+| `web.RateLimiter` / `IPRateLimiterForGin` / `IDRateLimiter` | 限流 |
+| `web.Recover()` / `web.SetDeadline(d)` / `web.Metrics()` | 恢复/超时/指标 |
+
+### SSE（→ `web-toolkit.md`）
+
+| 函数/类型 | 用途 |
+|----------|------|
+| `web.NewSSE` / `SSE.Publish` / `SSE.Close` / `SSE.Stop` | SSE 生命周期 |
+| `web.SendChunk` / `SendChunkPro` / `SendSSE` | 流式发送 |
+| `web.NewEventMessage(event, data)` | 创建事件消息 |
+
+### 缓存操作（→ `cache-layer.md`）
+
+| 操作 | 命令 | 理由 |
+|------|------|------|
+| 读穿透回填 | `singleflight.Do` + `SetNX` | 合并并发，不覆盖新值 |
+| Create | 不写缓存 | 等读时 SetNX 回填 |
+| Update | `Set(key, val, ttl)` | 最新值覆盖 |
+| WarmUp | `SetNX` | 不覆盖运行期缓存 |
 
 ---
 
@@ -54,7 +125,7 @@ description: GoDDD 六边形架构开发指南。当使用 goddd 架构实现代
 │  ├─ model.go           非 GORM 类型定义                   │
 │  ├─ <entity>.go        业务方法 + EntityStorer 接口        │
 │  ├─ <entity>.model.go  领域模型 (GORM 映射)               │
-│  ├─ <entity>.param.go  List/Create/Update Input 参数           │
+│  ├─ <entity>.param.go  List/Create/Update Input 参数      │
 │  ├─ <provider>adapter/ 对外提供的适配器实现                 │
 │  └─ store/<domain>db/  数据库实现 (被动适配器)             │
 └──────────────────────────────────────────────────────────┘
@@ -62,13 +133,11 @@ description: GoDDD 六边形架构开发指南。当使用 goddd 架构实现代
 
 **依赖方向**：API → Core ← Store/Adapter（外层依赖内层，内层通过接口反转依赖）
 
-> **Core 值类型选项**：当 Core 需要后台 goroutine 且出现 Wire 循环依赖时，可将生命周期剥离到独立的 `Handler` 结构体，Core 内嵌其指针作为字段。Core 保持值类型，职责仅为业务逻辑；Handler 负责 goroutine、ctx、cancel、优雅停机。详见 `references/lifecycle-split.md`。
-
 ---
 
 ## godddx 代码生成
 
-CRUD 场景**必须**使用 [godddx](https://github.com/ixugo/godddx) 生成代码，确保结构一致。
+CRUD 场景**必须**使用 [godddx](https://github.com/ixugo/godddx) 生成代码。
 
 ### 步骤
 
@@ -84,14 +153,6 @@ CRUD 场景**必须**使用 [godddx](https://github.com/ixugo/godddx) 生成代�
 ### 表定义示例
 
 ```go
-// tables/task/task.go
-package task
-
-import (
-    "time"
-    "github.com/ixugo/goddd/domain/uniqueid"
-)
-
 type Task struct {
     ID        uniqueid.Core `gorm:"primaryKey"`
     Name      string
@@ -103,18 +164,9 @@ type Task struct {
 }
 ```
 
-### Wire 注册模式
-
-在 `provider.go` 中添加 `NewXxxCore` 和 `NewXxxAPI`：
+### Wire 注册
 
 ```go
-var ProviderSet = wire.NewSet(
-    wire.Struct(new(Usecase), "*"),
-    NewHTTPHandler,
-    // ... 已有 provider
-    NewTaskCore, NewTaskAPI,  // 新增领域
-)
-
 func NewTaskCore(db *gorm.DB) task.Core {
     store := taskdb.NewDB(db).AutoMigrate(orm.GetEnabledAutoMigrate())
     return task.NewCore(store)
@@ -125,40 +177,29 @@ func NewTaskCore(db *gorm.DB) task.Core {
 
 ## 参数定义规范
 
-**核心原则**：归属字段（TenantID、CreatedBy）由 API 层填充，编辑时不可修改。
-
-### ListInput — 查询参数
+**核心原则**：归属字段（TenantID、CreatedBy）由 API 层填充，`json:"-"` / `form:"-"` 标记，编辑时不可修改。
 
 ```go
 type ListEntityInput struct {
-    web.PagerFilter                          // 分页
-    web.DateFilter                           // 日期范围（start_ms, end_ms 毫秒时间戳）
-    Name string `form:"name"`               // 模糊查询字段
-
-    TenantID  string `form:"-"`             // API 层填充
-    CreatedBy string `form:"-"`             // API 层填充
+    web.PagerFilter
+    web.DateFilter
+    Name      string `form:"name"`
+    TenantID  string `form:"-"`
 }
-```
 
-### CreateInput — 新增参数
-
-```go
 type CreateEntityInput struct {
-    Name string `json:"name"`
-
-    TenantID  string `json:"-"`             // API 层填充
-    CreatedBy string `json:"-"`             // API 层填充
+    Name      string `json:"name" binding:"required,max=50"`
+    TenantID  string `json:"-"`
+    CreatedBy string `json:"-"`
 }
-```
 
-### UpdateInput — 编辑参数
-
-```go
 type UpdateEntityInput struct {
     Name string `json:"name"`
-    // 不包含 TenantID、CreatedBy 等归属字段
+    // 不含归属字段
 }
 ```
+
+> 校验规范、分页过滤详见 `references/api-design-patterns.md`
 
 ---
 
@@ -166,19 +207,16 @@ type UpdateEntityInput struct {
 
 领域间**必须**通过适配器解耦，不能直接依赖其他领域的 Core。
 
-### 核心规则
-
 | 规则 | 说明 |
 |------|------|
-| Port 定义在**提供方** | 接口和模型定义在提供能力的领域子包中 |
-| Adapter 实现在**提供方** | 适配器放在 `<provider>adapter/` 子包 |
-| 消费方通过 **Option 注入** | `NewCore(store, opts...)` 模式 |
+| Port 定义在**提供方** | 接口和模型在 `<provider>adapter/` 子包 |
+| Adapter 实现在**提供方** | 同上 |
+| 消费方通过 **Option 注入** | `NewCore(store, opts...)` |
 | 返回类型定义在**提供方子包** | 避免重复定义 |
 
 ### Option 注入模式
 
 ```go
-// 消费方 core.go
 type Core struct {
     store        Storer
     userProvider useradapter.BriefProvider
@@ -197,33 +235,18 @@ func NewCore(store Storer, opts ...Option) Core {
 }
 ```
 
-### API 层注入
-
-```go
-func NewMessageCore(db *gorm.DB, briefProvider useradapter.BriefProvider) message.Core {
-    store := messagedb.NewDB(db).AutoMigrate(orm.GetEnabledAutoMigrate())
-    return message.NewCore(store,
-        message.WithUserProvider(briefProvider),
-    )
-}
-```
-
-> 详细示例和完整代码请阅读 `references/adapter-pattern.md`
+> 完整代码模板（Port 定义、Adapter 实现、Wire 装配、port.go/model.go 分工）详见 `references/adapter-pattern.md`
 
 ---
 
 ## 领域内子包依赖
 
-同一领域目录下（如 `internal/core/sms/`）可能存在多个子包（如 scheduler、store、adapter 等），它们共同组成该领域的完整实现。与跨领域解耦规则不同，领域内子包间的依赖更直接灵活。
-
-### 核心规则
-
 | 规则 | 说明 |
 |------|------|
-| 子包单向依赖根包 | 所有子包都可以 import 领域根包（如 `sms`），根包不感知子包 |
-| 子包间可直接依赖 | 子包 A 可直接 import 子包 B，无需通过接口隔离 |
-| 禁止循环依赖 | 若子包 A 和 B 需要双向引用，一方直接依赖，另一方通过接口依赖 |
-| 基础设施仍需接口 | 隔离 MQ 客户端、数据库驱动等外部依赖的接口仍定义在根包（一般在 `port.go` 中） |
+| 子包单向依赖根包 | 所有子包可 import 根包，根包不感知子包 |
+| 子包间可直接依赖 | 无需通过接口隔离 |
+| 禁止循环依赖 | 双向引用时一方用接口打破 |
+| 基础设施仍需接口 | MQ、DB 驱动等外部依赖接口定义在根包 `port.go` |
 
 ### 判断是否需要接口
 
@@ -243,19 +266,19 @@ func NewMessageCore(db *gorm.DB, briefProvider useradapter.BriefProvider) messag
 
 ```
 domain/                 ← 领域根包（定义端口接口、模型、共享类型）
-├── sub-a/              ← 单向依赖 domain（import domain 根包）
+├── sub-a/              ← 单向依赖 domain
 ├── sub-b/              ← 单向依赖 domain
-├── sub-infra/          ← 单向依赖 domain（实现 domain.Publisher 等接口）
-└── store/domaindb/     ← 单向依赖 domain（实现 domain.Storer）
+├── sub-infra/          ← 实现 domain.Publisher 等接口
+└── store/domaindb/     ← 实现 domain.Storer
 ```
 
-子包之间若无交叉依赖，全部通过根包共享类型和接口定义。若未来 sub-a 需要调用 sub-b 的某个方法，可直接 import sub-b；若反向也需要，则一方定义 narrow interface 打破循环。
+子包之间若无交叉依赖，全部通过根包共享类型和接口定义。若 sub-a 需调用 sub-b 可直接 import；若反向也需要，则一方定义 narrow interface 打破循环。
 
 ---
 
 ## 排序功能实现
 
-实现拖拽排序：接收有序 ID 数组，重新分配 sort 值而不影响未传入的记录。
+拖拽排序：接收有序 ID 数组，重新分配 sort 值，不影响未传入记录。
 
 ### 核心逻辑
 
@@ -264,37 +287,24 @@ domain/                 ← 领域根包（定义端口接口、模型、共享�
 3. 按传入 ID 顺序重新分配排序值
 4. 事务批量更新
 
-> 完整实现代码请阅读 `references/sort.md`
-
 ### 要点
 
 - 数据库字段 `sort` 使用 gorm tag `autoIncrement` 自增
 - Store 层用事务批量更新，Core 层编排逻辑，API 层只做协议转换
 - 校验所有 ID 存在，不存在则返回错误
+- 路由：`g.PUT("/sort", web.WrapH(api.sortXxx))`
+
+> 完整参数定义、Store/Core/API 三层代码模板详见 `references/sort.md`
 
 ---
 
-## WithContext
+## WithContext：Core 层获取 HTTP 信息
 
-解决 Core 层不依赖 HTTP 框架、但 Adapter 需要 HTTP 请求信息的矛盾。
+Core 不依赖 HTTP 框架，Adapter 需要 HTTP 元信息时，通过 `web.Context` 透传：
 
-### 原理
-
-`web.Context` 扩展了 `context.Context`，携带 `*http.Request`，通过类型断言按需获取：
-
-```go
-// API 层 — 构造 web.Context
-ctx := web.WithContext(c.Request)
-core.DoSomething(ctx, ...)
-
-// Adapter 层 — 类型断言获取 HTTP 信息
-func (p *impl) resolveCover(ctx context.Context, cover string) string {
-    if wc, ok := ctx.(web.Context); ok {
-        return p.coverURLFunc(wc.Request(), cover)
-    }
-    return cover  // 非 HTTP 场景降级
-}
-```
+- **API 层**：`ctx := web.WithContext(c.Request)`
+- **Core 层**：透传 `ctx context.Context`
+- **Adapter 层**：`if wc, ok := ctx.(web.Context); ok { ... }`
 
 ### 设计要点
 
@@ -302,218 +312,62 @@ func (p *impl) resolveCover(ctx context.Context, cover string) string {
 |------|------|
 | 零破坏性 | 实现 `context.Context`，现有签名无需修改 |
 | 渐进式采用 | 只改调用处（API）和使用处（Adapter），Core 层透传 |
-| 优雅降级 | 类型断言失败时返回原始值，非 HTTP 场景正常工作 |
-| 可扩展 | 接口可定义子接口扩展 |
+| 优雅降级 | 断言失败返回原始值，非 HTTP 场景正常工作 |
 
-### 适用场景
-
-- 动态 URL 拼接（需要 scheme + host）
-- 请求级元信息透传（IP、User-Agent）
-- 跨领域 Adapter 需要 HTTP 上下文辅助数据转换
-
-### 不适用
-
-- 已有明确参数的简单场景 → 直接传参
-- 与 HTTP 无关的逻辑 → 使用标准 `context.Context`
-- 需要修改请求状态 → 在 API 层处理
-
-> 完整设计文档请阅读 `references/with-context.md`
+> 完整背景分析、代码示例、适用/不适用场景详见 `references/with-context.md`
 
 ---
 
 ## Core 生命周期分离
 
-**触发条件**：Core 需要后台 goroutine，且 Wire 注入因值/指针类型冲突产生循环依赖。
-**设计原则**：代码可读性第一，避免 Core 职责过重（SRP）。
-
-### 核心思想
-
-将 goroutine、ctx、cancel、quit 等生命周期逻辑从 Core 中剥离，委托给独立的 `Handler` 结构体：
+**触发条件**：Core 需后台 goroutine，Wire 因值/指针类型冲突循环依赖。
 
 | 结构体 | 类型 | 职责 |
 |--------|------|------|
 | `Core` | 值类型 | 纯业务逻辑（查询 DB、计算、编排） |
-| `XxxHandler` | 指针类型，Core 内嵌 | goroutine 启动/停止、ctx 管理、优雅停机 |
+| `XxxHandler` | 指针，Core 内嵌 | goroutine 启动/停止、ctx 管理、优雅停机 |
 
-### 方法分配原则
+### 方法分配
 
-- **Core 方法**：查询 DB、纯业务计算（直接实现）
-- **Core 委托方法**：需要转发给 Handler 的公开方法（一行转发，不含业务逻辑）
-- **Handler 方法**：goroutine 内部调用的私有逻辑
+- **Core 方法**：查询 DB、纯业务计算
+- **Core 委托方法**：一行转发给 Handler（`c.ss.TrackHeartbeat(...)`）
+- **Handler 方法**：goroutine 内部私有逻辑
 
-```go
-// Core 委托方法：只转发，不含业务逻辑
-func (c Core) TrackHeartbeat(mediaID, sessionID, userID string, t int) {
-    c.ss.TrackHeartbeat(mediaID, sessionID, userID, t)
-}
-func (c Core) Close() { c.ss.Close() }
-```
+Wire：`func NewXxxCore(...) (xxx.Core, func()) { ... }`，返回值类型 Core + 清理函数。
 
-### Wire 注入
-
-`NewCore` 返回值类型 `Core` + 清理函数 `func()`，Wire 无需处理指针：
-
-```go
-func NewXxxCore(...) (xxx.Core, func()) { ... }
-```
-
-> 完整结构、构造函数、注意事项请阅读 `references/lifecycle-split.md`
-
----
-
-## Web 工具函数速查
-
-`github.com/ixugo/goddd/pkg/web` 提供 HTTP 开发基础设施。
-
-> 完整函数签名和使用示例请阅读 `references/web-toolkit.md`
-
-### 请求处理
-
-| 函数/类型 | 用途 |
-|----------|------|
-| `WrapH(fn)` | 核心包装函数，将 `func(*gin.Context, *Input) (Output, error)` 包装为 `gin.HandlerFunc` |
-| `WrapHs(fn, mid...)` | 同 WrapH，附加前置中间件 |
-| `PagerFilter` | 分页参数（Page, Size, Sort, SortSafelist），含 `Offset()`, `Limit()`, `SortColumn()` |
-| `NewPagerFilterMaxSize()` | 不分页查询（Size=99999） |
-| `DateFilter` | 日期范围（StartMs, EndMs 毫秒时间戳），含 `StartAt()`, `EndAt()`, `DefaultStartAt()`, `DefaultEndAt()` |
-| `Validator` | 参数校验，`Check(ok, key, msg)`, `AddError(key, msg)`, `Valid()`, `List()` |
-| `CustomMethods` | 自定义方法路由 |
-| `Limit(v, minV, maxV)` | 将整数值限制在 [minV, maxV] 区间内 |
-| `Offset(page, size)` | 计算分页偏移量（page 从 1 开始） |
-
-### 响应处理
-
-| 函数/类型 | 用途 |
-|----------|------|
-| `PageOutput[T]` | 分页响应 `{Items, Total}` |
-| `ScrollPageOutput[T]` | 滚动分页 `{Items, Next}` |
-| `Success(c, data)` | 统一成功响应 |
-| `Fail(c, err)` | 统一错误响应，自动映射 HTTP 状态码，**不打断**后续 handler |
-| `AbortWithStatusJSON(c, err)` | 错误响应并 **Abort**，打断后续 handler（用于中间件） |
-| `ResponseMsg` | 通用消息响应 `{Msg}` |
-
-### Context 与 URL
-
-| 函数/类型 | 用途 |
-|----------|------|
-| `WithContext(r)` | `*http.Request` → `web.Context`，携带 HTTP 元信息 |
-| `GetBaseURL(r)` | 提取 `scheme://host` |
-| `BaseURLJoin(r,...string)` | 拼接 `scheme://host/fullpath`|
-| `GetHost(r)` / `GetScheme(r)` | 提取 host / scheme |
-| `XForwardedPrefix(r, path)` | 处理反向代理前缀 |
-| `TraceID(ctx)` / `MustTraceID(ctx)` | 获取请求追踪 ID |
-| `SetTraceID(ctx, id)` | 设置追踪 ID |
-
-### JWT 鉴权
-
-| 函数 | 用途 |
-|------|------|
-| `NewToken(data, secret, opts...)` | 创建 JWT（默认 6h 过期） |
-| `ParseToken(token, secret)` | 解析 JWT |
-| `AuthMiddleware(secret)` | JWT 鉴权中间件 |
-| `AuthLevel(level)` | 等级鉴权中间件（等级越小权限越大） |
-| `NewClaimsData()` | 创建 Claims 数据，链式 `SetUserID/SetUsername/SetRoleID/SetLevel/Set` |
-| `GetUID/GetUsername/GetRoleID/GetLevel/GetToken/GetInt` | 从上下文获取用户信息 |
-| `WithExpires(duration)` | Token Option：设置相对过期时长 |
-| `WithExpiresAt(time.Time)` | Token Option：设置绝对过期时间 |
-| `WithIssuedAt(time.Time)` | Token Option：设置签发时间 |
-| `WithIssuer(issuer)` | Token Option：设置签发人 |
-| `WithNotBefore(time.Time)` | Token Option：设置生效时间 |
-
-### 中间件
-
-| 函数 | 用途 |
-|------|------|
-| `Logger(ignoreFn...)` | 请求日志 |
-| `LoggerWithBody(limit, ignoreFn...)` | 记录请求体/响应体 |
-| `LoggerWithUseTime(maxLimit, ignoreFn...)` | 耗时记录，超时打 warn |
-| `RateLimiter(r, b)` | 全局限流 |
-| `IPRateLimiterForGin(r, b)` | 按 IP 限流 |
-| `IDRateLimiter(r, b, ttl)` | 按 ID 限流 |
-| `LimitContentLength(limit)` | 请求体大小限制 |
-| `CacheControlMaxAge(second)` | Cache-Control 头 |
-| `EtagHandler()` | ETag + 304 支持 |
-| `Recover()` | panic 恢复 |
-| `SetDeadline(duration)` | 读写超时 |
-| `Metrics()` | 请求计数统计 |
-
-### SSE（Server-Sent Events）
-
-| 函数/类型 | 用途 |
-|----------|------|
-| `NewSSE(length, timeout)` | 创建 SSE 实例 |
-| `SSE.Publish(event)` | 发布事件 |
-| `SSE.ServeHTTP(w, r)` | 实现 http.Handler |
-| `SendChunk(ch, c)` / `SendChunkPro(ch, c)` | 分块进度发送 |
-| `NewEventMessage(event, data)` | 创建 SSE 事件消息 |
-
-### 忽略选项（用于日志/限流中间件）
-
-| 函数 | 用途 |
-|------|------|
-| `IgnorePrefix(prefix...)` | 忽略路径前缀 |
-| `IgnorePath(path...)` | 忽略完整路径 |
-| `IgnoreMethod(method)` | 忽略 HTTP 方法 |
-| `IgoreContains(substrs...)` | 忽略路径含子串 |
-| `IgnoreBool(v)` | 固定布尔值忽略 |
-
-### 性能分析
-
-| 函数 | 用途 |
-|------|------|
-| `SetupPProf(r, &ips)` | 注册 pprof 路由，IP 白名单 |
-| `SetupMutexProfile(rate)` | 启用互斥锁采样 |
-| `CountGoroutines(d, num)` | 记录 goroutine 数量 |
-
-### WrapH 入参规则
-
-- POST/PUT/DELETE/PATCH → 绑定 Request Body（`json` tag）
-- GET → 绑定 URL Query（`form` tag）
-- 入参第二个参数必须是指针，`*struct{}` 表示无参数
-- 路由参数通过 `uri` tag 自动绑定：`struct{ ID string \`uri:"id"\` }`
-
-### 错误处理
-
-Core 层返回 `reason.Error` 类型错误，`web.WrapH` 自动映射 HTTP 状态码：
-
-```go
-return nil, reason.ErrBadRequest.SetMsg("参数不合法")     // → 400
-return nil, reason.ErrDB.Withf("查询失败: %s", err)       // → 500
-return nil, reason.ErrUnauthorized.SetMsg("未登录")       // → 401
-```
-
-- `SetMsg()` — 给用户的友好提示
-- `Withf()` — 给开发者的 details（`SetRelease()` 后不输出）
+> 完整结构定义、构造函数、反模式警告详见 `references/lifecycle-split.md`
 
 ---
 
 ## Store 缓存层规范
 
-修改 `store/<domain>cache/` 时，**首先**判断是内存缓存（`conc.Cacher`）还是 Redis 缓存（`*redis.Client`）。
-若为 Redis 缓存：删除 `conc.Cacher` 依赖，换 `*redis.Client`，使用 SETNX/SETEX 防竞态。
+修改 `store/<domain>cache/` 时，**首先**判断缓存类型：
 
-### 核心规则
+| 类型 | 依赖 | 适用场景 |
+|------|------|---------|
+| 内存缓存 | `conc.Cacher` | 单副本、短 TTL、数据量小 |
+| Redis 缓存 | `redis.Cmdable` | 多副本共享、长 TTL、高频读 |
 
-| 操作 | Redis 命令 | 理由 |
-|------|-----------|------|
-| 读穿透回填 | `singleflight.Do` + `SetNX` | 合并并发穿透 + 不覆盖写入的新值 |
-| Create / Update | `Set(ctx, key, val, ttl)` | 写完 DB 后用最新值覆盖缓存 |
-| Delete | `Expire(key, 3s)` | 墓碑保护期 3s，防 SetNX 回填已删记录 |
-| WarmUp | `SetNX` | 不覆盖运行期间已更新的缓存 |
+若为 Redis 缓存：删除 `conc.Cacher`，换 `redis.Cmdable`（接口类型，兼容单机/集群），SETNX 防竞态。
 
-> 完整改造步骤、代码模板和 key 命名规范请阅读 `references/cache-layer.md`
+```go
+func NewXxxCore(db *gorm.DB, rdb redis.Cmdable) xxx.Core {
+    dbStore := xxxdb.NewDB(db).AutoMigrate(orm.GetEnabledAutoMigrate())
+    store := xxxcache.NewCache(dbStore, rdb)
+    store.WarmUp(context.Background())
+    return xxx.NewCore(store)
+}
+```
+
+> 完整改造步骤、防竞态、穿透防护、Key 命名详见 `references/cache-layer.md`
 
 ---
 
 ## API 层规范
 
-1. **只做 HTTP 协议转换**：参数绑定 → 填充归属字段 → 调用 Core → 返回响应
-2. **归属字段在 API 层填充**：TenantID、CreatedBy 等通过 `json:"-"` / `form:"-"` 标记
-3. **路由参数用 `uri` tag**：通过 `struct{ ID string \`uri:"id"\` }` 自动绑定，仅无参数时入参用 `_ *struct{}`
-4. **适配器不定义在 API 层**：统一放在领域的 `<provider>adapter/` 目录
-5. **Handler 若需访问后续赋值字段**：使用指针接收者
-
-### 路由注册模式
+1. **只做协议转换**：参数绑定 → 填充归属字段 → 调用 Core → 返回响应
+2. **归属字段 API 层填充**：`json:"-"` / `form:"-"`
+3. **路由参数用 `uri` tag**：`struct{ ID string \`uri:"id"\` }`
 
 ```go
 func registerTask(r gin.IRouter, api TaskAPI, handler ...gin.HandlerFunc) {
@@ -526,3 +380,25 @@ func registerTask(r gin.IRouter, api TaskAPI, handler ...gin.HandlerFunc) {
     g.PUT("/sort", web.WrapH(api.sortTasks))
 }
 ```
+
+### WrapH 入参规则
+
+- POST/PUT/DELETE → 绑定 Request Body（`json` tag）
+- GET → 绑定 URL Query（`form` tag）
+- 入参第二个参数必须是指针，`*struct{}` 表示无参数
+- 路由参数通过 `uri` tag 自动绑定：`struct{ ID string \`uri:"id"\` }`
+
+### 错误处理
+
+Core 层返回 `reason.Error`，`web.WrapH` 自动映射 HTTP 状态码：
+
+```go
+return nil, reason.ErrBadRequest.SetMsg("参数不合法")     // → 400
+return nil, reason.ErrDB.Withf("查询失败: %s", err)       // → 400
+return nil, reason.ErrUnauthorizedToken.SetMsg("未登录")   // → 401
+```
+
+- `SetMsg()` — 给用户的友好提示
+- `Withf()` — 给开发者的 details（`SetRelease()` 后不输出）
+
+> 完整 API 设计规范（资源命名、标准方法、自定义方法、状态码、分页、校验、限流）详见 `references/api-design-patterns.md`

@@ -170,10 +170,11 @@ type ResponseMsg struct {
 WrapH 内部自动处理错误，Core 层返回 `reason.Error` 类型：
 
 ```go
-reason.ErrBadRequest.SetMsg("参数不合法")          // → 400
-reason.ErrUnauthorized.SetMsg("未登录")            // → 401
-reason.ErrDB.Withf("查询失败: %s", err)            // → 500
-reason.ErrServer.Withf("err[%s] detail...", err)   // → 500
+reason.ErrBadRequest.SetMsg("参数不合法")              // → 400（默认）
+reason.ErrDB.Withf("查询失败: %s", err)                // → 400（默认）
+reason.ErrServer.SetMsg("服务器错误")                  // → 400（默认）
+reason.ErrUnauthorizedToken.SetMsg("用户已过期")        // → 401（显式 SetHTTPStatus）
+reason.ErrRateLimit.SetMsg("请求频率过高")              // → 429（显式 SetHTTPStatus）
 ```
 
 - `SetMsg()` 设置给用户看的友好提示
@@ -236,10 +237,11 @@ if wc, ok := ctx.(web.Context); ok {
 ### URL 工具
 
 ```go
-func GetBaseURL(req *http.Request) string      // 提取 scheme://host
-func GetHost(req *http.Request) string         // 提取 host
-func GetScheme(req *http.Request) string       // 提取 http/https
-func XForwardedPrefix(req *http.Request, path string) string  // 处理反向代理前缀
+func GetBaseURL(req *http.Request) string                      // 提取 scheme://host
+func BaseURLJoin(req *http.Request, paths ...string) string    // 拼接 scheme://host/fullpath
+func GetHost(req *http.Request) string                         // 提取 host
+func GetScheme(req *http.Request) string                       // 提取 http/https
+func XForwardedPrefix(req *http.Request, path string) string   // 处理反向代理前缀
 ```
 
 ### TraceID
@@ -385,6 +387,7 @@ sse.Publish(web.Event{
 })
 
 sse.Close()
+sse.Stop()  // 停止 SSE，不再接受新事件
 ```
 
 ### 作为 HTTP Handler
@@ -399,9 +402,19 @@ r.GET("/events", func(c *gin.Context) {
 
 ```go
 ch := make(chan web.Chunk)
-go web.SendChunk(ch, c)
+go web.SendChunk(ch, c)       // 基础分块
+go web.SendChunkPro(ch, c)    // 高级分块（含更多状态信息）
 
 ch <- web.Chunk{Total: 100, Current: 50, Success: 48, Failure: 2}
+```
+
+### SSE 事件流发送
+
+```go
+ch := make(chan web.EventMessage)
+go web.SendSSE(ch, c)
+
+ch <- *web.NewEventMessage("update", map[string]any{"id": 1, "status": "done"})
 ```
 
 ### NewEventMessage

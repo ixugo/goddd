@@ -45,10 +45,13 @@ rename:
 
 ## init: 安装开发环境
 init:
+	@make title content="install dependencies..."
 	go install github.com/google/wire/cmd/wire@latest
 	go install github.com/divan/expvarmon@latest
+	go install github.com/ixugo/godddx@latest
 	go install github.com/rakyll/hey@latest
 	go install mvdan.cc/gofumpt@latest
+	@make title content="Successed!"
 
 ## wire: 生成依赖注入代码
 wire:

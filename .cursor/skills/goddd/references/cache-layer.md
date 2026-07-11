@@ -9,9 +9,9 @@ godddx 生成的 `store/<domain>cache/` 默认使用 `conc.Cacher`（进程内�
 | 类型 | 依赖 | 适用场景 |
 |------|------|---------|
 | 内存缓存 | `conc.Cacher` (`conc.NewTTLCache`) | 单副本、短 TTL、数据量小 |
-| Redis 缓存 | `*redis.Client` (`github.com/redis/go-redis/v9`) | 多副本共享、长 TTL、高频读 |
+| Redis 缓存 | `redis.Cmdable` (`github.com/redis/go-redis/v9`) | 多副本共享、长 TTL、高频读 |
 
-**如果是 Redis 缓存**：删除 `conc.Cacher` 依赖，替换为 `*redis.Client`。
+**如果是 Redis 缓存**：删除 `conc.Cacher` 依赖，替换为 `redis.Cmdable`（接口类型，兼容 `*redis.Client` 单机和 `*redis.ClusterClient` 集群）。
 
 ## 防竞态缓存操作（核心规则）
 
@@ -30,9 +30,8 @@ T1: SET 缓存 v1 （脏数据！DEL 已经执行完了）
 | 操作 | Redis 命令 | 理由 |
 |------|-----------|------|
 | 读穿透回填 | `singleflight.Do` + `SetNX` | singleflight 合并并发穿透 + SetNX 不覆盖写入的新值 |
-| Create | `Set(ctx, key, val, ttl)` | 新记录直接写入缓存（`SetEx` 已弃用，用 `Set` + TTL 替代） |
+| Create | 不写缓存 | 新记录等首次读取时由 SetNX 回填 |
 | Update | `Set(ctx, key, val, ttl)` | 写完 DB 后用最新值覆盖缓存，防止读穿透回填旧值 |
-| Delete | `Expire(key, 3s)` | 墓碑保护期 3s，覆盖 DB 查询+序列化+网络抖动的最大时延，防 SetNX 回填已删记录 |
 | WarmUp | `SetNX` | 不覆盖运行期间已更新的缓存 |
 
 ## Redis 缓存改造步骤
@@ -50,13 +49,13 @@ import (
 
 var _ xxx.Storer = (*Cache)(nil)
 
-func NewCache(store xxx.Storer, rdb *redis.Client) *Cache {
+func NewCache(store xxx.Storer, rdb redis.Cmdable) *Cache {
     return &Cache{store: store, rdb: rdb}
 }
 
 type Cache struct {
     store xxx.Storer
-    rdb   *redis.Client
+    rdb   redis.Cmdable
     sf    singleflight.Group // 防缓存击穿：同一 key 并发穿透合并为一次 DB 查询
 }
 
@@ -117,30 +116,17 @@ func (c *Entity) GetByKey(ctx context.Context, key string) (*xxx.Entity, error) 
     return v.(*xxx.Entity), nil
 }
 
-// Create 写完 DB 后用 SETEX 写入缓存。
+// Create 只写 DB，不写缓存，等首次读取时由 SetNX 回填。
 func (c *Entity) Create(ctx context.Context, model *xxx.Entity) error {
-    if err := c.store.Entity().Create(ctx, model); err != nil {
-        return err
-    }
-    c.setCache(ctx, model)
-    return nil
+    return c.store.Entity().Create(ctx, model)
 }
 
-// Update 写完 DB 后用 SETEX 覆盖缓存为最新值。
+// Update 写完 DB 后用最新值覆盖缓存。
 func (c *Entity) Update(ctx context.Context, model *xxx.Entity, changeFn func(*xxx.Entity), opts ...orm.QueryOption) error {
     if err := c.store.Entity().Update(ctx, model, changeFn, opts...); err != nil {
         return err
     }
     c.setCache(ctx, model)
-    return nil
-}
-
-// Delete 写完 DB 后将缓存 TTL 缩至 3s（墓碑保护期），防止并发 SetNX 回填已删记录。
-func (c *Entity) Delete(ctx context.Context, model *xxx.Entity, opts ...orm.QueryOption) error {
-    if err := c.store.Entity().Delete(ctx, model, opts...); err != nil {
-        return err
-    }
-    c.rdb.Expire(ctx, c.cacheKey(model.Key), 3*time.Second)
     return nil
 }
 
@@ -188,7 +174,7 @@ func (c *Cache) WarmUp(ctx context.Context) {
 ### 4. API 层装配
 
 ```go
-func NewXxxCore(db *gorm.DB, rdb *redis.Client) xxx.Core {
+func NewXxxCore(db *gorm.DB, rdb redis.Cmdable) xxx.Core {
     dbStore := xxxdb.NewDB(db).AutoMigrate(orm.GetEnabledAutoMigrate())
     store := xxxcache.NewCache(dbStore, rdb)
     store.WarmUp(context.Background())
@@ -202,6 +188,37 @@ func NewXxxCore(db *gorm.DB, rdb *redis.Client) xxx.Core {
 - 示例：`app:ak:abc123`、`greet:openapi`（Hash key）
 - 维度名用缩写：`ak` = access_key，`id` = primary key
 
+## 缓存穿透防护
+
+当查询的 key 在 DB 中不存在时，每次请求都会穿透到 DB。通过缓存空值防护：
+
+```go
+v, err, _ := (*Cache)(c).sf.Do(key, func() (any, error) {
+    out, err := c.store.Entity().GetByKey(ctx, key)
+    if err != nil {
+        // DB 中不存在时缓存空标记，短 TTL 防止长期占用
+        c.rdb.SetNX(ctx, cacheKey, []byte("null"), 30*time.Second)
+        return nil, err
+    }
+    if b, _ := json.Marshal(out); b != nil {
+        c.rdb.SetNX(ctx, cacheKey, b, keyTTL)
+    }
+    return out, nil
+})
+```
+
+读取时先检查空标记：
+
+```go
+data, err := c.rdb.Get(ctx, cacheKey).Bytes()
+if err == nil {
+    if string(data) == "null" {
+        return nil, ErrNotFound
+    }
+    // 正常反序列化...
+}
+```
+
 ## 要点
 
 - WarmUp 在 `NewXxxCore` 中调用，Redis 不可达时仅打日志不阻塞启动
@@ -209,3 +226,4 @@ func NewXxxCore(db *gorm.DB, rdb *redis.Client) xxx.Core {
 - TTL 按业务需要设置，长期不变的数据可设 365 天
 - 多副本部署下 Update 用 `Set` + TTL 覆盖（而非 DEL），确保最终一致
 - **singleflight 防击穿**：Cache 结构体持有 `singleflight.Group`，读穿透时用 `sf.Do(key, fn)` 包裹 DB 查询 + SetNX，同一 key 并发穿透只查一次 DB
+- **redis.Cmdable 接口**：兼容 `*redis.Client`（单机）和 `*redis.ClusterClient`（集群），部署模式变更时无需改业务代码
