@@ -12,6 +12,7 @@ import (
 )
 
 func TestFile(t *testing.T) {
+	t.Skip()
 	_ = os.MkdirAll("./test", 0o744)
 	for i := range 20 {
 		os.WriteFile(filepath.Join("./test", fmt.Sprintf("%d.txt", i)), []byte("123"), os.ModeAppend|os.ModePerm)

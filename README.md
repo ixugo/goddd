@@ -13,15 +13,18 @@
 
 [English](./README.md) | [简体中文](./README_zh.md)
 
-# Enterprise REST API Template
+# AI-Driven Lightweight Enterprise REST API Scaffold
 
 This is a complete CRUD solution focused on REST API.
+
+GoDDD is an **AI-driven lightweight enterprise REST API scaffold**. By describing business requirements in natural language, [godddx](https://github.com/ixugo/godddx) generates domain code for you, so developers can focus on business logic instead of boilerplate.
 
 The goal of GoDDD is to:
 
 + Provide a clean architecture suitable for projects of any size.
 + Provide a modular structure for quickly starting a project, focusing on business development.
 + Simplify projects, making development more efficient and enjoyable.
++ Keep the learning curve low, so developers can get started quickly without being DDD experts.
 
 If you think the above description fits your needs, then let's get started quickly.
 

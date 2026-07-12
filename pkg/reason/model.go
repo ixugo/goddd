@@ -97,7 +97,10 @@ func (e *Error) GetReason() string {
 	return e.Reason
 }
 
-// NewError ..
+// NewError 创建一个自定义错误。
+// 该函数要求每个 reason 全局唯一，若发现重复定义会立即 panic，
+// 目的是在程序启动阶段就暴露冲突，避免不同模块使用相同的 reason
+// 导致错误判断语义混乱。
 func NewError(reason, msg string) CustomError {
 	if _, ok := codes[reason]; ok {
 		panic(fmt.Sprintf("err reason %s exists", reason))
