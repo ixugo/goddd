@@ -14,10 +14,12 @@ Git 提交与分支管理规范。
 ### 格式
 
 ```
-<type>: <subject>
+<type>[(<scope>)]: <subject>
 ```
 
-subject 用祈使句，不超过 50 字符，首字母小写，末尾无句号。
+- `(scope)` 可选，填写被修改的业务领域名（如 `rule`、`phone`、`sms`、`sched`）
+- `chore` 类型通常不带 scope
+- subject 用祈使句，不超过 50 字符，首字母小写，末尾无句号
 
 ### 类型
 
@@ -33,10 +35,12 @@ subject 用祈使句，不超过 50 字符，首字母小写，末尾无句号�
 ### 示例
 
 ```
-feat: add JWT refresh token support
-fix: prevent duplicate order creation on retry
-refactor: extract db migration logic into version package
+feat(rule): add clone_from_id to track rule origin
+fix(phone): map sopsdk online status to device_status correctly
+refactor(rule): remove opts from ListAll to enforce cache hit
+refactor(sched): use CancelCauseFunc for card exit reason
 chore: upgrade Go to 1.26
+test(phone): add onlineStatusToDeviceStatus mapping test
 ```
 
 ### 带 body 的提交
@@ -53,10 +57,10 @@ after a timeout.
 
 ### 破坏性变更
 
-在 type 后加 `!`，footer 写迁移说明：
+在 type 后加 `!`（scope 之前），footer 写迁移说明：
 
 ```
-feat!: change token payload structure
+feat(auth)!: change token payload structure
 
 BREAKING CHANGE: JWT payload field `uid` renamed to `user_id`.
 Clients must update token parsing logic.

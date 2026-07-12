@@ -402,3 +402,13 @@ return nil, reason.ErrUnauthorizedToken.SetMsg("未登录")   // → 401
 - `Withf()` — 给开发者的 details（`SetRelease()` 后不输出）
 
 > 完整 API 设计规范（资源命名、标准方法、自定义方法、状态码、分页、校验、限流）详见 `references/api-design-patterns.md`
+
+### API 文档同步（联动 goddd-api-doc 技能）
+
+凡涉及以下变动，**必须**使用 `goddd-api-doc` 技能同步更新 `docs/api/*.go.yaml` 接口文档（不等用户要求）：
+
+- handler 函数签名变更（入参/出参类型）
+- 路由路径或 HTTP 方法变更
+- 请求/响应结构体字段增删改
+- model 字段与 JSON 映射变更（重命名、类型变更）
+- 新增接口后尚无对应 `.go.yaml` 文件
