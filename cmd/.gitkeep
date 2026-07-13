@@ -1,0 +1,5 @@
+可以将 main.go 存放至 server/main.go
+
+也可以有其他入口时，创建对应的目录
+
+但如果很明确就 1 个入口，建议直接用 main.go, 而非 server/main.go

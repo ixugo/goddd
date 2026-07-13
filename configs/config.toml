@@ -1,0 +1,34 @@
+[Server]
+  [Server.HTTP]
+    Port = 8080
+    JwtSecret = ""
+    Timeout = "30s"
+
+    [Server.HTTP.Pprof]
+      Enabled = true
+      # pprof 访问 IP 白名单
+      AccessIps = ['::1', '127.0.0.1']
+
+[Data]
+  [Data.Database]
+    Dsn = './data.db'
+    MaxIdleConns = 1
+    MaxOpenConns = 1
+    ConnMaxLifetime = '6h0m0s'
+    SlowThreshold = '200ms'
+
+[Log]
+  # 日志存储目录，不能使用特殊符号
+  Dir = './logs'
+  # 记录级别 debug/info/warn/error
+  Level = 'debug'
+  # 保留日志多久，超过时间自动删除
+  MaxAge = 7
+  # 多久时间，分割一个新的日志文件
+  RotationTime = '8h0m0s'
+  # 多大文件，分割一个新的日志文件(MB)
+  MaxSize = 50
+  # 是否压缩日志
+  Compress = false
+  # 保留的旧日志归档文件最大数量，超出的自动删除
+  MaxBackups = 0
