@@ -28,7 +28,7 @@ The goal of GoDDD is to:
 
 If you think the above description fits your needs, then let's get started quickly.
 
-Supports [code generation](https://github.com/ixugo/godddx).
+Supports code generation: built-in `goddd gen` command or standalone tool [godddx](https://github.com/ixugo/godddx).
 
 Supports [event bus/transaction messages](https://github.com/ixugo/nsqite).
 
@@ -48,16 +48,45 @@ Different developers or teams can work on these domain modules independently, re
 
 When the program outgrows the domain-module scale, the team can easily extract a domain module into a microservice when needed.
 
-## Quick start
+## Quick Start
 
-1. Golang version >= 1.25.0 (Go 1.26 is recommended)
-2. `git clone github.com/ixugo/goddd`
-3. `cd goddd && go build -o goddd ./cmd/server && ./goddd`
+### Option 1: Using goddd CLI (Recommended)
+
+```bash
+# Install CLI
+go install github.com/ixugo/goddd/cmd/goddd@latest
+
+# Create a new project
+goddd init myapp -g github.com/yourname/myapp
+
+# Run the project
+cd myapp && go run main.go
+```
+
+Generate DDD layered code:
+
+```bash
+# Generate Core/Store/Cache/API code from struct definitions
+goddd gen -f tables/user/user.go
+
+# Multiple files
+goddd gen -f tables/user/user.go,tables/task/task.go
+```
+
+For more commands, see [cmd/goddd/README.md](cmd/goddd/README.md).
+
+### Option 2: Manual Clone
+
+```bash
+git clone --depth 1 --branch template-empty https://github.com/ixugo/goddd.git myapp
+cd myapp
+rm -rf .git && git init
+```
+
+1. Update the module path in `go.mod` to your actual module path
+2. `make init` (optional — installs development tools)
+3. `go build -o server ./main.go && ./server`
 4. Open a new terminal and access `curl http://localhost:8080/health`
-
-5. Modify the module package name:
-   `make rename name=github.com/name/project`
-   Replace `name` with your actual module name.
 
 
 

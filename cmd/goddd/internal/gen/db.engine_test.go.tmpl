@@ -1,0 +1,26 @@
+package {{.PackageName}}db
+
+import (
+	"context"
+	"testing"
+
+	"github.com/ixugo/goddd/pkg/orm"
+	"github.com/ixugo/goddd/pkg/web"
+)
+
+func Test{{.Name}}Get(t *testing.T) {
+	db, mock, err := generateMockDB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	userDB := New{{.Name}}(db)
+
+	mock.ExpectQuery(`SELECT \* FROM "{{.Name | Plural}}" WHERE id=\$1 (.+) LIMIT \$2`).WithArgs("jack", 1)
+	var out {{.PackageName}}.{{.Name}}
+	if err := userDB.Get(context.Background(), &out, orm.Where("id=?", "jack"));err!=nil{
+		t.Fatal(err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal("ExpectationsWereMet err:", err)
+	}
+}

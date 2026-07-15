@@ -50,7 +50,7 @@ GoDDD 目标是:
 
 如果你觉得以上描述符合你的需求，那就快速开始吧。
 
-支持[代码自动生成](https://github.com/ixugo/godddx)
+支持代码自动生成：内置 `goddd gen` 命令或独立工具 [godddx](https://github.com/ixugo/godddx)
 
 
 ## 设计说明
@@ -72,12 +72,43 @@ GoDDD 目标是:
 
 ## 快速开始
 
-1. Golang 版本 >= 1.25.0（建议直接使用 Go 1.26）
-2. `git clone github.com/ixugo/goddd && cd goddd`
-3. 修改模块包名 `make rename name=github.com/name/project` 将 name 替换成实际的模块名
-4. `make init` 可选操作，安装开发环境工具
-5. `go build -o server ./main.go && ./server`
-6. 新开一个终端访问 `curl http://localhost:8080/health`
+### 方式一：使用 goddd CLI（推荐）
+
+```bash
+# 安装 CLI
+go install github.com/ixugo/goddd/cmd/goddd@latest
+
+# 创建新项目
+goddd init myapp -g github.com/yourname/myapp
+
+# 运行项目
+cd myapp && go run main.go
+```
+
+生成 DDD 分层代码：
+
+```bash
+# 基于结构体定义生成 Core/Store/Cache/API 代码
+goddd gen -f tables/user/user.go
+
+# 多个文件
+goddd gen -f tables/user/user.go,tables/task/task.go
+```
+
+更多命令详见 [cmd/goddd/README.md](cmd/goddd/README.md)。
+
+### 方式二：手动克隆
+
+```bash
+git clone --depth 1 --branch template-empty https://github.com/ixugo/goddd.git myapp
+cd myapp
+rm -rf .git && git init
+```
+
+1. 修改 `go.mod` 中的模块包名为实际的 module 路径
+2. `make init` 可选操作，安装开发环境工具
+3. `go build -o server ./main.go && ./server`
+4. 新开一个终端访问 `curl http://localhost:8080/health`
 
 ## 业务实践
 
