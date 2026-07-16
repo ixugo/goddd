@@ -28,8 +28,12 @@ func (d DB) AutoMigrate(ok bool) DB {
 	return d
 }
 
-// First ...
+// First 获取最新版本记录
+// 如果 versions 表不存在，直接返回 ErrRecordNotFound，避免 gorm 日志打印 "no such table" 错误
 func (d DB) First(v *version.Version) error {
+	if !d.db.Migrator().HasTable(v) {
+		return gorm.ErrRecordNotFound
+	}
 	return d.db.Order("id DESC").First(v).Error
 }
 
