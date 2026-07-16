@@ -106,6 +106,13 @@ func runInit(_ context.Context, name, module string) error {
 		return fmt.Errorf("integrity check failed: %w", err)
 	}
 
+	err = withSpinner("初始化仓库", func() error {
+		return initGitRepo(name)
+	})
+	if err != nil {
+		return fmt.Errorf("git init failed: %w", err)
+	}
+
 	fmt.Println()
 	printGreen("  ✓ 项目初始化成功\n")
 	fmt.Println()
@@ -476,6 +483,24 @@ func runGoModTidy(name string) error {
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%w: %s", err, string(output))
+	}
+	return nil
+}
+
+// initGitRepo 在目标目录初始化 Git 仓库并创建首次提交。
+func initGitRepo(dir string) error {
+	cmds := [][]string{
+		{"git", "init"},
+		{"git", "add", "."},
+		{"git", "commit", "-m", "chore: first commit"},
+	}
+	for _, args := range cmds {
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = dir
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("%s: %w: %s", args[0], err, string(output))
+		}
 	}
 	return nil
 }
