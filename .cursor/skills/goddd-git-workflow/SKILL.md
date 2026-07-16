@@ -88,17 +88,101 @@ Clients must update token parsing logic.
 
 ### 工作流
 
+#### 日常开发与发布
+
+```mermaid
+sequenceDiagram
+    participant Dev as Developer
+    participant Feature as initials/feature
+    participant DevBranch as dev
+    participant Main as main
+
+    Dev->>DevBranch: checkout dev
+    Dev->>DevBranch: pull origin dev
+    Dev->>Feature: checkout -b initials/feature
+    loop 开发迭代
+        Dev->>Dev: 编写代码
+        Dev->>Feature: git add / commit
+    end
+    Dev->>Feature: rebase dev
+    Dev->>DevBranch: 发起 PR/MR
+    DevBranch->>DevBranch: Code Review
+    alt Review 通过
+        DevBranch->>DevBranch: merge into dev
+        Note over DevBranch: 保持线性历史
+    else Review 不通过
+        Dev->>Feature: push fix commits
+        Feature->>DevBranch: 重新发起 PR/MR
+    end
+    DevBranch->>Main: --no-ff merge
+    Main->>Main: tag vX.Y.Z
+    Main->>Main: 触发发布
+    Note over Main: 正式发布完成
 ```
-main ← (--no-ff merge) ← dev ← (rebase + merge) ← zs/jwt-refresh
-                           ↑
-                    fix/critical-bug（紧急修复从 main 创建，修完合回 main 和 dev）
+
+#### 热修流程
+
+```mermaid
+sequenceDiagram
+    participant Dev as Developer
+    participant Main as main
+    participant FixBranch as fix/*
+    participant DevBranch as dev
+
+    Dev->>Main: checkout main
+    Dev->>FixBranch: checkout -b fix/issue
+    loop 修复迭代
+        Dev->>Dev: 编写修复代码
+        Dev->>FixBranch: git add / commit
+    end
+    Dev->>FixBranch: rebase main
+    Dev->>Main: 发起 PR/MR
+    Main->>Main: Code Review
+    alt Review 通过
+        Main->>Main: merge fix/* into main
+        Main->>Main: tag vX.Y.Z
+        Main->>DevBranch: back-merge into dev
+        Note over DevBranch: 保证 dev 与 main 一致
+    else Review 不通过
+        Dev->>FixBranch: push fix commits
+        FixBranch->>Main: 重新发起 PR/MR
+    end
 ```
 
 - **个人分支**从 `dev` 创建，命名 `<开发者缩写>/<功能>`：`zs/jwt-refresh`、`lw/user-avatar`
 - **合并到 dev**：先 `git rebase dev` 再合并，保持线性历史
 - **dev 合并到 main**：`git merge --no-ff dev`，保留合并节点便于追溯版本
 - **fix 分支**从 `main` 创建，修完后合并回 `main` 和 `dev`
+- **其它个人开发分支禁止直接合并到 `main`**，必须先合入 `dev`
 - 分支名用 kebab-case，不用驼峰
+
+---
+
+## 代码审查
+
+合并前对照检查：
+
+- ⚠️ 配置变更是否向后兼容（新增字段可选、默认值合理）
+- 🔒 是否引入敏感信息泄露（日志/响应/错误）
+- ⏱️ 是否存在超时缺失（HTTP/DB/Redis/外部请求）
+- 📦 是否存在无界资源使用（未限制 body、未限制上传大小）
+
+---
+
+## 合并条件
+
+### 合并到 `dev`
+
+- `go build ./...` 编译通过
+- `go test ./...` 通过
+- 无新增 lint 告警
+- 关键配置变更已同步更新配置示例与文档
+
+### 合并到 `main`
+
+- 必须来自 `dev`（正常发布）或 `fix/*`（紧急修复）
+- 必须先通过 `dev` 分支的合并条件（hotfix 除外，但 hotfix 需单独通过等价检查）
+- 合并后立即打 tag `v<major>.<minor>.<patch>`
 
 ---
 
