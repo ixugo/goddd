@@ -407,7 +407,7 @@ func cloneTemplate(ctx context.Context, repoURL, target string) error {
 
 // cleanupProject 删除模板中不需要的文件和目录。
 func cleanupProject(name string) error {
-	removes := []string{".git", ".claude", ".cursor", ".DS_Store", "CLAUDE.md", "AGENTS.md"}
+	removes := []string{".git", ".DS_Store"}
 	for _, r := range removes {
 		_ = os.RemoveAll(filepath.Join(name, r))
 	}
