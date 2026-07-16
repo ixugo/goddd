@@ -44,3 +44,5 @@ tables/
 CLAUDE.local.md
 *.mp4
 *.mp3
+tmp/
+**/.DS_Store
