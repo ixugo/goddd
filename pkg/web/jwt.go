@@ -231,7 +231,7 @@ func NewToken(data map[string]any, secret string, opts ...TokenOptions) (string,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(now.Add(6 * time.Hour)), // 失效时间
 			IssuedAt:  jwt.NewNumericDate(now),                    // 签发时间
-			Issuer:    "xx@golang.space",                          // 签发人
+			Issuer:    "goddd.golang.space",                       // 签发人
 		},
 	}
 	for _, opt := range opts {
