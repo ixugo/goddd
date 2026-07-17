@@ -42,6 +42,37 @@ router.GET("/users", web.WrapH(api.findUsers))
 router.POST("/users", web.WrapH(api.addUser))
 ```
 
+#### 文件上传（multipart form）
+
+文件上传接口（如批量导入）禁止用 `*struct{}` 入参再手动 `c.Request.FormFile("file")` / `c.PostForm("xxx")` 取参。正确做法是把文件和其他字段写进同一个 in 结构体，让 WrapH 统一绑定：
+
+```go
+// ImportGreetsInput 批量导入的入参。
+// access_key 与 file 均通过 multipart form 一起提交。
+type ImportGreetsInput struct {
+    AccessKey string                `form:"access_key" binding:"max=64"`
+    File      *multipart.FileHeader `form:"file"`
+}
+
+func (a GreetAPI) importGreets(c *gin.Context, in *greet.ImportGreetsInput) (*greet.ImportGreetsResult, error) {
+    if in.File == nil {
+        return nil, reason.ErrBadRequest.SetMsg("file 参数缺失")
+    }
+    file, err := in.File.Open()
+    if err != nil {
+        return nil, reason.ErrBadRequest.SetMsg("读取文件失败")
+    }
+    defer file.Close()
+    // 后续用 file 做 csv.NewReader(file) 或 bufio.Scanner 解析
+}
+```
+
+要点：
+
+- 普通字段与文件字段全部走 multipart form，不再单独拼 query 参数
+- `File` 不加 `binding:"required"`，用 `in.File == nil` 手动判断
+
+
 ### WrapHs — 带中间件的路由包装
 
 ```go
