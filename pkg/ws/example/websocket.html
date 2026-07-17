@@ -1,0 +1,407 @@
+<html>
+  <head>
+    <title>demo</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .messages-container {
+        flex: 1;
+        overflow-y: auto;
+        padding: 20px;
+        padding-bottom: 300px;
+        background-color: #f8f9fa;
+        border-bottom: 2px solid #e9ecef;
+        scroll-behavior: smooth;
+      }
+
+      #messages {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+      }
+
+      .form-container {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: white;
+        border-top: 2px solid #e9ecef;
+        padding: 20px 20px 20px 20px;
+        box-shadow: 0 -2px 5px rgba(102, 102, 102, 0.1);
+        z-index: 1000;
+        height: 280px;
+      }
+
+      .form-container .ui.form {
+        max-width: 1200px;
+        margin: 0 auto;
+      }
+
+      /* 为底部固定表单留出空间 */
+      body {
+        padding-bottom: 500px;
+      }
+
+      /* 消息项样式优化 */
+      #messages li {
+        padding: 10px;
+        margin-bottom: 8px;
+        border-radius: 8px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      }
+
+      /* 消息样式统一 */
+      #messages li {
+        background: white;
+      }
+
+      /* 滚动条样式 */
+      .messages-container::-webkit-scrollbar {
+        width: 8px;
+      }
+
+      .messages-container::-webkit-scrollbar-track {
+        background: #f1f1f1;
+      }
+
+      .messages-container::-webkit-scrollbar-thumb {
+        background: #888;
+        border-radius: 4px;
+      }
+
+      .messages-container::-webkit-scrollbar-thumb:hover {
+        background: #555;
+      }
+    </style>
+
+    <link
+      href="http://cdn.bootcdn.net/ajax/libs/semantic-ui/2.5.0/semantic.min.css"
+      rel="stylesheet"
+    />
+  </head>
+  <body class="ui">
+    <div class="messages-container">
+      <ul id="messages"></ul>
+    </div>
+
+    <div class="form-container">
+      <form id="etcgodemo" class="ui form">
+        <div class="field">
+          <textarea rows="2" placeholder="自定义 json 消息"></textarea>
+        </div>
+        <div class="field">
+          <input class="ui primary button" type="submit" value="发送" />
+        </div>
+
+        <div class="field">
+          <div class="ui buttons">
+            <input
+              class="ui button"
+              type="button"
+              onclick="sendAuth()"
+              value="发送鉴权"
+            />
+            <input
+              class="ui button"
+              type="button"
+              onclick="sendCPU()"
+              value="发送CPU/Memory/Disk"
+            />
+
+            <input
+              class="ui button"
+              type="button"
+              onclick="sendVersion()"
+              value="发送版本"
+            />
+
+            <input
+              class="ui button"
+              type="button"
+              onclick="sendIP()"
+              value="发送IP/MAC"
+            />
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="ui buttons">
+            <input
+              class="ui basic primary button"
+              type="button"
+              onclick="sendReboot()"
+              value="测试服务端下发重启"
+            />
+            <input
+              class="ui basic primary button"
+              type="button"
+              onclick="sendUpgrade()"
+              value="测试服务端下发更新"
+            />
+          </div>
+
+          <div class="ui labeled button" tabindex="0">
+            <div
+              class="ui basic primary button"
+              type="button"
+              id="switch-btn"
+              onclick="sendAutoCPU()"
+            >
+              <i class="android icon"></i> 自动发送 CPU/M/D 信息
+            </div>
+            <a id="countdown" class="ui basic left pointing blue label"
+              >未开始</a
+            >
+          </div>
+        </div>
+      </form>
+    </div>
+  </body>
+  <script src="http://cdn.bootcdn.net/ajax/libs/jquery/3.6.4/jquery.min.js"></script>
+  <script src="http://cdn.jsdelivr.net/npm/clipboard@2.0.10/dist/clipboard.min.js"></script>
+  <script>
+    var socket = null;
+    var msgBox = $("#etcgodemo textarea");
+    var messages = $("#messages");
+    var messagesContainer = $(".messages-container");
+
+    // 自动滚动到底部的函数
+    function scrollToBottom() {
+      setTimeout(function () {
+        // 停止之前的动画，避免动画叠加
+        messagesContainer.stop();
+        messagesContainer.animate(
+          {
+            scrollTop: messagesContainer[0].scrollHeight,
+          },
+          300
+        ); // 减少到300ms，更快响应
+      }, 10);
+    }
+
+    function sendAuth() {
+      if (socket == null) {
+        alert("websocket 未连接");
+        return;
+      }
+      sendMessage(`{"type":"auth", "data":{"token":"a67c2bacf5c691b6"}}`);
+    }
+
+    function sendCPU() {
+      if (socket == null) {
+        alert("websocket 未连接");
+        return;
+      }
+      sendMessage(
+        `{"type":"property", "data":{"cpu":10.5, "memory":30.9, "disk":50.8}}`
+      );
+    }
+    function sendVersion() {
+      if (socket == null) {
+        alert("websocket 未连接");
+        return;
+      }
+      sendMessage(
+        `{"type":"version", "data":{"version":"0.1.0", "business_version":"1.2.0"}}`
+      );
+    }
+    function sendIP() {
+      if (socket == null) {
+        alert("websocket 未连接");
+        return;
+      }
+      sendMessage(
+        `{"type":"ip_info", "data":{"mac_address":"06:32:54:b9:e3:63", "internal_ip":"192.168.1.9", "internet_ip":"60:180:23:42"}}`
+      );
+    }
+
+    function sendReboot() {
+      if (socket == null) {
+        alert("websocket 未连接");
+        return;
+      }
+      sendMessage(`{"type":"reboot", "data":{}}`);
+    }
+
+    function sendUpgrade() {
+      if (socket == null) {
+        alert("websocket 未连接");
+        return;
+      }
+      sendMessage(`{"type":"upgrade", "data":{}}`);
+    }
+
+    // 统一的消息发送函数
+    function sendMessage(message) {
+      if (!socket) {
+        alert("Error: There is no socket connection.");
+        return;
+      }
+
+      let now = new Date();
+      let hours = now.getHours().toString().padStart(2, "0");
+      let minutes = now.getMinutes().toString().padStart(2, "0");
+      let seconds = now.getSeconds().toString().padStart(2, "0");
+
+      writeClientMsg(`客户端 |${hours}:${minutes}:${seconds}| `, message);
+      socket.send(message);
+      scrollToBottom();
+    }
+
+    let intervalId;
+    let timeLeft = 30;
+
+    function sendAutoCPU() {
+      const switchBtn = document.getElementById("switch-btn");
+      const countdown = document.getElementById("countdown");
+
+      if (intervalId == undefined) {
+        switchBtn.classList.remove("basic");
+        timeLeft = 30;
+
+        intervalId = setInterval(() => {
+          if (socket == null) {
+            alert("websocket 未连接");
+            return;
+          }
+          timeLeft--;
+          countdown.innerHTML = timeLeft;
+
+          if (timeLeft == 0) {
+            const randomCPU = (Math.random() * 90 + 10).toFixed(1);
+            const randomMemory = (Math.random() * 90 + 10).toFixed(1);
+            const randomDisk = (Math.random() * 90 + 10).toFixed(1);
+
+            sendMessage(
+              `{"type":"property", "data":{"cpu":${randomCPU}, "memory":${randomMemory}, "disk":${randomDisk}}}`
+            );
+            timeLeft = 30;
+          }
+        }, 1000);
+      } else {
+        clearInterval(intervalId);
+        switchBtn.classList.add("basic");
+        intervalId = undefined;
+        timeLeft = "未开始";
+        countdown.innerHTML = timeLeft;
+      }
+    }
+
+    function loadWebsocket(index) {
+      socket = new WebSocket(`ws://${window.location.host}/websocket`);
+      socket.onclose = function () {
+        writeMsg("bell", "SYSTEM", "连接已断开", "blue");
+        messages.append(
+          $(`<h5 class="ui horizontal divider header">第${index}次重连</h5>`)
+        );
+        scrollToBottom();
+
+        alert("连接已断开，关闭对话框后将自动重连");
+        loadWebsocket(index + 1);
+      };
+      socket.onopen = function () {
+        writeMsg("bell", "SYSTEM", "建立连接", "blue");
+        scrollToBottom();
+      };
+      socket.onmessage = function (e) {
+        let now = new Date();
+        let hours = now.getHours().toString().padStart(2, "0");
+        let minutes = now.getMinutes().toString().padStart(2, "0");
+        let seconds = now.getSeconds().toString().padStart(2, "0");
+
+        writeServerMsg(`服务端 |${hours}:${minutes}:${seconds}| `, e.data);
+        scrollToBottom();
+      };
+    }
+
+    function writeClientMsg(title, remark) {
+      writeMsg("tablet alternate", title, remark, "green");
+    }
+    function writeServerMsg(title, remark) {
+      writeMsg("server", title, remark, "blue");
+    }
+
+    function writeMsg(name, title, remark, labelColor) {
+      let color = "";
+      if (remark.charAt(0) === `{`) {
+        let data = JSON.parse(remark);
+        if (data.type == "error") {
+          color = "red basic";
+        }
+      }
+
+      messages.append(
+        $(`<li>`).append(
+          $(
+            `<div class="ui ${
+              labelColor || "blue"
+            } label"><i class="${name} icon"></i> ${title}</div>`
+          ),
+          $(
+            `<span data-clipboard-text='${remark}'  style="color:#333;margin-left:10px" class="ui btn left pointing ${color} label">${remark}</span>`
+          )
+        )
+      );
+
+      // 每次添加消息后自动滚动到底部
+      scrollToBottom();
+    }
+
+    function Toast(msg, duration) {
+      duration = isNaN(duration) ? 3000 : duration;
+      var m = document.createElement("div");
+      m.innerHTML = msg;
+      m.style.cssText =
+        "font-family:siyuan;max-width:60%;min-width: 150px;padding:0 14px;height: 40px;color: rgb(255, 255, 255);line-height: 40px;text-align: center;border-radius: 4px;position: fixed;top: 75%;left: 50%;transform: translate(-50%, -50%);z-index: 999;background: rgba(0, 0, 0,.7);font-size: 16px;";
+      document.body.appendChild(m);
+      setTimeout(function () {
+        var d = 0.5;
+        m.style.webkitTransition =
+          "-webkit-transform " + d + "s ease-in, opacity " + d + "s ease-in";
+        m.style.opacity = "0";
+        setTimeout(function () {
+          document.body.removeChild(m);
+        }, d * 1000);
+      }, duration);
+    }
+
+    $(function () {
+      var clipboard = new ClipboardJS(".btn");
+      clipboard.on("success", function (e) {
+        Toast("复制成功", 2000);
+      });
+
+      $("#etcgodemo").submit(function () {
+        if (!msgBox.val()) return false;
+        if (!socket) {
+          alert("Error: There is no socket connection.");
+          return false;
+        }
+        let v = msgBox.val();
+        let now = new Date();
+        let hours = now.getHours().toString().padStart(2, "0");
+        let minutes = now.getMinutes().toString().padStart(2, "0");
+        let seconds = now.getSeconds().toString().padStart(2, "0");
+
+        writeClientMsg(`客户端 |${hours}:${minutes}:${seconds}| `, v);
+        socket.send(v);
+        msgBox.val("");
+        scrollToBottom();
+        return false;
+      });
+
+      if (!window["WebSocket"]) {
+        alert("Error: Your browser does not support web sockets.");
+      } else {
+        loadWebsocket(1);
+      }
+    });
+  </script>
+</html>
