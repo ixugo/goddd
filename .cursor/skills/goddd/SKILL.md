@@ -1,6 +1,6 @@
 ---
 name: goddd
-description: GoDDD 六边形架构开发指南。当使用 goddd 架构实现代码、创建新领域、新增 CRUD、数据库表定义、领域间依赖解耦、领域内子包拆分与依赖、排序功能、Core 层需要 HTTP 请求信息时使用此技能。也应在以下隐含场景主动触发：新增业务模块、讨论 Core/Store/API 分层、使用 godddx 生成代码、实现适配器模式、添加 Wire provider、使用 web.WrapH/PagerFilter/DateFilter/WithContext 等框架工具、Core 需要后台任务/定时任务/心跳检测/goroutine、优雅停机、Wire 循环依赖、Core 生命周期分离、SessionHandler、修改 store/xxxcache 缓存层（判断内存缓存 vs Redis 缓存、SETNX/SETEX 防竞态、WarmUp 预热）、领域内子包间依赖方向、子包是否需要接口隔离、子包循环依赖处理。即使用户没有提到"goddd"，只要涉及六边形架构、领域驱动、依赖倒置、CRUD 生成、Core 职责过重、缓存层改造、子包拆分依赖等概念，都应使用此技能。
+description: GoDDD 六边形架构开发指南。当使用 goddd 架构实现代码、创建新领域、新增 CRUD、数据库表定义、领域间依赖解耦、领域内子包拆分与依赖、排序功能、Core 层需要 HTTP 请求信息时使用此技能。也应在以下隐含场景主动触发：新增业务模块、讨论 Core/Store/API 分层、使用 goddd gen 生成代码、实现适配器模式、添加 Wire provider、使用 web.WrapH/PagerFilter/DateFilter/WithContext 等框架工具、Core 需要后台任务/定时任务/心跳检测/goroutine、优雅停机、Wire 循环依赖、Core 生命周期分离、SessionHandler、修改 store/xxxcache 缓存层（判断内存缓存 vs Redis 缓存、SETNX/SETEX 防竞态、WarmUp 预热）、领域内子包间依赖方向、子包是否需要接口隔离、子包循环依赖处理。即使用户没有提到"goddd"，只要涉及六边形架构、领域驱动、依赖倒置、CRUD 生成、Core 职责过重、缓存层改造、子包拆分依赖等概念，都应使用此技能。
 ---
 
 # GoDDD 六边形架构开发指南
@@ -135,9 +135,9 @@ description: GoDDD 六边形架构开发指南。当使用 goddd 架构实现代
 
 ---
 
-## godddx 代码生成
+## 代码生成
 
-CRUD 场景**必须**使用 [godddx](https://github.com/ixugo/godddx) 生成代码。
+CRUD 场景**必须**使用 `goddd gen` 生成代码。
 
 ### 步骤
 
@@ -145,7 +145,7 @@ CRUD 场景**必须**使用 [godddx](https://github.com/ixugo/godddx) 生成代�
 2. 结构体**必须包含** `ID`、`CreatedAt`、`UpdatedAt` 字段
 3. 若使用随机字符 ID，使用 `uniqueid.Core` 类型
 4. 同一领域多个结构体放在同一个 tables 文件中
-5. 执行生成：`godddx -f tables/<domain>/<entity>.go`
+5. 执行生成：`goddd gen -f tables/<domain>/<entity>.go`
 6. 在 `internal/web/api/provider.go` 注册 Wire provider
 7. 调用生成的 `Register<Domain>` 函数注册路由
 8. 在领域目录下创建 `doc.go` 描述领域用途
@@ -385,6 +385,7 @@ func registerTask(r gin.IRouter, api TaskAPI, handler ...gin.HandlerFunc) {
 
 - POST/PUT/DELETE → 绑定 Request Body（`json` tag）
 - GET → 绑定 URL Query（`form` tag）
+- 文件上传 → multipart form 统一绑定，in 结构体内嵌 `File *multipart.FileHeader \`form:"file"\``，禁止 `c.Request.FormFile` 手取（模板见 `references/web-toolkit.md`）
 - 入参第二个参数必须是指针，`*struct{}` 表示无参数
 - 路由参数通过 `uri` tag 自动绑定：`struct{ ID string \`uri:"id"\` }`
 
