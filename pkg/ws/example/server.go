@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 	_ "embed"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -27,6 +28,79 @@ const (
 	typeUpgrade  = "upgrade"
 	typeResponse = "response"
 )
+
+// propertyMsg 系统性能消息的数据结构
+type propertyMsg struct {
+	CPU    float64 `json:"cpu"`
+	Memory float64 `json:"memory"`
+	Disk   float64 `json:"disk"`
+}
+
+// versionMsg 版本信息消息的数据结构
+type versionMsg struct {
+	Version         string `json:"version"`
+	BusinessVersion string `json:"business_version"`
+}
+
+// ipInfoMsg 网络信息消息的数据结构
+type ipInfoMsg struct {
+	MacAddress string `json:"mac_address"`
+	InternalIP string `json:"internal_ip"`
+	InternetIP string `json:"internet_ip"`
+}
+
+// handleProperty 处理系统性能上报，回执确认
+func handleProperty(client *ws.Client, data propertyMsg) error {
+	log.Printf("收到客户端 %s 的系统性能数据 - CPU: %.1f%%, Memory: %.1f%%, Disk: %.1f%%",
+		client.ID(), data.CPU, data.Memory, data.Disk)
+	return client.Send(context.Background(), ws.NewMessage(typeResponse, map[string]any{
+		"status":  "success",
+		"message": fmt.Sprintf("收到系统信息 - CPU: %.1f%%, Memory: %.1f%%, Disk: %.1f%%", data.CPU, data.Memory, data.Disk),
+	}))
+}
+
+// handleVersion 处理版本信息上报，记录元数据后回执确认
+func handleVersion(client *ws.Client, data versionMsg) error {
+	log.Printf("收到客户端 %s 的版本信息 - 版本: %s, 业务版本: %s",
+		client.ID(), data.Version, data.BusinessVersion)
+	client.SetMetadata("version", data.Version)
+	client.SetMetadata("business_version", data.BusinessVersion)
+	return client.Send(context.Background(), ws.NewMessage(typeResponse, map[string]any{
+		"status":  "success",
+		"message": fmt.Sprintf("收到版本信息 - 版本: %s, 业务版本: %s", data.Version, data.BusinessVersion),
+	}))
+}
+
+// handleIPInfo 处理网络信息上报，记录元数据后回执确认
+func handleIPInfo(client *ws.Client, data ipInfoMsg) error {
+	log.Printf("收到客户端 %s 的网络信息 - MAC: %s, 内网IP: %s, 外网IP: %s",
+		client.ID(), data.MacAddress, data.InternalIP, data.InternetIP)
+	client.SetMetadata("mac_address", data.MacAddress)
+	client.SetMetadata("internal_ip", data.InternalIP)
+	client.SetMetadata("internet_ip", data.InternetIP)
+	return client.Send(context.Background(), ws.NewMessage(typeResponse, map[string]any{
+		"status":  "success",
+		"message": fmt.Sprintf("网络信息 - MAC: %s, 内网IP: %s, 外网IP: %s", data.MacAddress, data.InternalIP, data.InternetIP),
+	}))
+}
+
+// handleReboot 处理重启指令，回执告警
+func handleReboot(client *ws.Client, _ struct{}) error {
+	log.Printf("收到客户端 %s 的重启指令", client.ID())
+	return client.Send(context.Background(), ws.NewMessage(typeResponse, map[string]any{
+		"status":  "warning",
+		"message": "收到重启指令，系统将在 10 秒后重启",
+	}))
+}
+
+// handleUpgrade 处理升级指令，回执告警
+func handleUpgrade(client *ws.Client, _ struct{}) error {
+	log.Printf("收到客户端 %s 的升级指令", client.ID())
+	return client.Send(context.Background(), ws.NewMessage(typeResponse, map[string]any{
+		"status":  "warning",
+		"message": "收到更新指令，系统将开始更新流程",
+	}))
+}
 
 func main() {
 	// 创建 WebSocket Hub
@@ -54,10 +128,14 @@ func main() {
 
 // 鉴权处理器 - 处理框架级别的鉴权
 func authHandler(message ws.Message) (clientID string, err error) {
-	data := message.Data()
-
-	token, ok := data["token"].(string)
-	if !ok {
+	var data struct {
+		Token string `json:"token"`
+	}
+	if err := json.Unmarshal(message.Data(), &data); err != nil {
+		return "", err
+	}
+	token := data.Token
+	if token == "" {
 		return "", fmt.Errorf("token 不能为空")
 	}
 
@@ -121,73 +199,12 @@ func createHub() ws.Huber {
 	h.SetDisconnectHandler(disconnectHandler)
 	h.SetErrorHandler(errorHandler)
 
-	// 注册消息处理器
-	h.RegisterHandler(typeProperty, ws.HandlerFunc(func(client *ws.Client, message ws.Message) error {
-		data := message.Data()
-		cpu := data["cpu"].(float64)
-		memory := data["memory"].(float64)
-		disk := data["disk"].(float64)
-
-		log.Printf("收到客户端 %s 的系统性能数据 - CPU: %.1f%%, Memory: %.1f%%, Disk: %.1f%%",
-			client.ID(), cpu, memory, disk)
-
-		return client.Send(context.Background(), ws.NewMessage(typeResponse, map[string]any{
-			"status":  "success",
-			"message": fmt.Sprintf("收到系统信息 - CPU: %.1f%%, Memory: %.1f%%, Disk: %.1f%%", cpu, memory, disk),
-		}))
-	}))
-
-	h.RegisterHandler(typeVersion, ws.HandlerFunc(func(client *ws.Client, message ws.Message) error {
-		data := message.Data()
-		version := data["version"].(string)
-		businessVersion := data["business_version"].(string)
-
-		log.Printf("收到客户端 %s 的版本信息 - 版本: %s, 业务版本: %s",
-			client.ID(), version, businessVersion)
-
-		client.SetMetadata("version", version)
-		client.SetMetadata("business_version", businessVersion)
-
-		return client.Send(context.Background(), ws.NewMessage(typeResponse, map[string]any{
-			"status":  "success",
-			"message": fmt.Sprintf("收到版本信息 - 版本: %s, 业务版本: %s", version, businessVersion),
-		}))
-	}))
-
-	h.RegisterHandler(typeIPInfo, ws.HandlerFunc(func(client *ws.Client, message ws.Message) error {
-		data := message.Data()
-		macAddress := data["mac_address"].(string)
-		internalIP := data["internal_ip"].(string)
-		internetIP := data["internet_ip"].(string)
-
-		log.Printf("收到客户端 %s 的网络信息 - MAC: %s, 内网IP: %s, 外网IP: %s",
-			client.ID(), macAddress, internalIP, internetIP)
-
-		client.SetMetadata("mac_address", macAddress)
-		client.SetMetadata("internal_ip", internalIP)
-		client.SetMetadata("internet_ip", internetIP)
-
-		return client.Send(context.Background(), ws.NewMessage(typeResponse, map[string]any{
-			"status":  "success",
-			"message": fmt.Sprintf("网络信息 - MAC: %s, 内网IP: %s, 外网IP: %s", macAddress, internalIP, internetIP),
-		}))
-	}))
-
-	h.RegisterHandler(typeReboot, ws.HandlerFunc(func(client *ws.Client, message ws.Message) error {
-		log.Printf("收到客户端 %s 的重启指令", client.ID())
-		return client.Send(context.Background(), ws.NewMessage(typeResponse, map[string]any{
-			"status":  "warning",
-			"message": "收到重启指令，系统将在 10 秒后重启",
-		}))
-	}))
-
-	h.RegisterHandler(typeUpgrade, ws.HandlerFunc(func(client *ws.Client, message ws.Message) error {
-		log.Printf("收到客户端 %s 的升级指令", client.ID())
-		return client.Send(context.Background(), ws.NewMessage(typeResponse, map[string]any{
-			"status":  "warning",
-			"message": "收到更新指令，系统将开始更新流程",
-		}))
-	}))
+	// 注册消息处理器，ws.Wrap 将强类型函数包装为 Handler
+	h.Handle(typeProperty, ws.Wrap(handleProperty))
+	h.Handle(typeVersion, ws.Wrap(handleVersion))
+	h.Handle(typeIPInfo, ws.Wrap(handleIPInfo))
+	h.Handle(typeReboot, ws.Wrap(handleReboot))
+	h.Handle(typeUpgrade, ws.Wrap(handleUpgrade))
 
 	return h
 }

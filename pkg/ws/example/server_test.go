@@ -4,12 +4,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
-	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"github.com/ixugo/goddd/pkg/assert"
 )
 
 // 创建测试服务器
@@ -48,7 +47,9 @@ func TestRootRedirect(t *testing.T) {
 	}
 
 	resp, err := client.Get(server.URL + "/")
-	require.NoError(t, err)
+	if !assert.NoError(t, err) {
+		return
+	}
 	defer resp.Body.Close()
 
 	// 检查重定向状态码
@@ -66,49 +67,71 @@ func TestWebSocketConnection(t *testing.T) {
 	// 连接 WebSocket
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/websocket"
 	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
-	require.NoError(t, err)
+	if !assert.NoError(t, err) {
+		return
+	}
 	defer conn.Close()
 
 	// 读取欢迎消息
 	var welcomeMsg map[string]any
-	err = conn.ReadJSON(&welcomeMsg)
-	require.NoError(t, err)
+	if !assert.NoError(t, conn.ReadJSON(&welcomeMsg)) {
+		return
+	}
 
 	assert.Equal(t, "welcome", welcomeMsg["type"])
 	data := welcomeMsg["data"].(map[string]any)
 	assert.Contains(t, data["message"], "连接成功")
 }
 
+// dialAndReadWelcome 拨号并读完欢迎消息，失败时标记测试失败并返回 nil
+func dialAndReadWelcome(t *testing.T, wsURL string) *websocket.Conn {
+	t.Helper()
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	if !assert.NoError(t, err) {
+		return nil
+	}
+	var welcomeMsg map[string]any
+	if !assert.NoError(t, conn.ReadJSON(&welcomeMsg)) {
+		conn.Close()
+		return nil
+	}
+	return conn
+}
+
+// writeAuth 发送鉴权消息并读回响应，返回响应与是否成功
+func writeAuth(t *testing.T, conn *websocket.Conn, token string) map[string]any {
+	t.Helper()
+	authMsg := map[string]any{
+		"type": "auth",
+		"data": map[string]any{
+			"token": token,
+		},
+	}
+	if !assert.NoError(t, conn.WriteJSON(authMsg)) {
+		return nil
+	}
+	var authResponse map[string]any
+	if !assert.NoError(t, conn.ReadJSON(&authResponse)) {
+		return nil
+	}
+	return authResponse
+}
+
 func TestAuthentication(t *testing.T) {
 	server := createTestServer()
 	defer server.Close()
 
-	// 连接 WebSocket
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/websocket"
-	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
-	require.NoError(t, err)
+	conn := dialAndReadWelcome(t, wsURL)
+	if conn == nil {
+		return
+	}
 	defer conn.Close()
 
-	// 读取欢迎消息
-	var welcomeMsg map[string]any
-	err = conn.ReadJSON(&welcomeMsg)
-	require.NoError(t, err)
-
-	// 发送正确的鉴权消息
-	authMsg := map[string]any{
-		"type": "auth",
-		"data": map[string]any{
-			"token": "a67c2bacf5c691b6",
-		},
+	authResponse := writeAuth(t, conn, "a67c2bacf5c691b6")
+	if authResponse == nil {
+		return
 	}
-	err = conn.WriteJSON(authMsg)
-	require.NoError(t, err)
-
-	// 读取鉴权响应
-	var authResponse map[string]any
-	err = conn.ReadJSON(&authResponse)
-	require.NoError(t, err)
-
 	assert.Equal(t, "auth_ok", authResponse["type"])
 }
 
@@ -116,37 +139,33 @@ func TestAuthenticationFailure(t *testing.T) {
 	server := createTestServer()
 	defer server.Close()
 
-	// 连接 WebSocket
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/websocket"
-	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
-	require.NoError(t, err)
+	conn := dialAndReadWelcome(t, wsURL)
+	if conn == nil {
+		return
+	}
 	defer conn.Close()
 
-	// 读取欢迎消息
-	var welcomeMsg map[string]any
-	err = conn.ReadJSON(&welcomeMsg)
-	require.NoError(t, err)
-
-	// 发送错误的鉴权消息
 	authMsg := map[string]any{
 		"type": "auth",
 		"data": map[string]any{
 			"token": "invalid_token",
 		},
 	}
-	err = conn.WriteJSON(authMsg)
-	require.NoError(t, err)
+	if !assert.NoError(t, conn.WriteJSON(authMsg)) {
+		return
+	}
 
 	// 尝试读取错误响应，如果连接被关闭则跳过
 	var errorResponse map[string]any
-	err = conn.ReadJSON(&errorResponse)
-	if err != nil {
+	if err := conn.ReadJSON(&errorResponse); err != nil {
 		// 连接可能因为鉴权失败而被关闭，这是正常的
 		if websocket.IsCloseError(err, websocket.CloseAbnormalClosure) {
 			t.Log("连接因鉴权失败被关闭，这是预期行为")
 			return
 		}
-		require.NoError(t, err)
+		assert.NoError(t, err)
+		return
 	}
 
 	assert.Equal(t, "error", errorResponse["type"])
@@ -156,31 +175,16 @@ func TestInvalidMessageType(t *testing.T) {
 	server := createTestServer()
 	defer server.Close()
 
-	// 连接并鉴权
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/websocket"
-	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
-	require.NoError(t, err)
+	conn := dialAndReadWelcome(t, wsURL)
+	if conn == nil {
+		return
+	}
 	defer conn.Close()
 
-	// 读取欢迎消息
-	var welcomeMsg map[string]any
-	err = conn.ReadJSON(&welcomeMsg)
-	require.NoError(t, err)
-
-	// 鉴权
-	authMsg := map[string]any{
-		"type": "auth",
-		"data": map[string]any{
-			"token": "a67c2bacf5c691b6",
-		},
+	if writeAuth(t, conn, "a67c2bacf5c691b6") == nil {
+		return
 	}
-	err = conn.WriteJSON(authMsg)
-	require.NoError(t, err)
-
-	// 读取鉴权响应
-	var authResponse map[string]any
-	err = conn.ReadJSON(&authResponse)
-	require.NoError(t, err)
 
 	// 发送无效消息类型
 	invalidMsg := map[string]any{
@@ -189,19 +193,23 @@ func TestInvalidMessageType(t *testing.T) {
 			"type": 999, // 无效的消息类型
 		},
 	}
-	err = conn.WriteJSON(invalidMsg)
-	require.NoError(t, err)
+	if !assert.NoError(t, conn.WriteJSON(invalidMsg)) {
+		return
+	}
 
 	// 读取响应（ErrorMessage 格式: {"type":"error","msg":"..."}）
 	var response map[string]any
-	err = conn.ReadJSON(&response)
-	require.NoError(t, err)
+	if !assert.NoError(t, conn.ReadJSON(&response)) {
+		return
+	}
 
 	assert.Equal(t, "error", response["type"])
 	msg, _ := response["msg"].(string)
 	assert.Contains(t, msg, "未知的消息类型")
 }
 
+// TestConcurrentConnections 五个客户端并发完成鉴权与消息收发，
+// 每个客户端都必须拿到正确的鉴权响应与消息回包，用 WaitGroup 等待全部完成后统一断言
 func TestConcurrentConnections(t *testing.T) {
 	server := createTestServer()
 	defer server.Close()
@@ -209,44 +217,23 @@ func TestConcurrentConnections(t *testing.T) {
 	const numClients = 5
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/websocket"
 
-	// 创建多个并发连接
+	var wg sync.WaitGroup
 	for i := range numClients {
+		wg.Add(1)
 		go func(clientID int) {
-			conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
-			if err != nil {
-				t.Errorf("客户端 %d 连接失败: %v", clientID, err)
+			defer wg.Done()
+
+			conn := dialAndReadWelcome(t, wsURL)
+			if conn == nil {
 				return
 			}
 			defer conn.Close()
 
-			// 读取欢迎消息
-			var welcomeMsg map[string]any
-			err = conn.ReadJSON(&welcomeMsg)
-			if err != nil {
-				t.Errorf("客户端 %d 读取欢迎消息失败: %v", clientID, err)
+			authResponse := writeAuth(t, conn, "a67c2bacf5c691b6")
+			if authResponse == nil {
 				return
 			}
-
-			// 鉴权
-			authMsg := map[string]any{
-				"type": "auth",
-				"data": map[string]any{
-					"token": "a67c2bacf5c691b6",
-				},
-			}
-			err = conn.WriteJSON(authMsg)
-			if err != nil {
-				t.Errorf("客户端 %d 发送鉴权消息失败: %v", clientID, err)
-				return
-			}
-
-			// 读取鉴权响应
-			var authResponse map[string]any
-			err = conn.ReadJSON(&authResponse)
-			if err != nil {
-				t.Errorf("客户端 %d 读取鉴权响应失败: %v", clientID, err)
-				return
-			}
+			assert.Equal(t, "auth_ok", authResponse["type"], "客户端 %d 鉴权响应", clientID)
 
 			// 发送测试消息
 			testMsg := map[string]any{
@@ -256,22 +243,17 @@ func TestConcurrentConnections(t *testing.T) {
 					"cpu":  float64(clientID * 10),
 				},
 			}
-			err = conn.WriteJSON(testMsg)
-			if err != nil {
-				t.Errorf("客户端 %d 发送测试消息失败: %v", clientID, err)
+			if !assert.NoError(t, conn.WriteJSON(testMsg), "客户端 %d 发送测试消息", clientID) {
 				return
 			}
 
-			// 读取响应
+			// 读取响应，必须收到回包才算链路完整
 			var response map[string]any
-			err = conn.ReadJSON(&response)
-			if err != nil {
-				t.Errorf("客户端 %d 读取响应失败: %v", clientID, err)
+			if !assert.NoError(t, conn.ReadJSON(&response), "客户端 %d 读取响应", clientID) {
 				return
 			}
+			assert.NotEmpty(t, response["type"], "客户端 %d 响应应有消息类型", clientID)
 		}(i)
 	}
-
-	// 等待所有连接完成
-	time.Sleep(2 * time.Second)
+	wg.Wait()
 }

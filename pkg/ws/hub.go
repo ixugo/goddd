@@ -20,6 +20,9 @@ type Huber interface {
 	SendToClient(ctx context.Context, clientID string, message Message) error
 	// SendToClientAsync 向指定客户端发送消息，仅等待入队成功，不等待投递结果
 	SendToClientAsync(ctx context.Context, clientID string, message Message) error
+	// CloseClient 按 ID 踢下线：关闭该 ID 下所有连接（多标签页一并断开），阻塞等待处理完毕。
+	// ID 不存在时目标态已达成，按幂等返回成功；断开走正常 leave 流程，触发 disconnect 回调
+	CloseClient(clientID string) error
 	// SendToGroup 向指定分组内所有客户端发送消息，阻塞等待投递完毕，ctx 控制最长等待时间。
 	// 队列积压的慢连接跳过并记录告警日志，不剔除连接；分组不存在或为空时直接返回成功
 	SendToGroup(ctx context.Context, groupID string, message Message) error
@@ -42,8 +45,8 @@ type Huber interface {
 	// SetErrorHandler 设置错误处理器
 	SetErrorHandler(handler ErrorHandler)
 
-	// RegisterHandler 注册指定类型的消息处理器
-	RegisterHandler(msgType string, handler Handler)
+	// Handle 注册指定类型的消息处理器，用法同 http.Handle
+	Handle(msgType string, handler Handler)
 	// SetDefaultHandler 设置默认消息处理器（处理未注册类型的消息）
 	SetDefaultHandler(handler Handler)
 }
@@ -121,6 +124,12 @@ type sendToClientRequest struct {
 	response chan error
 }
 
+// closeClientRequest 按 ID 踢下线的请求，response 仅作同步屏障：通知调用方连接已关闭
+type closeClientRequest struct {
+	clientID string
+	response chan error
+}
+
 // getClientsRequest 获取客户端列表的请求
 type getClientsRequest struct {
 	response chan []*Client
@@ -159,6 +168,7 @@ type Hub struct {
 
 	broadcast    chan Message
 	sendToClient chan sendToClientRequest
+	closeClient  chan closeClientRequest
 	getClients   chan getClientsRequest
 	groupOp      chan groupOperation
 	sendToGroup  chan sendToGroupRequest
@@ -198,6 +208,7 @@ func NewHub(opt ...ConfigOption) *Hub {
 		addToID:      make(chan *Client, config.EventQueueSize),
 		broadcast:    make(chan Message, config.EventQueueSize),
 		sendToClient: make(chan sendToClientRequest, config.SendToClientQueueSize),
+		closeClient:  make(chan closeClientRequest, config.EventQueueSize),
 		getClients:   make(chan getClientsRequest, config.GetClientsQueueSize),
 		groupOp:      make(chan groupOperation, config.EventQueueSize),
 		sendToGroup:  make(chan sendToGroupRequest, config.SendToClientQueueSize),
@@ -222,6 +233,8 @@ func (h *Hub) isClosed() bool {
 }
 
 func (h *Hub) run() {
+	// 事件循环是 Hub 的心脏，意外 panic 须拦截在此，避免全进程陪葬
+	defer recoverLog("hub run loop panic")
 	for {
 		select {
 		case client := <-h.join:
@@ -234,6 +247,8 @@ func (h *Hub) run() {
 			h.broadcastToAll(message)
 		case req := <-h.sendToClient:
 			h.sendTo(req)
+		case req := <-h.closeClient:
+			h.closeClientByID(req)
 		case op := <-h.groupOp:
 			h.handleGroupOp(op)
 		case req := <-h.sendToGroup:
@@ -261,7 +276,9 @@ func (h *Hub) closeChannel() {
 	// 关闭所有客户端连接
 	for client := range h.clients {
 		if client != nil {
-			client.close()
+			if err := client.close(); err != nil {
+				slog.Error("close client error", "client_id", client.ID(), "err", err)
+			}
 		}
 	}
 
@@ -286,7 +303,9 @@ func (h *Hub) joinClient(client *Client) {
 		case client.send <- NewErrorMessage("连接数已达上限"):
 		default:
 		}
-		client.close()
+		if err := client.close(); err != nil {
+			slog.Error("close client error", "client_id", client.ID(), "err", err)
+		}
 		return
 	}
 	h.clients[client] = struct{}{}
@@ -294,7 +313,7 @@ func (h *Hub) joinClient(client *Client) {
 		// 必须在独立协程中执行连接回调。
 		// 回调内部可能调用 SendToClient 等需要 run() 协程消费的方法，
 		// 同步执行会导致 run() 等待自身而死锁。
-		go h.connectHandler(client)
+		safeGo(func() { _ = h.connectHandler(client) })
 	}
 }
 
@@ -328,7 +347,7 @@ func (h *Hub) leaveClient(client *Client) {
 	// 回调内部可能调用 GetClients() / SendToClient() 等需要与 run() 协程通信的方法，
 	// 如果直接在 run() 中调用会导致死锁（自己等自己）。
 	if h.disconnectHandler != nil {
-		go h.disconnectHandler(client, nil)
+		safeGo(func() { h.disconnectHandler(client, nil) })
 	}
 }
 
@@ -424,6 +443,16 @@ func (h *Hub) removeFromIDMap(client *Client) {
 	} else {
 		h.clientsByID[id] = filtered
 	}
+}
+
+// closeClientByID 关闭指定 ID 下的所有连接。
+// close() 取消 ctx 并关闭底层连接，readPump 退出后走 leave 事件完成除名与退组，
+// 此处不直接改动 clientsByID，避免与 leave 处理产生双重清理
+func (h *Hub) closeClientByID(req closeClientRequest) {
+	for _, client := range h.clientsByID[req.clientID] {
+		_ = client.close()
+	}
+	req.response <- nil
 }
 
 func (h *Hub) sendTo(req sendToClientRequest) {
@@ -552,6 +581,31 @@ func (h *Hub) SendToClientAsync(ctx context.Context, clientID string, message Me
 		return ErrHubClosed
 	case <-ctx.Done():
 		return ctx.Err()
+	}
+}
+
+// CloseClient 按 ID 踢下线：关闭该 ID 下所有连接（多标签页一并断开），阻塞等待 run() 处理完毕。
+// ID 不存在时目标态已达成，按幂等返回 nil；Hub 关闭时返回 ErrHubClosed。
+func (h *Hub) CloseClient(clientID string) error {
+	if h.isClosed() {
+		return ErrHubClosed
+	}
+
+	req := closeClientRequest{
+		clientID: clientID,
+		response: make(chan error, 1),
+	}
+
+	select {
+	case h.closeClient <- req:
+	case <-h.closeCh:
+		return ErrHubClosed
+	}
+	select {
+	case err := <-req.response:
+		return err
+	case <-h.closeCh:
+		return ErrHubClosed
 	}
 }
 
@@ -685,8 +739,8 @@ func (h *Hub) SetErrorHandler(handler ErrorHandler) {
 	h.errorHandler = handler
 }
 
-// RegisterHandler 注册指定类型的业务消息处理器
-func (h *Hub) RegisterHandler(msgType string, handler Handler) {
+// Handle 注册指定类型的业务消息处理器
+func (h *Hub) Handle(msgType string, handler Handler) {
 	h.router.RegisterHandler(msgType, handler)
 }
 

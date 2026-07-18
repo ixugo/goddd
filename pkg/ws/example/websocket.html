@@ -92,7 +92,7 @@
     </div>
 
     <div class="form-container">
-      <form id="etcgodemo" class="ui form">
+      <form id="ws_demo" class="ui form">
         <div class="field">
           <textarea rows="2" placeholder="自定义 json 消息"></textarea>
         </div>
@@ -168,7 +168,7 @@
   <script src="http://cdn.jsdelivr.net/npm/clipboard@2.0.10/dist/clipboard.min.js"></script>
   <script>
     var socket = null;
-    var msgBox = $("#etcgodemo textarea");
+    var msgBox = $("#ws_demo textarea");
     var messages = $("#messages");
     var messagesContainer = $(".messages-container");
 
@@ -378,7 +378,7 @@
         Toast("复制成功", 2000);
       });
 
-      $("#etcgodemo").submit(function () {
+      $("#ws_demo").submit(function () {
         if (!msgBox.val()) return false;
         if (!socket) {
           alert("Error: There is no socket connection.");
