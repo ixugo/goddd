@@ -2,6 +2,7 @@ package ws
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"log/slog"
@@ -42,7 +43,10 @@ func NewExampleChatServer() *ExampleChatServer {
 func (s *ExampleChatServer) setupHandlers() {
 	// 鉴权处理器
 	s.hub.SetAuthHandler(func(message Message) (string, error) {
-		data := message.Data()
+		var data map[string]any
+		if err := json.Unmarshal(message.Data(), &data); err != nil {
+			return "", err
+		}
 
 		token, ok := data["token"].(string)
 		if !ok {
@@ -86,19 +90,19 @@ func (s *ExampleChatServer) setupHandlers() {
 	})
 
 	// 注册消息处理器
-	s.hub.RegisterHandler("chat", HandlerFunc(func(client *Client, message Message) error {
+	s.hub.Handle("chat", HandlerFunc(func(client *Client, message Message) error {
 		metadata := client.GetMetadata()
 		username := metadata["username"].(string)
 		return s.handleChatMessage(client, message, username)
 	}))
 
-	s.hub.RegisterHandler("private", HandlerFunc(func(client *Client, message Message) error {
+	s.hub.Handle("private", HandlerFunc(func(client *Client, message Message) error {
 		metadata := client.GetMetadata()
 		username := metadata["username"].(string)
 		return s.handlePrivateMessage(client, message, username)
 	}))
 
-	s.hub.RegisterHandler("get_users", HandlerFunc(func(client *Client, message Message) error {
+	s.hub.Handle("get_users", HandlerFunc(func(client *Client, message Message) error {
 		return s.handleGetUsers(client)
 	}))
 
@@ -112,7 +116,10 @@ func (s *ExampleChatServer) setupHandlers() {
 
 // handleChatMessage 处理聊天消息
 func (s *ExampleChatServer) handleChatMessage(client *Client, message Message, username string) error {
-	data := message.Data()
+	var data map[string]any
+	if err := json.Unmarshal(message.Data(), &data); err != nil {
+		return err
+	}
 
 	content, ok := data["content"].(string)
 	if !ok {
@@ -131,7 +138,10 @@ func (s *ExampleChatServer) handleChatMessage(client *Client, message Message, u
 
 // handlePrivateMessage 处理私聊消息
 func (s *ExampleChatServer) handlePrivateMessage(client *Client, message Message, username string) error {
-	data := message.Data()
+	var data map[string]any
+	if err := json.Unmarshal(message.Data(), &data); err != nil {
+		return err
+	}
 
 	target, ok := data["target"].(string)
 	if !ok {
@@ -432,7 +442,10 @@ func ExampleWithJWTAuth() {
 
 	// 模拟 JWT 验证
 	hub.SetAuthHandler(func(message Message) (string, error) {
-		data := message.Data()
+		var data map[string]any
+		if err := json.Unmarshal(message.Data(), &data); err != nil {
+			return "", err
+		}
 		token, ok := data["token"].(string)
 		if !ok {
 			return "", fmt.Errorf("token 不能为空")
@@ -463,7 +476,7 @@ func ExampleWithJWTAuth() {
 	})
 
 	// 注册消息处理器
-	hub.RegisterHandler("broadcast", HandlerFunc(func(client *Client, message Message) error {
+	hub.Handle("broadcast", HandlerFunc(func(client *Client, message Message) error {
 		metadata := client.GetMetadata()
 		role := metadata["role"].(string)
 		if role == "admin" {
@@ -472,7 +485,7 @@ func ExampleWithJWTAuth() {
 		return fmt.Errorf("权限不足")
 	}))
 
-	hub.RegisterHandler("kick_user", HandlerFunc(func(client *Client, message Message) error {
+	hub.Handle("kick_user", HandlerFunc(func(client *Client, message Message) error {
 		metadata := client.GetMetadata()
 		role := metadata["role"].(string)
 		if role == "admin" {
@@ -481,7 +494,7 @@ func ExampleWithJWTAuth() {
 		return fmt.Errorf("权限不足")
 	}))
 
-	hub.RegisterHandler("chat", HandlerFunc(func(client *Client, message Message) error {
+	hub.Handle("chat", HandlerFunc(func(client *Client, message Message) error {
 		return handleUserMessage(client, message, hub)
 	}))
 
@@ -492,17 +505,25 @@ func ExampleWithJWTAuth() {
 func handleAdminMessage(client *Client, message Message, hub Huber) error {
 	switch message.Type() {
 	case "broadcast":
-		data := message.Data()
+		var data map[string]any
+		if err := json.Unmarshal(message.Data(), &data); err != nil {
+			return err
+		}
 		content := data["content"].(string)
 		hub.Broadcast(NewMessage("admin_broadcast", map[string]any{
 			"content": content,
 			"from":    "系统管理员",
 		}))
 	case "kick_user":
-		data := message.Data()
+		var data map[string]any
+		if err := json.Unmarshal(message.Data(), &data); err != nil {
+			return err
+		}
 		targetUser := data["user"].(string)
-		// 这里可以实现踢出用户的逻辑
-		hub.SendToClient(context.Background(), targetUser, NewErrorMessage("您已被管理员踢出"))
+		// 先通知后踢：同步等通知入队再关闭连接，尽力让被踢者收到原因。
+		// 目标不在线时入队失败忽略之，踢人按幂等成功
+		_ = hub.SendToClient(context.Background(), targetUser, NewErrorMessage("您已被管理员踢出"))
+		return hub.CloseClient(targetUser)
 	default:
 		return fmt.Errorf("未知的管理员命令: %s", message.Type())
 	}
@@ -512,7 +533,10 @@ func handleAdminMessage(client *Client, message Message, hub Huber) error {
 func handleUserMessage(client *Client, message Message, hub Huber) error {
 	switch message.Type() {
 	case "chat":
-		data := message.Data()
+		var data map[string]any
+		if err := json.Unmarshal(message.Data(), &data); err != nil {
+			return err
+		}
 		content := data["content"].(string)
 		metadata := client.GetMetadata()
 		username := metadata["username"].(string)

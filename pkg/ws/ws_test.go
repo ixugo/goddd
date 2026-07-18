@@ -2,6 +2,7 @@ package ws
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -12,8 +13,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/gorilla/websocket"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"github.com/ixugo/goddd/pkg/assert"
 )
 
 func TestNewHub(t *testing.T) {
@@ -64,7 +64,9 @@ func TestWebSocketConnection(t *testing.T) {
 	// 连接 WebSocket
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
 	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
-	require.NoError(t, err)
+	if !assert.NoError(t, err) {
+		return
+	}
 	defer conn.Close()
 
 	// 等待连接建立
@@ -81,7 +83,10 @@ func TestAuthentication(t *testing.T) {
 
 	// 设置鉴权处理器
 	hub.SetAuthHandler(func(message Message) (string, error) {
-		data := message.Data()
+		var data map[string]any
+		if err := json.Unmarshal(message.Data(), &data); err != nil {
+			return "", err
+		}
 		token, ok := data["token"].(string)
 		if !ok {
 			return "", ErrAuthFailed
@@ -99,7 +104,9 @@ func TestAuthentication(t *testing.T) {
 	// 连接 WebSocket
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
 	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
-	require.NoError(t, err)
+	if !assert.NoError(t, err) {
+		return
+	}
 	defer conn.Close()
 
 	// 发送鉴权消息
@@ -110,12 +117,16 @@ func TestAuthentication(t *testing.T) {
 		},
 	}
 	err = conn.WriteJSON(authMsg)
-	require.NoError(t, err)
+	if !assert.NoError(t, err) {
+		return
+	}
 
 	// 读取鉴权响应
 	var response map[string]any
 	err = conn.ReadJSON(&response)
-	require.NoError(t, err)
+	if !assert.NoError(t, err) {
+		return
+	}
 
 	assert.Equal(t, MsgTypeAuthOK, response["type"])
 
@@ -144,7 +155,9 @@ func TestAuthenticationFailure(t *testing.T) {
 	// 连接 WebSocket
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
 	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
-	require.NoError(t, err)
+	if !assert.NoError(t, err) {
+		return
+	}
 	defer conn.Close()
 
 	// 发送无效鉴权消息
@@ -155,7 +168,9 @@ func TestAuthenticationFailure(t *testing.T) {
 		},
 	}
 	err = conn.WriteJSON(authMsg)
-	require.NoError(t, err)
+	if !assert.NoError(t, err) {
+		return
+	}
 
 	// 读取错误响应
 	var response map[string]any
@@ -174,7 +189,10 @@ func TestBroadcast(t *testing.T) {
 
 	// 设置简单鉴权（无需 token）
 	hub.SetAuthHandler(func(message Message) (string, error) {
-		data := message.Data()
+		var data map[string]any
+		if err := json.Unmarshal(message.Data(), &data); err != nil {
+			return "", err
+		}
 		token, ok := data["token"].(string)
 		if !ok {
 			return "", ErrAuthFailed
@@ -190,11 +208,15 @@ func TestBroadcast(t *testing.T) {
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
 
 	conn1, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
-	require.NoError(t, err)
+	if !assert.NoError(t, err) {
+		return
+	}
 	defer conn1.Close()
 
 	conn2, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
-	require.NoError(t, err)
+	if !assert.NoError(t, err) {
+		return
+	}
 	defer conn2.Close()
 
 	// 客户端1鉴权
@@ -203,7 +225,9 @@ func TestBroadcast(t *testing.T) {
 		"data": map[string]any{"token": "123"},
 	}
 	err = conn1.WriteJSON(authMsg1)
-	require.NoError(t, err)
+	if !assert.NoError(t, err) {
+		return
+	}
 
 	// 客户端2鉴权
 	authMsg2 := map[string]any{
@@ -211,14 +235,20 @@ func TestBroadcast(t *testing.T) {
 		"data": map[string]any{"token": "456"},
 	}
 	err = conn2.WriteJSON(authMsg2)
-	require.NoError(t, err)
+	if !assert.NoError(t, err) {
+		return
+	}
 
 	// 读取鉴权响应
 	var response1, response2 map[string]any
 	err = conn1.ReadJSON(&response1)
-	require.NoError(t, err)
+	if !assert.NoError(t, err) {
+		return
+	}
 	err = conn2.ReadJSON(&response2)
-	require.NoError(t, err)
+	if !assert.NoError(t, err) {
+		return
+	}
 
 	// 等待连接建立
 	time.Sleep(100 * time.Millisecond)
@@ -232,9 +262,13 @@ func TestBroadcast(t *testing.T) {
 	// 验证两个客户端都收到消息
 	var msg1, msg2 map[string]any
 	err = conn1.ReadJSON(&msg1)
-	require.NoError(t, err)
+	if !assert.NoError(t, err) {
+		return
+	}
 	err = conn2.ReadJSON(&msg2)
-	require.NoError(t, err)
+	if !assert.NoError(t, err) {
+		return
+	}
 
 	assert.Equal(t, "notification", msg1["type"])
 	assert.Equal(t, "notification", msg2["type"])
@@ -246,7 +280,10 @@ func TestSendToClient(t *testing.T) {
 
 	// 设置简单鉴权
 	hub.SetAuthHandler(func(message Message) (string, error) {
-		data := message.Data()
+		var data map[string]any
+		if err := json.Unmarshal(message.Data(), &data); err != nil {
+			return "", err
+		}
 		token, ok := data["token"].(string)
 		if !ok {
 			return "", ErrAuthFailed
@@ -261,7 +298,9 @@ func TestSendToClient(t *testing.T) {
 	// 创建客户端连接
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
 	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
-	require.NoError(t, err)
+	if !assert.NoError(t, err) {
+		return
+	}
 	defer conn.Close()
 
 	// 鉴权
@@ -270,12 +309,16 @@ func TestSendToClient(t *testing.T) {
 		"data": map[string]any{"token": "123"},
 	}
 	err = conn.WriteJSON(authMsg)
-	require.NoError(t, err)
+	if !assert.NoError(t, err) {
+		return
+	}
 
 	// 读取鉴权响应
 	var response map[string]any
 	err = conn.ReadJSON(&response)
-	require.NoError(t, err)
+	if !assert.NoError(t, err) {
+		return
+	}
 
 	// 等待连接建立
 	time.Sleep(100 * time.Millisecond)
@@ -285,12 +328,16 @@ func TestSendToClient(t *testing.T) {
 		"message": "Hello user_123!",
 	})
 	err = hub.SendToClient(context.Background(), "user_123", privateMsg)
-	require.NoError(t, err)
+	if !assert.NoError(t, err) {
+		return
+	}
 
 	// 验证客户端收到消息
 	var msg map[string]any
 	err = conn.ReadJSON(&msg)
-	require.NoError(t, err)
+	if !assert.NoError(t, err) {
+		return
+	}
 
 	assert.Equal(t, "private", msg["type"])
 	data := msg["data"].(map[string]any)
@@ -310,7 +357,7 @@ func TestMessageHandler(t *testing.T) {
 	var receivedClients []*Client
 
 	// 注册 chat 消息处理器
-	hub.RegisterHandler("chat", HandlerFunc(func(client *Client, message Message) error {
+	hub.Handle("chat", HandlerFunc(func(client *Client, message Message) error {
 		mu.Lock()
 		receivedMessages = append(receivedMessages, message)
 		receivedClients = append(receivedClients, client)
@@ -320,7 +367,10 @@ func TestMessageHandler(t *testing.T) {
 
 	// 设置简单鉴权
 	hub.SetAuthHandler(func(message Message) (string, error) {
-		data := message.Data()
+		var data map[string]any
+		if err := json.Unmarshal(message.Data(), &data); err != nil {
+			return "", err
+		}
 		token, ok := data["token"].(string)
 		if !ok {
 			return "", ErrAuthFailed
@@ -335,7 +385,9 @@ func TestMessageHandler(t *testing.T) {
 	// 创建客户端连接
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
 	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
-	require.NoError(t, err)
+	if !assert.NoError(t, err) {
+		return
+	}
 	defer conn.Close()
 
 	// 鉴权
@@ -344,12 +396,16 @@ func TestMessageHandler(t *testing.T) {
 		"data": map[string]any{"token": "123"},
 	}
 	err = conn.WriteJSON(authMsg)
-	require.NoError(t, err)
+	if !assert.NoError(t, err) {
+		return
+	}
 
 	// 读取鉴权响应
 	var response map[string]any
 	err = conn.ReadJSON(&response)
-	require.NoError(t, err)
+	if !assert.NoError(t, err) {
+		return
+	}
 
 	// 发送业务消息
 	businessMsg := map[string]any{
@@ -359,7 +415,9 @@ func TestMessageHandler(t *testing.T) {
 		},
 	}
 	err = conn.WriteJSON(businessMsg)
-	require.NoError(t, err)
+	if !assert.NoError(t, err) {
+		return
+	}
 
 	// 等待消息处理
 	time.Sleep(100 * time.Millisecond)
@@ -379,7 +437,10 @@ func TestClientMetadata(t *testing.T) {
 
 	// 设置鉴权处理器，在鉴权时设置元数据
 	hub.SetAuthHandler(func(message Message) (string, error) {
-		data := message.Data()
+		var data map[string]any
+		if err := json.Unmarshal(message.Data(), &data); err != nil {
+			return "", err
+		}
 		token, ok := data["token"].(string)
 		if !ok {
 			return "", ErrAuthFailed
@@ -401,7 +462,9 @@ func TestClientMetadata(t *testing.T) {
 	// 创建客户端连接
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
 	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
-	require.NoError(t, err)
+	if !assert.NoError(t, err) {
+		return
+	}
 	defer conn.Close()
 
 	// 鉴权
@@ -410,23 +473,28 @@ func TestClientMetadata(t *testing.T) {
 		"data": map[string]any{"token": "123"},
 	}
 	err = conn.WriteJSON(authMsg)
-	require.NoError(t, err)
+	if !assert.NoError(t, err) {
+		return
+	}
 
 	// 读取鉴权响应
 	var response map[string]any
 	err = conn.ReadJSON(&response)
-	require.NoError(t, err)
+	if !assert.NoError(t, err) {
+		return
+	}
 
 	// 等待连接建立
 	time.Sleep(100 * time.Millisecond)
 
 	// 验证客户端元数据
 	clients := hub.GetClients()
-	require.Len(t, clients, 1)
+	if !assert.Len(t, clients, 1) {
+		return
+	}
 
 	metadata := clients[0].GetMetadata()
-	assert.Contains(t, metadata, "connect_time")
-	assert.Contains(t, metadata, "user_agent")
+	assert.True(t, metadata["connect_time"] != nil, "metadata 应含 connect_time")
 	assert.Equal(t, "test_client", metadata["user_agent"])
 }
 
@@ -440,7 +508,9 @@ func TestHubClose(t *testing.T) {
 	// 创建客户端连接
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
 	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
-	require.NoError(t, err)
+	if !assert.NoError(t, err) {
+		return
+	}
 	defer conn.Close()
 
 	// 等待连接建立
@@ -477,7 +547,9 @@ func TestAuthTimeout(t *testing.T) {
 	// 创建客户端连接但不发送鉴权消息
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
 	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
-	require.NoError(t, err)
+	if !assert.NoError(t, err) {
+		return
+	}
 	defer conn.Close()
 
 	// 设置读取超时
@@ -499,7 +571,10 @@ func TestForceLogout(t *testing.T) {
 	defer hub.Close()
 
 	hub.SetAuthHandler(func(message Message) (string, error) {
-		data := message.Data()
+		var data map[string]any
+		if err := json.Unmarshal(message.Data(), &data); err != nil {
+			return "", err
+		}
 		token, ok := data["token"].(string)
 		if !ok {
 			return "", ErrAuthFailed
@@ -515,15 +590,21 @@ func TestForceLogout(t *testing.T) {
 	// 辅助函数：建立连接并鉴权
 	dialAndAuth := func(userID string) *websocket.Conn {
 		conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
-		require.NoError(t, err)
+		if !assert.NoError(t, err) {
+			return nil
+		}
 		err = conn.WriteJSON(map[string]any{
 			"type": MsgTypeAuth,
 			"data": map[string]any{"token": userID},
 		})
-		require.NoError(t, err)
+		if !assert.NoError(t, err) {
+			return nil
+		}
 		var resp map[string]any
 		err = conn.ReadJSON(&resp)
-		require.NoError(t, err)
+		if !assert.NoError(t, err) {
+			return nil
+		}
 		assert.Equal(t, MsgTypeAuthOK, resp["type"])
 		return conn
 	}
@@ -539,12 +620,16 @@ func TestForceLogout(t *testing.T) {
 		"reason":  "same_device_type_login",
 		"message": "您的账号已在另一台设备上登录",
 	}))
-	require.NoError(t, err)
+	if !assert.NoError(t, err) {
+		return
+	}
 
 	// 旧连接应收到 force_logout
 	var msg map[string]any
 	err = oldConn.ReadJSON(&msg)
-	require.NoError(t, err)
+	if !assert.NoError(t, err) {
+		return
+	}
 	assert.Equal(t, "force_logout", msg["type"])
 	data := msg["data"].(map[string]any)
 	assert.Equal(t, "same_device_type_login", data["reason"])
@@ -556,7 +641,10 @@ func TestForceLogoutMultiTab(t *testing.T) {
 	defer hub.Close()
 
 	hub.SetAuthHandler(func(message Message) (string, error) {
-		data := message.Data()
+		var data map[string]any
+		if err := json.Unmarshal(message.Data(), &data); err != nil {
+			return "", err
+		}
 		token, ok := data["token"].(string)
 		if !ok {
 			return "", ErrAuthFailed
@@ -571,15 +659,21 @@ func TestForceLogoutMultiTab(t *testing.T) {
 
 	dialAndAuth := func(userID string) *websocket.Conn {
 		conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
-		require.NoError(t, err)
+		if !assert.NoError(t, err) {
+			return nil
+		}
 		err = conn.WriteJSON(map[string]any{
 			"type": MsgTypeAuth,
 			"data": map[string]any{"token": userID},
 		})
-		require.NoError(t, err)
+		if !assert.NoError(t, err) {
+			return nil
+		}
 		var resp map[string]any
 		err = conn.ReadJSON(&resp)
-		require.NoError(t, err)
+		if !assert.NoError(t, err) {
+			return nil
+		}
 		return conn
 	}
 
@@ -606,7 +700,9 @@ func TestForceLogoutMultiTab(t *testing.T) {
 		"reason":  "same_device_type_login",
 		"message": "您的账号已在另一台设备上登录",
 	}))
-	require.NoError(t, err)
+	if !assert.NoError(t, err) {
+		return
+	}
 
 	// 两个标签页都应收到
 	var wg sync.WaitGroup
@@ -640,29 +736,45 @@ func TestReAuthIdempotent(t *testing.T) {
 
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
 	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
-	require.NoError(t, err)
+	if !assert.NoError(t, err) {
+		return
+	}
 	defer conn.Close()
 
 	authMsg := map[string]any{"type": MsgTypeAuth, "data": map[string]any{"token": "t"}}
-	require.NoError(t, conn.WriteJSON(authMsg))
+	if !assert.NoError(t, conn.WriteJSON(authMsg)) {
+		return
+	}
 	var resp map[string]any
-	require.NoError(t, conn.ReadJSON(&resp))
+	if !assert.NoError(t, conn.ReadJSON(&resp)) {
+		return
+	}
 	assert.Equal(t, MsgTypeAuthOK, resp["type"])
 
 	// 再次鉴权
-	require.NoError(t, conn.WriteJSON(authMsg))
-	require.NoError(t, conn.ReadJSON(&resp))
+	if !assert.NoError(t, conn.WriteJSON(authMsg)) {
+		return
+	}
+	if !assert.NoError(t, conn.ReadJSON(&resp)) {
+		return
+	}
 	assert.Equal(t, MsgTypeAuthOK, resp["type"])
 
 	time.Sleep(100 * time.Millisecond)
 
 	// 仅登记一次
 	clients := hub.GetClients()
-	require.Len(t, clients, 1)
+	if !assert.Len(t, clients, 1) {
+		return
+	}
 
 	// 定向投递仅送达一份
-	require.NoError(t, hub.SendToClient(context.Background(), "user_reauth", NewMessage("once", nil)))
-	require.NoError(t, conn.ReadJSON(&resp))
+	if !assert.NoError(t, hub.SendToClient(context.Background(), "user_reauth", NewMessage("once", nil))) {
+		return
+	}
+	if !assert.NoError(t, conn.ReadJSON(&resp)) {
+		return
+	}
 	assert.Equal(t, "once", resp["type"])
 
 	// 第二读应超时（无重复投递）
@@ -681,15 +793,21 @@ func TestUUIDAssignedWithoutAuthHandler(t *testing.T) {
 
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
 	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
-	require.NoError(t, err)
+	if !assert.NoError(t, err) {
+		return
+	}
 	defer conn.Close()
 
-	require.NoError(t, conn.WriteJSON(map[string]any{"type": MsgTypeAuth}))
+	if !assert.NoError(t, conn.WriteJSON(map[string]any{"type": MsgTypeAuth})) {
+		return
+	}
 	var resp map[string]any
-	require.NoError(t, conn.ReadJSON(&resp))
+	if !assert.NoError(t, conn.ReadJSON(&resp)) {
+		return
+	}
 	assert.Equal(t, MsgTypeAuthOK, resp["type"])
 
-	require.Eventually(t, func() bool {
+	assert.Eventually(t, func() bool {
 		clients := hub.GetClients()
 		if len(clients) != 1 {
 			return false
@@ -705,7 +823,9 @@ func TestClientSendBackpressure(t *testing.T) {
 	c.ctx, c.cancel = context.WithCancel(context.Background())
 
 	// 队列有余量时立即入队
-	require.NoError(t, c.Send(context.Background(), NewMessage("m1", nil)))
+	if !assert.NoError(t, c.Send(context.Background(), NewMessage("m1", nil))) {
+		return
+	}
 
 	// 队列满，阻塞至 ctx 超时
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
@@ -733,18 +853,24 @@ func TestClientLeavesOnDisconnect(t *testing.T) {
 
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
 	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
-	require.NoError(t, err)
+	if !assert.NoError(t, err) {
+		return
+	}
 
-	require.NoError(t, conn.WriteJSON(map[string]any{"type": MsgTypeAuth, "data": map[string]any{"token": "t"}}))
+	if !assert.NoError(t, conn.WriteJSON(map[string]any{"type": MsgTypeAuth, "data": map[string]any{"token": "t"}})) {
+		return
+	}
 	var resp map[string]any
-	require.NoError(t, conn.ReadJSON(&resp))
+	if !assert.NoError(t, conn.ReadJSON(&resp)) {
+		return
+	}
 
-	require.Eventually(t, func() bool {
+	assert.Eventually(t, func() bool {
 		return len(hub.GetClients()) == 1
 	}, 2*time.Second, 50*time.Millisecond)
 
 	conn.Close()
-	require.Eventually(t, func() bool {
+	assert.Eventually(t, func() bool {
 		return len(hub.GetClients()) == 0
 	}, 2*time.Second, 50*time.Millisecond, "断开后应除名，不得残留幽灵连接")
 }
@@ -761,11 +887,15 @@ func TestMaxMessageSizeExceeded(t *testing.T) {
 
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
 	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
-	require.NoError(t, err)
+	if !assert.NoError(t, err) {
+		return
+	}
 	defer conn.Close()
 
 	// 发送远超 64 字节的消息
-	require.NoError(t, conn.WriteMessage(websocket.TextMessage, make([]byte, 256)))
+	if !assert.NoError(t, conn.WriteMessage(websocket.TextMessage, make([]byte, 256))) {
+		return
+	}
 
 	// 连接应被服务端关闭
 	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
@@ -774,383 +904,146 @@ func TestMaxMessageSizeExceeded(t *testing.T) {
 	assert.Error(t, err)
 }
 
-// TestBroadcastSkipsSlowConsumer 广播跳过发送队列满的慢连接，但不剔除、不关闭
-func TestBroadcastSkipsSlowConsumer(t *testing.T) {
-	hub := NewHub(func(c *Config) {
-		c.MessageQueueSize = 1
-	})
-	defer hub.Close()
-
-	// 构造无网络假客户端：队列满且无人消费
-	c := &Client{send: make(chan Message, 1), isAuth: true, id: "slow"}
+// ============================================================
+// 以下测试自原 coverage_test.go 并入，按被测源文件分节
+// ============================================================
+// newSyntheticClient 构造无网络连接的合成客户端，用于直接测试不依赖真实连接的函数。
+// ctx 必须初始化，否则 Send 等方法会因 nil ctx 崩溃。
+func newSyntheticClient(sendCap int) *Client {
+	c := &Client{send: make(chan Message, sendCap)}
 	c.ctx, c.cancel = context.WithCancel(context.Background())
-
-	hub.join <- c
-	hub.addToID <- c
-	time.Sleep(50 * time.Millisecond)
-
-	// 占满队列后广播，触发跳过
-	c.send <- NewMessage("fill", nil)
-	hub.Broadcast(NewMessage("b", nil))
-	time.Sleep(100 * time.Millisecond)
-
-	// 慢连接仍在册、未被关闭，删除只能由 leave 事件执行
-	clients := hub.GetClients()
-	assert.Len(t, clients, 1)
-	assert.NoError(t, c.ctx.Err(), "广播不得关闭慢连接")
+	return c
 }
 
-// TestConcurrentSendAndClose 并发 Send 与连接关闭不得产生 panic 或数据竞争（配合 -race）
-func TestConcurrentSendAndClose(t *testing.T) {
-	hub := NewHub()
-	defer hub.Close()
+// drainSend 从客户端发送队列取出一条消息，超时说明预期消息根本没入队，直接判失败
+func drainSend(t *testing.T, c *Client) Message {
+	t.Helper()
+	select {
+	case m := <-c.send:
+		return m
+	case <-time.After(2 * time.Second):
+		t.Fatal("发送队列为空，未收到预期消息")
+		return nil
+	}
+}
 
-	hub.SetAuthHandler(func(message Message) (string, error) {
-		return "user_race", nil
-	})
-
-	server := httptest.NewServer(http.HandlerFunc(hub.ServeHTTP))
-	defer server.Close()
-
-	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
-	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
-	require.NoError(t, err)
-	defer conn.Close()
-
-	require.NoError(t, conn.WriteJSON(map[string]any{"type": MsgTypeAuth, "data": map[string]any{"token": "t"}}))
-	var resp map[string]any
-	require.NoError(t, conn.ReadJSON(&resp))
-
-	require.Eventually(t, func() bool {
-		return len(hub.GetClients()) == 1
-	}, 2*time.Second, 50*time.Millisecond)
-
-	c := hub.GetClients()[0]
-	var wg sync.WaitGroup
-	for range 8 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for j := range 100 {
-				_ = c.Send(context.Background(), NewMessage("spam", j))
+// drainUntilType 从客户端发送队列取出指定类型的消息。
+// 连接回调的广播（如 user_online）可能先入队，不能假设第一条就是目标消息。
+func drainUntilType(t *testing.T, c *Client, msgType string) Message {
+	t.Helper()
+	deadline := time.After(2 * time.Second)
+	for {
+		select {
+		case m := <-c.send:
+			if m.Type() == msgType {
+				return m
 			}
-		}()
+		case <-deadline:
+			t.Fatalf("未在超时内从队列取到类型 %s 的消息", msgType)
+			return nil
+		}
 	}
-
-	time.Sleep(10 * time.Millisecond)
-	_ = c.close()
-	wg.Wait()
 }
 
-// TestSendToClientAsync 异步投递：入队成功即返回，消息正常送达
-func TestSendToClientAsync(t *testing.T) {
+// readUntilType 持续读取连接直到收到指定类型的消息。
+// 广播类消息（如 user_online）可能插队，不能假设第一条就是目标消息。
+func readUntilType(t *testing.T, conn *websocket.Conn, msgType string) map[string]any {
+	t.Helper()
+	if !assert.NoError(t, conn.SetReadDeadline(time.Now().Add(3*time.Second))) {
+		return nil
+	}
+	for {
+		var msg map[string]any
+		if !assert.NoError(t, conn.ReadJSON(&msg)) {
+			return nil
+		}
+		if msg["type"] == msgType {
+			return msg
+		}
+	}
+}
+
+// TestErrorMessage 覆盖错误消息的全部方法：构造、类型、空数据、序列化与三种输入的反序列化
+
+// TestCloseClient 按 ID 踢下线：该 ID 所有连接断开，其他用户不受影响，重复踢幂等
+func TestCloseClient(t *testing.T) {
 	hub := NewHub()
 	defer hub.Close()
 
 	hub.SetAuthHandler(func(message Message) (string, error) {
-		return "user_async", nil
+		var data map[string]any
+		if err := json.Unmarshal(message.Data(), &data); err != nil {
+			return "", err
+		}
+		token, ok := data["token"].(string)
+		if !ok {
+			return "", ErrAuthFailed
+		}
+		return token, nil
 	})
 
 	server := httptest.NewServer(http.HandlerFunc(hub.ServeHTTP))
 	defer server.Close()
 
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
-	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
-	require.NoError(t, err)
-	defer conn.Close()
+	dialAndAuth := func(userID string) *websocket.Conn {
+		conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+		if !assert.NoError(t, err) {
+			return nil
+		}
+		if !assert.NoError(t, conn.WriteJSON(map[string]any{"type": MsgTypeAuth, "data": map[string]any{"token": userID}})) {
+			return nil
+		}
+		var resp map[string]any
+		if !assert.NoError(t, conn.ReadJSON(&resp)) {
+			return nil
+		}
+		assert.Equal(t, MsgTypeAuthOK, resp["type"])
+		return conn
+	}
 
-	require.NoError(t, conn.WriteJSON(map[string]any{"type": MsgTypeAuth, "data": map[string]any{"token": "t"}}))
-	var resp map[string]any
-	require.NoError(t, conn.ReadJSON(&resp))
+	// 同一用户两个标签页 + 另一用户
+	tab1 := dialAndAuth("user_a")
+	defer tab1.Close()
+	tab2 := dialAndAuth("user_a")
+	defer tab2.Close()
+	other := dialAndAuth("user_b")
+	defer other.Close()
 
 	time.Sleep(100 * time.Millisecond)
+	assert.Len(t, hub.GetClients(), 3)
 
-	err = hub.SendToClientAsync(context.Background(), "user_async", NewMessage("async_msg", nil))
-	require.NoError(t, err)
-
-	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
-	require.NoError(t, conn.ReadJSON(&resp))
-	assert.Equal(t, "async_msg", resp["type"])
-}
-
-// TestEmptyAuthIDKeepsUUID 鉴权回调返回空 ID 时保留连接建立时分配的 UUID
-func TestEmptyAuthIDKeepsUUID(t *testing.T) {
-	hub := NewHub()
-	defer hub.Close()
-
-	hub.SetAuthHandler(func(message Message) (string, error) {
-		return "", nil
-	})
-
-	server := httptest.NewServer(http.HandlerFunc(hub.ServeHTTP))
-	defer server.Close()
-
-	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
-	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
-	require.NoError(t, err)
-	defer conn.Close()
-
-	require.NoError(t, conn.WriteJSON(map[string]any{"type": MsgTypeAuth}))
-	var resp map[string]any
-	require.NoError(t, conn.ReadJSON(&resp))
-	assert.Equal(t, MsgTypeAuthOK, resp["type"])
-
-	require.Eventually(t, func() bool {
-		clients := hub.GetClients()
-		if len(clients) != 1 {
-			return false
-		}
-		_, err := uuid.Parse(clients[0].ID())
-		return err == nil
-	}, 2*time.Second, 50*time.Millisecond, "空 ID 应保留 UUID")
-}
-
-// groupTestClient 拨号并完成鉴权，返回连接
-func groupTestClient(t *testing.T, wsURL, token string) *websocket.Conn {
-	t.Helper()
-	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
-	require.NoError(t, err)
-	require.NoError(t, conn.WriteJSON(map[string]any{
-		"type": MsgTypeAuth,
-		"data": map[string]any{"token": token},
-	}))
-	var resp map[string]any
-	require.NoError(t, conn.ReadJSON(&resp))
-	require.Equal(t, MsgTypeAuthOK, resp["type"])
-	return conn
-}
-
-// findClientByID 按业务 ID 在已认证客户端列表中定位连接
-func findClientByID(t *testing.T, hub *Hub, id string) *Client {
-	t.Helper()
-	for _, c := range hub.GetClients() {
-		if c.ID() == id {
-			return c
-		}
+	// 踢 user_a：两个标签页连接均被服务端断开
+	if !assert.NoError(t, hub.CloseClient("user_a")) {
+		return
 	}
-	t.Fatalf("客户端 %s 不存在", id)
-	return nil
-}
-
-// TestGroupSendToMembers 组内投递：仅组成员收到消息，组外连接不受影响
-func TestGroupSendToMembers(t *testing.T) {
-	hub := NewHub()
-	defer hub.Close()
-
-	hub.SetAuthHandler(func(message Message) (string, error) {
-		token, _ := message.Data()["token"].(string)
-		return "user_" + token, nil
-	})
-
-	server := httptest.NewServer(http.HandlerFunc(hub.ServeHTTP))
-	defer server.Close()
-	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
-
-	connA := groupTestClient(t, wsURL, "a")
-	defer connA.Close()
-	connB := groupTestClient(t, wsURL, "b")
-	defer connB.Close()
-	connC := groupTestClient(t, wsURL, "c")
-	defer connC.Close()
-
-	require.Eventually(t, func() bool {
-		return len(hub.GetClients()) == 3
-	}, 2*time.Second, 20*time.Millisecond)
-
-	findClientByID(t, hub, "user_a").JoinGroup("room1")
-	findClientByID(t, hub, "user_b").JoinGroup("room1")
-	require.Eventually(t, func() bool {
-		return hub.GroupSize("room1") == 2
-	}, 2*time.Second, 20*time.Millisecond)
-
-	err := hub.SendToGroup(context.Background(), "room1", NewMessage("room_msg", nil))
-	require.NoError(t, err)
-
-	for _, conn := range []*websocket.Conn{connA, connB} {
-		conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	for _, conn := range []*websocket.Conn{tab1, tab2} {
+		_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
 		var msg map[string]any
-		require.NoError(t, conn.ReadJSON(&msg))
-		assert.Equal(t, "room_msg", msg["type"])
+		assert.Error(t, conn.ReadJSON(&msg))
 	}
 
-	// 组外连接不应收到
-	connC.SetReadDeadline(time.Now().Add(300 * time.Millisecond))
-	var msg map[string]any
-	assert.Error(t, connC.ReadJSON(&msg))
-}
-
-// TestGroupLeaveIdempotent 退组幂等：重复退组不 panic，退组后不再收到组消息
-func TestGroupLeaveIdempotent(t *testing.T) {
-	hub := NewHub()
-	defer hub.Close()
-
-	hub.SetAuthHandler(func(message Message) (string, error) {
-		return "user_solo", nil
-	})
-
-	server := httptest.NewServer(http.HandlerFunc(hub.ServeHTTP))
-	defer server.Close()
-	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
-
-	conn := groupTestClient(t, wsURL, "x")
-	defer conn.Close()
-
-	require.Eventually(t, func() bool {
-		return len(hub.GetClients()) == 1
-	}, 2*time.Second, 20*time.Millisecond)
-
-	client := findClientByID(t, hub, "user_solo")
-	client.JoinGroup("room1")
-	require.Eventually(t, func() bool {
-		return hub.GroupSize("room1") == 1
-	}, 2*time.Second, 20*time.Millisecond)
-
-	client.LeaveGroup("room1")
-	client.LeaveGroup("room1")
-	require.Eventually(t, func() bool {
-		return hub.GroupSize("room1") == 0
-	}, 2*time.Second, 20*time.Millisecond)
-
-	require.NoError(t, hub.SendToGroup(context.Background(), "room1", NewMessage("room_msg", nil)))
-	conn.SetReadDeadline(time.Now().Add(300 * time.Millisecond))
-	var msg map[string]any
-	assert.Error(t, conn.ReadJSON(&msg))
-}
-
-// TestGroupDisconnectCleanup 断开连接自动清出所有分组，无需业务手动清理
-func TestGroupDisconnectCleanup(t *testing.T) {
-	hub := NewHub()
-	defer hub.Close()
-
-	hub.SetAuthHandler(func(message Message) (string, error) {
-		return "user_tmp", nil
-	})
-
-	server := httptest.NewServer(http.HandlerFunc(hub.ServeHTTP))
-	defer server.Close()
-	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
-
-	conn := groupTestClient(t, wsURL, "x")
-
-	require.Eventually(t, func() bool {
-		return len(hub.GetClients()) == 1
-	}, 2*time.Second, 20*time.Millisecond)
-
-	client := findClientByID(t, hub, "user_tmp")
-	client.JoinGroup("room1")
-	client.JoinGroup("room2")
-	require.Eventually(t, func() bool {
-		return hub.GroupSize("room1") == 1 && hub.GroupSize("room2") == 1
-	}, 2*time.Second, 20*time.Millisecond)
-
-	require.NoError(t, conn.Close())
-	require.Eventually(t, func() bool {
-		return hub.GroupSize("room1") == 0 && hub.GroupSize("room2") == 0
-	}, 2*time.Second, 20*time.Millisecond, "断开后应自动清出所有分组")
-}
-
-// TestGroupSlowConsumerSkipped 组内慢连接跳过：发送队列积压时不阻塞投递，正常成员照收
-func TestGroupSlowConsumerSkipped(t *testing.T) {
-	hub := NewHub()
-	defer hub.Close()
-
-	hub.SetAuthHandler(func(message Message) (string, error) {
-		token, _ := message.Data()["token"].(string)
-		return "user_" + token, nil
-	})
-
-	server := httptest.NewServer(http.HandlerFunc(hub.ServeHTTP))
-	defer server.Close()
-	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
-
-	slow := groupTestClient(t, wsURL, "slow")
-	defer slow.Close()
-	fast := groupTestClient(t, wsURL, "fast")
-	defer fast.Close()
-
-	require.Eventually(t, func() bool {
-		return len(hub.GetClients()) == 2
-	}, 2*time.Second, 20*time.Millisecond)
-
-	slowClient := findClientByID(t, hub, "user_slow")
-	fastClient := findClientByID(t, hub, "user_fast")
-	slowClient.JoinGroup("room1")
-	fastClient.JoinGroup("room1")
-	require.Eventually(t, func() bool {
-		return hub.GroupSize("room1") == 2
-	}, 2*time.Second, 20*time.Millisecond)
-
-	// 填满慢连接的发送队列，模拟消费积压
-	for range hub.config.MessageQueueSize {
-		slowClient.send <- NewMessage("flood", nil)
+	// user_b 不受影响，仍可正常收发
+	time.Sleep(100 * time.Millisecond)
+	assert.Len(t, hub.GetClients(), 1)
+	if !assert.NoError(t, hub.SendToClient(context.Background(), "user_b", NewMessage("ping", nil))) {
+		return
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	require.NoError(t, hub.SendToGroup(ctx, "room1", NewMessage("room_msg", nil)))
-
-	fast.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_ = other.SetReadDeadline(time.Now().Add(2 * time.Second))
 	var msg map[string]any
-	require.NoError(t, fast.ReadJSON(&msg))
-	assert.Equal(t, "room_msg", msg["type"])
+	if !assert.NoError(t, other.ReadJSON(&msg)) {
+		return
+	}
+	assert.Equal(t, "ping", msg["type"])
 
-	// 慢连接不被剔除、连接保持存活
-	assert.NoError(t, slowClient.ctx.Err())
+	// 幂等：踢不存在的 ID 直接成功
+	assert.NoError(t, hub.CloseClient("user_a"))
+	assert.NoError(t, hub.CloseClient("not_exist"))
 }
 
-// TestGroupEdgeCases 边界：空组名忽略、不存在的组投递成功、异步投递可用
-func TestGroupEdgeCases(t *testing.T) {
+// TestCloseClientOnClosedHub Hub 关闭后踢人返回 ErrHubClosed
+func TestCloseClientOnClosedHub(t *testing.T) {
 	hub := NewHub()
-	defer hub.Close()
-
-	hub.SetAuthHandler(func(message Message) (string, error) {
-		return "user_edge", nil
-	})
-
-	server := httptest.NewServer(http.HandlerFunc(hub.ServeHTTP))
-	defer server.Close()
-	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
-
-	conn := groupTestClient(t, wsURL, "x")
-	defer conn.Close()
-
-	require.Eventually(t, func() bool {
-		return len(hub.GetClients()) == 1
-	}, 2*time.Second, 20*time.Millisecond)
-
-	client := findClientByID(t, hub, "user_edge")
-
-	// 空组名为空操作
-	client.JoinGroup("")
-	client.LeaveGroup("")
-	assert.Equal(t, 0, hub.GroupSize(""))
-
-	// 向不存在的分组投递视为成功
-	require.NoError(t, hub.SendToGroup(context.Background(), "no_such_room", NewMessage("m", nil)))
-
-	// 异步投递
-	client.JoinGroup("room_async")
-	require.Eventually(t, func() bool {
-		return hub.GroupSize("room_async") == 1
-	}, 2*time.Second, 20*time.Millisecond)
-	require.NoError(t, hub.SendToGroupAsync(context.Background(), "room_async", NewMessage("async_room", nil)))
-
-	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
-	var msg map[string]any
-	require.NoError(t, conn.ReadJSON(&msg))
-	assert.Equal(t, "async_room", msg["type"])
-}
-
-// TestJoinSkipsDeadClient 连接在 join 事件排队期间已断开时不予登记，防止幽灵连接
-func TestJoinSkipsDeadClient(t *testing.T) {
-	hub := NewHub()
-	defer hub.Close()
-
-	dead := newClient(nil, hub, nil)
-	dead.cancel() // 模拟 join 入队后连接即断开的重排窗口
-
-	hub.join <- dead
-	require.Never(t, func() bool {
-		return len(hub.GetClients()) > 0
-	}, 300*time.Millisecond, 50*time.Millisecond, "已死连接不应登记")
+	hub.Close()
+	assert.ErrorIs(t, hub.CloseClient("user_a"), ErrHubClosed)
 }

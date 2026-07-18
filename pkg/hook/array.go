@@ -3,6 +3,8 @@ package hook
 import "slices"
 
 // Reverse 反转数组
+//
+// Deprecated: 请改用标准库 slices.Reverse；若需保留原切片，先 slices.Clone 再 slices.Reverse。
 func Reverse[T any](s []T) []T {
 	arr := slices.Clone(s)
 	i, j := 0, len(s)-1
@@ -24,6 +26,8 @@ func Unique[T comparable](values []T) bool {
 }
 
 // Any 存在指定的值即返回 true
+//
+// Deprecated: 请改用标准库 slices.ContainsFunc。
 func Any[T comparable](items []T, callback func(T) bool) bool {
 	return slices.ContainsFunc(items, callback)
 }

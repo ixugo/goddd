@@ -7,7 +7,9 @@ import (
 	"log/slog"
 	"maps"
 	"net/http"
+	"runtime/debug"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -37,32 +39,34 @@ const (
 
 // Client WebSocket 客户端实现
 type Client struct {
-	id       string
+	// id 存 string，鉴权后不再变，用原子值承载：ID() 是各收发路径的高频读操作，原子读避免锁开销
+	id       atomic.Value
 	conn     *websocket.Conn
 	hub      *Hub
 	send     chan Message
 	metadata map[string]any
-	mu       sync.RWMutex
+	mu       sync.RWMutex // 仅护 metadata 与 request
 	ctx      context.Context
 	cancel   context.CancelFunc
-	isAuth   bool
-	request  *http.Request // 升级时的原始 HTTP 请求，供业务 handler 读取请求上下文
+	// isAuth 每条入站消息都要检查，用原子布尔消除读路径上的互斥
+	isAuth  atomic.Bool
+	request *http.Request // 升级时的原始 HTTP 请求，供业务 handler 读取请求上下文
 }
 
 func newClient(conn *websocket.Conn, h *Hub, r *http.Request) *Client {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Client{
-		// 连接建立即分配唯一 ID，鉴权处理器可返回业务 ID 覆盖之
-		id:       uuid.NewString(),
+	client := &Client{
 		conn:     conn,
 		hub:      h,
 		send:     make(chan Message, h.config.MessageQueueSize),
 		metadata: make(map[string]any),
 		ctx:      ctx,
 		cancel:   cancel,
-		isAuth:   false,
 		request:  r,
 	}
+	// 连接建立即分配唯一 ID，鉴权处理器可返回业务 ID 覆盖之
+	client.id.Store(uuid.NewString())
+	return client
 }
 
 // Request 返回客户端升级时的原始 HTTP 请求，业务 handler 可用它拼接完整 URL 等。
@@ -75,15 +79,11 @@ func (c *Client) Request() *http.Request {
 
 // ID 返回客户端 ID：连接建立时为 UUID，鉴权成功后被业务 ID 覆盖（鉴权回调返回空 ID 则保留 UUID）
 func (c *Client) ID() string {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.id
+	return c.id.Load().(string)
 }
 
 func (c *Client) setID(id string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.id = id
+	c.id.Store(id)
 }
 
 // Send 将消息投入发送队列，队列满时阻塞等待，直至队列可用、连接关闭或 ctx 超时。
@@ -157,15 +157,11 @@ func (c *Client) touch() {
 }
 
 func (c *Client) setAuth(auth bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.isAuth = auth
+	c.isAuth.Store(auth)
 }
 
 func (c *Client) isAuthenticated() bool {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.isAuth
+	return c.isAuth.Load()
 }
 
 // IsAuthenticated 检查客户端是否已通过鉴权
@@ -175,6 +171,8 @@ func (c *Client) IsAuthenticated() bool {
 
 // 读取消息
 func (c *Client) readPump() {
+	// 鉴权/错误等业务回调在此协程内同步执行，其 panic 须拦截，避免全进程陪葬
+	defer recoverLog("read pump panic", "client_id", c.ID())
 	defer func() {
 		if c.hub != nil {
 			// 注销事件不可丢弃（丢弃会产生幽灵连接），阻塞投递直至 run() 消费或 Hub 关闭
@@ -209,39 +207,39 @@ func (c *Client) readPump() {
 			// 任意入站消息均视为活跃信号，与 Pong 一样顺延读超时
 			c.touch()
 
-			// 解析完整的消息
-			var rawMsg map[string]any
-			if err := json.Unmarshal(messageBytes, &rawMsg); err != nil {
+			// 解析消息信封：只解 type 与 data 外壳，data 子树保留原始字节，
+			// 由强类型处理器直灌，不在此处物化 map
+			var envelope struct {
+				Type string          `json:"type"`
+				Data json.RawMessage `json:"data"`
+			}
+			if err := json.Unmarshal(messageBytes, &envelope); err != nil {
 				c.handleError(ErrInvalidMessage)
 				continue
 			}
-
-			msgType, ok := rawMsg["type"].(string)
-			if !ok {
+			if envelope.Type == "" {
 				c.handleError(ErrInvalidMessage)
 				continue
-			}
-
-			// 提取 data 字段作为 payload
-			var payload any
-			if data, exists := rawMsg["data"]; exists {
-				payload = data
-			} else {
-				// 如果没有 data 字段，将除了 type 之外的所有字段作为 payload
-				delete(rawMsg, "type")
-				if len(rawMsg) > 0 {
-					payload = rawMsg
-				}
 			}
 
 			// 创建消息对象
 			message := &StandardMessage{
-				MsgType: msgType,
-				Payload: payload,
+				MsgType: envelope.Type,
+				raw:     envelope.Data,
+			}
+			if len(envelope.Data) == 0 {
+				// 无 data 字段时，将除了 type 之外的所有字段作为 payload
+				var rawMsg map[string]any
+				if err := json.Unmarshal(messageBytes, &rawMsg); err == nil {
+					delete(rawMsg, "type")
+					if len(rawMsg) > 0 {
+						message.Payload = rawMsg
+					}
+				}
 			}
 
 			// 处理系统消息
-			switch msgType {
+			switch envelope.Type {
 			case MsgTypeAuth:
 				if err := c.handleAuth(message); err != nil {
 					continue
@@ -254,8 +252,8 @@ func (c *Client) readPump() {
 				}
 				// 使用注册的处理器处理消息
 				if c.hub != nil {
-					handler := c.hub.getHandler(msgType)
-					if err := handler.Handle(c, message); err != nil {
+					handler := c.hub.getHandler(envelope.Type)
+					if err := c.safeHandle(handler, message); err != nil {
 						c.handleError(err)
 					}
 				}
@@ -266,6 +264,7 @@ func (c *Client) readPump() {
 
 // 写入消息
 func (c *Client) writePump() {
+	defer recoverLog("write pump panic", "client_id", c.ID())
 	ticker := time.NewTicker(c.hub.config.HeartbeatInterval)
 	defer func() {
 		ticker.Stop()
@@ -347,6 +346,18 @@ func (c *Client) handleAuth(message Message) error {
 
 	c.Send(c.ctx, NewMessage(MsgTypeAuthOK, nil))
 	return nil
+}
+
+// safeHandle 调用业务消息处理器，处理器 panic 时捕获并记录日志、返回 nil。
+// 消息处理器由业务方编写，单条消息的 panic 不应打断读循环、更不应击垮进程。
+func (c *Client) safeHandle(handler Handler, message Message) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("message handler panic", "client_id", c.ID(), "msg_type", message.Type(), "error", r, "stack", debug.Stack())
+			err = nil
+		}
+	}()
+	return handler.Handle(c, message)
 }
 
 func (c *Client) handleError(err error) {

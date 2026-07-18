@@ -26,6 +26,7 @@ package main
 
 import (
     "context"
+    "encoding/json"
     "fmt"
     "net/http"
 
@@ -36,18 +37,23 @@ func main() {
     hub := ws.NewHub()
     defer hub.Close()
 
-    // 鉴权：验证 auth 消息，返回业务 ID
+    // 鉴权：验证 auth 消息，返回业务 ID。Data() 返回原始 JSON 字节
     hub.SetAuthHandler(func(message ws.Message) (string, error) {
-        token, ok := message.Data()["token"].(string)
-        if !ok || token != "secret" {
+        var data struct {
+            Token string `json:"token"`
+        }
+        if err := json.Unmarshal(message.Data(), &data); err != nil {
+            return "", err
+        }
+        if data.Token != "secret" {
             return "", fmt.Errorf("鉴权失败")
         }
         return "user_001", nil
     })
 
-    // 注册消息处理器
-    hub.RegisterHandler("echo", ws.HandlerFunc(func(client *ws.Client, message ws.Message) error {
-        return client.Send(context.Background(), ws.NewMessage("echo", message.Data()))
+    // 注册消息处理器：ws.Wrap 将消息数据绑定到强类型后再调用业务函数
+    hub.Handle("echo", ws.Wrap(func(client *ws.Client, data map[string]any) error {
+        return client.Send(context.Background(), ws.NewMessage("echo", data))
     }))
 
     http.Handle("/ws", hub)
@@ -71,6 +77,13 @@ func main() {
 {"type": "echo", "data": {"content": "hello"}}
 ```
 
+## 性能设计
+
+库的序列化路径为三处热点做了零分配优化，业务方无感知、无需配合：
+
+1. **序列化结果缓存**：`StandardMessage.Marshal` 以 `sync.Once` 缓存结果。广播/群发时同一消息实例被分发到所有连接，N 个连接共享一趟序列化，而非每连接各跑一遍。实测 100 连接广播：allocs/op 11 → 5，B/op 546 → 380。代价约束：消息发出后不可再改 Payload（消息合约本即只读）。
+2. **入站零 map 物化**：readPump 只解 `type` + `data` 信封外壳，`data` 子树以 `json.RawMessage` 保留原始字节，经 `ws.Wrap` 直灌强类型结构体，全程不物化 `map[string]any`，较 map 中转省一趟 marshal 与 map 分配。
+
 ## 回调一览
 
 所有回调通过 `hub.SetXxxHandler` 注册；除鉴权回调外均在**独立 goroutine** 中执行，内部可安全调用任意 Hub 方法。
@@ -81,7 +94,7 @@ func main() {
 | 连接回调 | `func(client *Client) error` | 新连接注册到 Hub 后 | `SetConnectHandler` |
 | 断开回调 | `func(client *Client, err error)` | 连接从 Hub 除名后 | `SetDisconnectHandler` |
 | 错误回调 | `func(client *Client, err error)` | 消息解析失败、handler 报错、未鉴权发业务消息等 | `SetErrorHandler` |
-| 消息处理器 | `func(client *Client, message Message) error` | 收到对应 `type` 的业务消息 | `RegisterHandler(type, handler)` |
+| 消息处理器 | `func(client *Client, message Message) error` | 收到对应 `type` 的业务消息 | `Handle(type, handler)` |
 | 默认处理器 | 同上 | 收到未注册 `type` 的消息 | `SetDefaultHandler` |
 
 ### 连接回调的适用场景
@@ -146,6 +159,7 @@ sequenceDiagram
 | `Broadcast(message)` | 向所有已认证客户端广播（队列满的慢连接跳过并记日志） |
 | `SendToClient(ctx, id, message)` | 定向发送，等待投递结果，ctx 控制超时 |
 | `SendToClientAsync(ctx, id, message)` | 定向发送，仅等入队即返回，吞吐优先 |
+| `CloseClient(id)` | 按 ID 踢下线，该 ID 所有连接一并断开，幂等（ID 不存在返回 nil） |
 | `SendToGroup(ctx, groupID, message)` | 组内发送，等待投递完毕，慢连接跳过并记日志 |
 | `SendToGroupAsync(ctx, groupID, message)` | 组内发送，仅等入队即返回 |
 | `GroupSize(groupID)` | 组内连接数，组不存在返回 0 |
@@ -168,14 +182,15 @@ sequenceDiagram
 一个连接可加入多个分组，组名由业务自定（直播间 ID、租户 ID、频道名等），组不存在时隐式创建，人去楼空时隐式销毁。分组成员关系由 Hub 单 goroutine 串行维护，无锁；断开连接自动清出所有分组，业务方无需在断开回调中手动清理。
 
 ```go
-hub.RegisterHandler("join", ws.HandlerFunc(func(client *ws.Client, message ws.Message) error {
-    pushID, _ := message.Data()["push_id"].(string)
-    if pushID == "" {
+hub.Handle("join", ws.Wrap(func(client *ws.Client, data struct {
+    PushID string `json:"push_id"`
+}) error {
+    if data.PushID == "" {
         return client.Send(context.Background(), ws.NewErrorMessage("push_id 不能为空"))
     }
-    client.JoinGroup(pushID)
+    client.JoinGroup(data.PushID)
     return client.Send(context.Background(), ws.NewMessage("join_ok", map[string]any{
-        "viewers": hub.GroupSize(pushID),
+        "viewers": hub.GroupSize(data.PushID),
     }))
 }))
 
@@ -205,6 +220,24 @@ _ = hub.SendToGroup(context.Background(), "push_123", ws.NewMessage("viewer_join
 | `GetClientsQueueSize` | 16 | 客户端列表请求通道缓冲 |
 | `EnableCompression` | false | 启用 WebSocket 压缩扩展 |
 | `CheckOrigin` | 放行 | 跨域校验函数，返回 false 拒绝升级 |
+
+## 基准测试
+
+测试环境：Apple M1 Pro（arm64），Go 1.25，每项 5 轮取中位数（`go test -bench . -benchmem -benchtime 1s -count 5`）。
+
+| 用例 | 场景 | ns/op | B/op | allocs/op |
+|---|---|---|---|---|
+| `BenchmarkSendToClient` | 1000 连接，并行定向投递 | ~4,683 | 257 | 6 |
+| `BenchmarkSendToClientAsync` | 1000 连接，并行异步投递（仅入队） | ~3,957 | 272 | 6 |
+| `BenchmarkBroadcast` | 100 连接，广播入队 | ~5,585 | 563 | 14 |
+| `BenchmarkHandleMessage` | 单连接 echo 全链路往返（解析→路由→强类型绑定→回包） | ~45,290 | 3,092 | 57 |
+| `BenchmarkGetClients` | 100 连接，客户端列表快照 | ~3,474 | 1,032 | 3 |
+
+说明：
+
+- `BenchmarkHandleMessage` 含本机 TCP 完整往返（写→服务端处理→回包→读），其中 loopback 传输约占 24µs（以裸 gorilla echo 为参照），框架侧开销约 21µs。
+- `BenchmarkBroadcast` 压测时生产速度高于消费速度，会出现 `broadcast channel is full` 告警日志，属慢连接保护语义的预期行为，数值反映的是入队成本而非端到端投递。
+- 横向对比（同机同负载 echo 往返）：HotGo 框架 `internal/websocket` 封装约 46,700 ns/op、78 allocs/op；本库约 45,290 ns/op、57 allocs/op，延迟低约 3%，分配少约 27%。
 
 ## 最佳实践
 

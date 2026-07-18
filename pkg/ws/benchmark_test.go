@@ -2,6 +2,7 @@ package ws
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -10,7 +11,8 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/stretchr/testify/require"
+
+	"github.com/ixugo/goddd/pkg/assert"
 )
 
 func BenchmarkSendToClient(b *testing.B) {
@@ -19,7 +21,10 @@ func BenchmarkSendToClient(b *testing.B) {
 
 	// 设置简单鉴权
 	hub.SetAuthHandler(func(message Message) (string, error) {
-		data := message.Data()
+		data := map[string]any{}
+		if err := json.Unmarshal(message.Data(), &data); err != nil {
+			return "", err
+		}
 		token, ok := data["token"].(string)
 		if !ok {
 			return "", ErrAuthFailed
@@ -41,7 +46,9 @@ func BenchmarkSendToClient(b *testing.B) {
 	// 建立连接并鉴权
 	for i := range numClients {
 		conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
-		require.NoError(b, err)
+		if !assert.NoError(b, err) {
+			return
+		}
 		clients[i] = conn
 
 		// 鉴权
@@ -50,12 +57,16 @@ func BenchmarkSendToClient(b *testing.B) {
 			"data": map[string]any{"token": fmt.Sprintf("%d", i)},
 		}
 		err = conn.WriteJSON(authMsg)
-		require.NoError(b, err)
+		if !assert.NoError(b, err) {
+			return
+		}
 
 		// 读取鉴权响应
 		var response map[string]any
 		err = conn.ReadJSON(&response)
-		require.NoError(b, err)
+		if !assert.NoError(b, err) {
+			return
+		}
 
 		clientIDs[i] = fmt.Sprintf("user_%d", i)
 	}
@@ -88,7 +99,10 @@ func BenchmarkBroadcast(b *testing.B) {
 
 	// 设置简单鉴权
 	hub.SetAuthHandler(func(message Message) (string, error) {
-		data := message.Data()
+		data := map[string]any{}
+		if err := json.Unmarshal(message.Data(), &data); err != nil {
+			return "", err
+		}
 
 		token, ok := data["token"].(string)
 		if !ok {
@@ -110,7 +124,9 @@ func BenchmarkBroadcast(b *testing.B) {
 	// 建立连接并鉴权
 	for i := range numClients {
 		conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
-		require.NoError(b, err)
+		if !assert.NoError(b, err) {
+			return
+		}
 		clients[i] = conn
 
 		// 鉴权
@@ -119,12 +135,16 @@ func BenchmarkBroadcast(b *testing.B) {
 			"data": map[string]any{"token": fmt.Sprintf("%d", i)},
 		}
 		err = conn.WriteJSON(authMsg)
-		require.NoError(b, err)
+		if !assert.NoError(b, err) {
+			return
+		}
 
 		// 读取鉴权响应
 		var response map[string]any
 		err = conn.ReadJSON(&response)
-		require.NoError(b, err)
+		if !assert.NoError(b, err) {
+			return
+		}
 	}
 
 	// 等待所有连接建立
@@ -148,7 +168,10 @@ func BenchmarkSendToClientAsync(b *testing.B) {
 	defer hub.Close()
 
 	hub.SetAuthHandler(func(message Message) (string, error) {
-		data := message.Data()
+		data := map[string]any{}
+		if err := json.Unmarshal(message.Data(), &data); err != nil {
+			return "", err
+		}
 		token, ok := data["token"].(string)
 		if !ok {
 			return "", ErrAuthFailed
@@ -167,17 +190,23 @@ func BenchmarkSendToClientAsync(b *testing.B) {
 
 	for i := range numClients {
 		conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
-		require.NoError(b, err)
+		if !assert.NoError(b, err) {
+			return
+		}
 		clients[i] = conn
 
 		err = conn.WriteJSON(map[string]any{
 			"type": MsgTypeAuth,
 			"data": map[string]any{"token": fmt.Sprintf("%d", i)},
 		})
-		require.NoError(b, err)
+		if !assert.NoError(b, err) {
+			return
+		}
 
 		var response map[string]any
-		require.NoError(b, conn.ReadJSON(&response))
+		if !assert.NoError(b, conn.ReadJSON(&response)) {
+			return
+		}
 
 		clientIDs[i] = fmt.Sprintf("user_%d", i)
 	}
@@ -200,12 +229,67 @@ func BenchmarkSendToClientAsync(b *testing.B) {
 	}
 }
 
+// BenchmarkHandleMessage 压测入站消息处理链路：readPump 解析 → 路由派发 → 处理器执行。
+// 处理器将消息数据绑定到强类型结构体，模拟真实业务用法。
+func BenchmarkHandleMessage(b *testing.B) {
+	type echoData struct {
+		CPU    float64 `json:"cpu"`
+		Memory float64 `json:"memory"`
+		Disk   float64 `json:"disk"`
+	}
+
+	hub := NewHub()
+	defer hub.Close()
+
+	hub.Handle("echo", Wrap(func(c *Client, d echoData) error {
+		return c.Send(context.Background(), NewMessage("echo", d))
+	}))
+
+	server := httptest.NewServer(http.HandlerFunc(hub.ServeHTTP))
+	defer server.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	if !assert.NoError(b, err) {
+		return
+	}
+	defer conn.Close()
+
+	// 先发鉴权消息打通链路，读走 auth_ok 回执
+	if !assert.NoError(b, conn.WriteJSON(map[string]any{"type": MsgTypeAuth})) {
+		return
+	}
+	var authResp map[string]any
+	if !assert.NoError(b, conn.ReadJSON(&authResp)) {
+		return
+	}
+
+	msg := map[string]any{
+		"type": "echo",
+		"data": map[string]any{"cpu": 1.1, "memory": 2.2, "disk": 3.3},
+	}
+	var resp map[string]any
+
+	b.ResetTimer()
+	for b.Loop() {
+		if !assert.NoError(b, conn.WriteJSON(msg)) {
+			return
+		}
+		if !assert.NoError(b, conn.ReadJSON(&resp)) {
+			return
+		}
+	}
+}
+
 func BenchmarkGetClients(b *testing.B) {
 	hub := NewHub()
 	defer hub.Close()
 
 	hub.SetAuthHandler(func(message Message) (string, error) {
-		data := message.Data()
+		data := map[string]any{}
+		if err := json.Unmarshal(message.Data(), &data); err != nil {
+			return "", err
+		}
 		token, ok := data["token"].(string)
 		if !ok {
 			return "", ErrAuthFailed
@@ -223,17 +307,23 @@ func BenchmarkGetClients(b *testing.B) {
 
 	for i := range numClients {
 		conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
-		require.NoError(b, err)
+		if !assert.NoError(b, err) {
+			return
+		}
 		clients[i] = conn
 
 		err = conn.WriteJSON(map[string]any{
 			"type": MsgTypeAuth,
 			"data": map[string]any{"token": fmt.Sprintf("%d", i)},
 		})
-		require.NoError(b, err)
+		if !assert.NoError(b, err) {
+			return
+		}
 
 		var response map[string]any
-		require.NoError(b, conn.ReadJSON(&response))
+		if !assert.NoError(b, conn.ReadJSON(&response)) {
+			return
+		}
 	}
 
 	time.Sleep(100 * time.Millisecond)
