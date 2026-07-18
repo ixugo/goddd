@@ -1,6 +1,7 @@
 package reason
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -105,10 +106,15 @@ func (e *Error) Withf(format string, args ...any) CustomError {
 }
 
 // WithCause 返回一个携带底层错误的新错误，用于 errors.Is/As 链路解包。
-// 原错误不会被修改，符合 CustomError 不可变语义。
+// 首次调用直接设置 Cause；再次调用时通过 errors.Join 并列累加而非覆盖，
+// 链式调用不丢前因。原错误不会被修改，符合 CustomError 不可变语义。
 func (e *Error) WithCause(err error) CustomError {
 	newErr := *e
-	newErr.Cause = err
+	if newErr.Cause != nil {
+		newErr.Cause = errors.Join(newErr.Cause, err)
+	} else {
+		newErr.Cause = err
+	}
 	return &newErr
 }
 
