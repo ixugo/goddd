@@ -93,7 +93,7 @@ func (c *Core) GetUser(id int64) (*UserOutput, error) {
 |---|---|---|
 | `With(args...)` | 追加 details（开发者排查信息） | `.With("用户 ID 必须大于 0")` |
 | `Withf(format, args...)` | 格式化追加 details | `.Withf("ID=%d 不合法", id)` |
-| `WithCause(err)` | 包裹底层错误，保留 `errors.Is/As` 链路 | `.WithCause(err)` |
+| `WithCause(err)` | 包裹底层错误，保留 `errors.Is/As` 链路；多次调用时并列累加 | `.WithCause(err)` |
 | `WithMsg(s)` | 覆盖面向用户的提示信息 | `.WithMsg("未找到该用户")` |
 | `WithHTTPStatus(code)` | 覆盖 HTTP 响应状态码 | `.WithHTTPStatus(401)` |
 
@@ -128,6 +128,16 @@ Core 返回 `nil` error 时，`WrapH` 调用 `web.Success` 直接输出业务数
 cause := errors.New("connection refused")
 err := reason.ErrDB.WithCause(cause).With("查询用户失败")
 errors.Is(err, cause) // true
+```
+
+多次调用 `WithCause` 时，底层错误通过 `errors.Join` 并列累加，不会覆盖前一个——这在逐层包裹错误时尤为重要，每一层的根因都不会丢：
+
+```go
+cause1 := errors.New("connection refused")
+cause2 := errors.New("timeout")
+err := reason.ErrDB.WithCause(cause1).WithCause(cause2)
+errors.Is(err, cause1) // true
+errors.Is(err, cause2) // true
 ```
 
 **`Is(target error) bool`**：按 `Reason` 字符串比较，而非指针比较。即使经过 `With/WithMsg` 产生了新对象，Reason 相同就匹配：

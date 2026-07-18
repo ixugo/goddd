@@ -129,6 +129,19 @@ func TestWithCause_MultiLevel(t *testing.T) {
 	}
 }
 
+func TestWithCause_Accumulate(t *testing.T) {
+	cause1 := errors.New("cause 1")
+	cause2 := errors.New("cause 2")
+	e := NewError("accumulate_e1", "e1").WithCause(cause1).WithCause(cause2)
+
+	if !errors.Is(e, cause1) {
+		t.Fatal("链式 WithCause 不应丢失第一个 cause")
+	}
+	if !errors.Is(e, cause2) {
+		t.Fatal("链式 WithCause 应包含第二个 cause")
+	}
+}
+
 func TestIs_ByReason(t *testing.T) {
 	e := NewError("is_reason_e1", "e1")
 	e2 := e.With("detail").WithMsg("不同的 msg").WithHTTPStatus(500)
