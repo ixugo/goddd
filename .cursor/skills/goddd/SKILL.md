@@ -1,6 +1,18 @@
 ---
 name: goddd
-description: GoDDD 六边形架构开发指南。当使用 goddd 架构实现代码、创建新领域、新增 CRUD、数据库表定义、领域间依赖解耦、领域内子包拆分与依赖、排序功能、Core 层需要 HTTP 请求信息时使用此技能。也应在以下隐含场景主动触发：新增业务模块、讨论 Core/Store/API 分层、使用 goddd gen 生成代码、实现适配器模式、添加 Wire provider、使用 web.WrapH/PagerFilter/DateFilter/WithContext 等框架工具、Core 需要后台任务/定时任务/心跳检测/goroutine、优雅停机、Wire 循环依赖、Core 生命周期分离、SessionHandler、修改 store/xxxcache 缓存层（判断内存缓存 vs Redis 缓存、SETNX/SETEX 防竞态、WarmUp 预热）、领域内子包间依赖方向、子包是否需要接口隔离、子包循环依赖处理。即使用户没有提到"goddd"，只要涉及六边形架构、领域驱动、依赖倒置、CRUD 生成、Core 职责过重、缓存层改造、子包拆分依赖等概念，都应使用此技能。
+description: >
+  GoDDD 六边形架构开发指南。当使用 goddd 架构实现代码、创建新领域、新增 CRUD、
+  数据库表定义、领域间依赖解耦、领域内子包拆分与依赖、排序功能、
+  Core 层需要 HTTP 请求信息时使用此技能。
+  也应在以下隐含场景主动触发：新增业务模块、讨论 Core/Store/API 分层、
+  使用 goddd gen 生成代码、实现适配器模式、添加 Wire provider、
+  使用 web.WrapH/PagerFilter/DateFilter/WithContext 等框架工具、
+  Core 需要后台任务/定时任务/心跳检测/goroutine、优雅停机、Wire 循环依赖、
+  Core 生命周期分离、SessionHandler、
+  修改 store/xxxcache 缓存层（判断内存缓存 vs Redis 缓存、SETNX/SETEX 防竞态、
+  WarmUp 预热）、领域内子包间依赖方向、子包是否需要接口隔离、子包循环依赖处理。
+  即使用户没有提到"goddd"，只要涉及六边形架构、领域驱动、依赖倒置、CRUD 生成、
+  Core 职责过重、缓存层改造、子包拆分依赖等概念，都应使用此技能。
 ---
 
 # GoDDD 六边形架构开发指南

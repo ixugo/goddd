@@ -1,6 +1,11 @@
 ---
 name: goddd-git-workflow
-description: Git 提交与分支管理规范。当进行 Git 提交、创建分支、合并代码、打版本 tag、生成 Changelog 时使用此技能。也应在以下场景主动触发：编写 commit message、选择 commit type、决定分支命名、合并策略（rebase vs merge）、版本号管理、破坏性变更标注。即使用户没有提到"git"，只要涉及代码提交、版本发布、分支管理、变更日志等概念，都应使用此技能。
+description: >
+  Git 提交与分支管理规范。当进行 Git 提交、创建分支、合并代码、打版本 tag、
+  生成 Changelog 时使用此技能。也应在以下场景主动触发：编写 commit message、
+  选择 commit type、决定分支命名、合并策略（rebase vs merge）、版本号管理、
+  破坏性变更标注。即使用户没有提到"git"，只要涉及代码提交、版本发布、分支管理、
+  变更日志等概念，都应使用此技能。
 ---
 
 # Git 工作流规范
@@ -19,7 +24,18 @@ Git 提交与分支管理规范。
 
 - `(scope)` 可选，填写被修改的业务领域名（如 `rule`、`phone`、`sms`、`sched`）
 - `chore` 类型通常不带 scope
-- subject 用祈使句，不超过 50 字符，首字母小写，末尾无句号
+- subject 用祈使句，不超过 30 字符，首字母小写，末尾无句号
+- 字符计数规则：一个汉字、一个字母、一个标点均算 1 个字符
+
+### 语言
+
+subject 的语言跟随用户与 AI 交互所用的语言：
+
+- 用户用中文交互，subject 就用中文描述（如 `feat(ws): 新增 WebSocket 连接管理库`）
+- 用户用英文交互，subject 就用英文描述（如 `feat(ws): add websocket manager`）
+- 会话中途切换了交互语言，以提交时当前使用的语言为准
+
+`type`、`scope`、结构关键字（如 `BREAKING CHANGE`）保持英文不变，只有描述性文字自适应。
 
 ### 类型
 

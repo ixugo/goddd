@@ -1,6 +1,11 @@
 ---
 name: goddd-api-doc
-description: 根据 Go Gin 路由代码生成或更新 OpenAPI 3.1 接口文档（YAML 格式）。识别特征：项目使用 web.WrapH 注册路由。在此类项目中，API 层发生以下任何变动时必须自动执行文档同步（不等用户要求）：handler 函数签名变更、路由路径/方法变更、请求/响应结构体字段增删改、model 字段与 JSON 映射变更（字段重命名、类型变更）、新增接口后尚无对应 .go.yaml 文件。也在用户要求"更新接口文档"、"更新 apifox"、"同步文档"时触发。
+description: >
+  Apifox 同步、上传接口文档到 Apifox、生成或更新 OpenAPI 3.1 YAML 接口文档。
+  当用户提到 apifox、同步 apifox、更新到 apifox、上传到 apifox、.go.yaml 文件、
+  接口文档、同步文档、生成文档时使用此技能。
+  也在项目使用 web.WrapH 注册路由且 API 层发生变动时自动触发。
+  docs/api/*.go.yaml 文件的任何操作都应触发此技能。
 ---
 
 # 更新接口文档
