@@ -9,9 +9,11 @@ import (
 
 // StructMap 其目的是将已知的参数作为结构体调用，未知的参数不动
 // 例如 s.Data.Username
+// Example:
+// type User = StructMap[UserInfo]
 type StructMap[T any] struct {
-	Data T
-	Map
+	Data T // 泛型数据
+	Map    // 原始数据
 }
 
 // UnmarshalJSON implements [json.Unmarshaler].
@@ -33,6 +35,7 @@ func (s StructMap[T]) MarshalJSON() ([]byte, error) {
 		b, _ := json.Marshal(s.Data)
 		_ = json.Unmarshal(b, &cache)
 	}
+	// 序列化时允许覆盖原始数据
 	maps.Copy(s.Map, cache)
 	return json.Marshal(s.Map)
 }

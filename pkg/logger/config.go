@@ -17,6 +17,7 @@ type Config struct {
 	Debug          bool    // 是否开启 debug，日志会同时写终端和文件
 	Level          string  // debug/info/warn/error
 	Sampler        Sampler // 采样器，用于控制日志写入频率(可选)
+	Events         Events  // 日志事件回调，按级别触发(可选)，回调同步执行，耗时操作需自行异步化
 	FileConfig             // 日志文件配置
 }
 
@@ -113,6 +114,12 @@ func (c Config) SetLevel(level string) Config {
 // SetSampler 设置采样器，用于控制日志写入频率(可选)
 func (c Config) SetSampler(sampler Sampler) Config {
 	c.Sampler = sampler
+	return c
+}
+
+// SetEvents 设置日志事件回调，按级别触发(可选)
+func (c Config) SetEvents(events Events) Config {
+	c.Events = events
 	return c
 }
 
