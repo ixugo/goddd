@@ -53,6 +53,8 @@ func newRotateWriter(cfg FileConfig) *timberjack.Logger {
 	}
 }
 
+var _ slog.Handler = (*zapslog.Handler)(nil)
+
 // SetupSlog 初始化日志，建议使用 NewDefaultConfig() 创建配置
 func SetupSlog(cfg Config) (*slog.Logger, func()) {
 	SetLevel(cfg.Level)
@@ -61,9 +63,12 @@ func SetupSlog(cfg Config) (*slog.Logger, func()) {
 
 	r := newRotateWriter(cfg.FileConfig)
 	log := slog.New(
-		newSlog(
-			NewJSONLogger(cfg.Debug, r, sampler).Core(),
-			zapslog.WithCaller(cfg.Debug),
+		New(
+			zapslog.NewHandler(
+				NewJSONLogger(cfg.Debug, r, sampler).Core(),
+				zapslog.WithCaller(cfg.Debug),
+			),
+			WithEvents(cfg.Events),
 		),
 	)
 
