@@ -34,7 +34,6 @@ tables/
 *.tar
 *.zip
 .idea/
-data/
 logs/
 build/
 __debug_bin*
@@ -44,3 +43,4 @@ tables/
 CLAUDE.local.md
 *.mp4
 *.mp3
+**/.DS_Store
