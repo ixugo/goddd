@@ -128,14 +128,14 @@ info:
 # BUILD
 # ==================================================================================== #
 
-BUILD_DIR_ROOT := ./build
+BUILD_DIR_ROOT	:= ./build
 # 常量定义，如需修改，请修改命令内的变量
-GOOS = $(shell go env GOOS)
-GOARCH = $(shell go env GOARCH)
+GOOS		= $(shell go env GOOS)
+GOARCH		= $(shell go env GOARCH)
 # cgo 默认跟随环境变量，如果明确不用 cgo，可以设置为 0
-CGO_ENABLED = $(shell go env CGO_ENABLED)
+CGO_ENABLED	= $(shell go env CGO_ENABLED)
 
-IMAGE_NAME := $(MODULE_NAME):latest
+IMAGE_NAME	:= $(MODULE_NAME):latest
 
 ## build/clean: 清理构建缓存目录
 .PHONY: build/clean
@@ -154,7 +154,7 @@ build/local:
 			-X main.buildVersion=$(VERSION) \
 			-X main.gitBranch=$(BRANCH) \
 			-X main.gitHash=$(HASH_AND_DATE) \
-			-X main.buildTimeAt=$(shell date +%s) \
+			-X main.buildTime=$(shell date +%s) \
 			-X main.release=true \
 			" -o=$(dir)/bin ./main.go
 	@echo '>>> OK'
