@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/arl/statsviz"
 	"github.com/gin-gonic/gin"
 )
 
@@ -96,6 +97,26 @@ func SetupPProf(r gin.IRouter, ips *[]string) {
 	debug.GET("/pprof/threadcreate", gin.WrapH(pprof.Handler("threadcreate")))
 	debug.GET("/pprof/goroutineleak", gin.WrapH(pprof.Handler("goroutineleak")))
 	debug.GET("/vars", gin.WrapH(expvar.Handler()))
+
+	setupStatsviz(debug)
+}
+
+func setupStatsviz(r gin.IRouter) {
+	srv, _ := statsviz.NewServer()
+	if srv == nil {
+		return
+	}
+
+	ws := srv.Ws()
+	index := srv.Index()
+
+	r.GET("/statsviz/*path", func(ctx *gin.Context) {
+		if ctx.Param("path") == "/ws" {
+			ws(ctx.Writer, ctx.Request)
+			return
+		}
+		index(ctx.Writer, ctx.Request)
+	})
 }
 
 // SetupMutexProfile 启用互斥锁采样，rate=1 开启采样, rate<=0 关闭采样

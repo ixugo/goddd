@@ -21,9 +21,9 @@ confirm:
 title:
 	@echo -e "\033[34m$(content)\033[0m"
 
-.PHONY: rename
 ## rename: clone 后的模板，需要更新 module 名
 # 例如: make rename name=github.com/name/project
+.PHONY: rename
 rename:
 	@rm -rf .git ./docs/* ./changelog
 	@if [ -z "$(name)" ]; then \
@@ -60,13 +60,24 @@ wire:
 	go generate ./...
 	go mod tidy
 
+
 ## expva/http: 监听网络请求指标
 expva/http:
-	expvarmon --ports=":9999" -i 1s -vars="version,request,requests,responses,goroutines,errors,panics,mem:memstats.Alloc"
+	expvarmon --ports="$${p:-8080}" -i 1s -vars="version,request,requests,responses,goroutines,panics,mem:memstats.HeapAlloc,mem:memstats.HeapSys,mem:memstats.Sys"
 
 ## expva/db: 监听数据库连接指标
 expva/db:
-	expvarmon --ports=":9999" -i 5s -vars="databse.MaxOpenConnections,databse.OpenConnections,database.InUse,databse.Idle"
+	expvarmon --ports="$${p:-8080}" -i 5s -vars="databse.MaxOpenConnections,databse.OpenConnections,database.InUse,databse.Idle"
+
+## statsviz: 打开 statsviz 可视化页面
+# darwin 用 open 打开浏览器，windows 用 start 打开浏览器
+.PHONY: statsviz
+statsviz:
+	@if [ "$(GOOS)" = "windows" ]; then \
+		start http://$${p:-127.0.0.1:8080}/debug/statsviz/; \
+	else \
+		open http://$${p:-127.0.0.1:8080}/debug/statsviz/; \
+	fi
 
 # 发起 100 次请求，每次并发 50
 # hey -n 100 -c 50 http://localhost:9999/healthcheck
