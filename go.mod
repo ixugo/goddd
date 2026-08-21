@@ -4,6 +4,7 @@ go 1.25.0
 
 require (
 	github.com/DeRuina/timberjack v1.4.5
+	github.com/arl/statsviz v0.8.1
 	github.com/gin-gonic/gin v1.12.0
 	github.com/golang-jwt/jwt/v4 v4.5.2
 	github.com/google/uuid v1.6.0
