@@ -1,6 +1,7 @@
 package web
 
 import (
+	"expvar"
 	"fmt"
 	"runtime/debug"
 
@@ -10,11 +11,13 @@ import (
 // Recover from panics and converts the panic to an error so it is
 // reported in Metrics and handled in Errors.
 func Recover() gin.HandlerFunc {
+	panics := expvar.NewInt("panics")
 	return func(c *gin.Context) {
 		// Defer a function to recover from a panic and set the err return
 		// variable after the fact.
 		defer func() {
 			if rec := recover(); rec != nil {
+				panics.Add(1)
 				trace := debug.Stack()
 				err := fmt.Errorf("PANIC [%v] TRACE[%s]", rec, string(trace))
 				fmt.Println(err)

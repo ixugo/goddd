@@ -46,6 +46,26 @@ func CacheControlMaxAge(second int, ignoreFn ...IngoreOption) gin.HandlerFunc {
 }
 
 // EtagHandler 添加 ETag 头，用于缓存静态资源
+func EtagHandlerWithPath(ignoreFn ...IngoreOption) gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		for _, fn := range ignoreFn {
+			if fn(ctx) {
+				ctx.Next()
+				return
+			}
+		}
+		name := ctx.Request.URL.Path
+		etag := `"` + name + `"`
+		ctx.Header("ETag", etag)
+		if match := ctx.GetHeader("If-None-Match"); match != "" && match == etag {
+			ctx.Writer.WriteHeader(http.StatusNotModified)
+			return
+		}
+		ctx.Next()
+	}
+}
+
+// EtagHandler 添加 ETag 头，用于缓存静态资源
 // 不适合大文件场景，每次都是实时计算的
 func EtagHandler(ignoreFn ...IngoreOption) gin.HandlerFunc {
 	return func(ctx *gin.Context) {

@@ -41,6 +41,12 @@ func WriteTimeout(v time.Duration) Option {
 	}
 }
 
+func IdleTimeout(v time.Duration) Option {
+	return func(s *Server) {
+		s.server.IdleTimeout = v
+	}
+}
+
 // DefaultPrintln 默认输出信息
 func DefaultPrintln() Option {
 	return func(s *Server) {
