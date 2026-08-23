@@ -56,13 +56,13 @@ func Run(bc *conf.Bootstrap) {
 
 	select {
 	case s := <-interrupt:
-		slog.Info(`<-interrupt`, "signal", s.String())
+		slog.Info(`<-shutdown`, "signal", s.String())
 	case err := <-svc.Notify():
 		system.ErrPrintf("err: %s\n", err.Error())
-		slog.Error(`<-server.Notify()`, "err", err)
+		slog.Error(`<-shutdown by server.Notify`, "err", err)
 	}
 	if err := svc.Shutdown(); err != nil {
-		slog.Error(`server.Shutdown()`, "err", err)
+		slog.Error(`server.Shutdown`, "err", err)
 	}
 }
 

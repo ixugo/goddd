@@ -6,16 +6,14 @@ import (
 	"net/http"
 	"sync"
 	"time"
-
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
 )
 
 const (
 	defaultReadTimeout     = 10 * time.Second
 	defaultWriteTimeout    = 10 * time.Second
+	defaultIdleTimeout     = 120 * time.Second
 	defaultAddr            = ":8080"
-	defaultShutdownTimeout = 3 * time.Second
+	defaultShutdownTimeout = 5 * time.Second
 )
 
 // Server HTTP 服务
@@ -29,13 +27,18 @@ type Server struct {
 
 // New 初始化并启动路由
 func New(handler http.Handler, opts ...Option) *Server {
+	// protocols 同时启用 HTTP/1.1 与明文 HTTP/2（h2c）
+	protocols := new(http.Protocols)
+	protocols.SetHTTP1(true)
+	protocols.SetUnencryptedHTTP2(true)
+
 	httpSer := http.Server{
-		Addr: defaultAddr,
-		Handler: h2c.NewHandler(handler, &http2.Server{
-			IdleTimeout: time.Minute,
-		}),
+		Addr:         defaultAddr,
+		Handler:      handler,
+		Protocols:    protocols,
 		ReadTimeout:  defaultReadTimeout,
 		WriteTimeout: defaultWriteTimeout,
+		IdleTimeout:  defaultIdleTimeout,
 	}
 
 	s := &Server{
