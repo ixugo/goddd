@@ -21,7 +21,7 @@ func DefaultConfig() Bootstrap {
 		},
 		Data: Data{
 			Database: Database{
-				Dsn:             "./data.db",
+				Dsn:             "./configs/data.db",
 				MaxIdleConns:    10,
 				MaxOpenConns:    50,
 				ConnMaxLifetime: Duration(6 * time.Hour),

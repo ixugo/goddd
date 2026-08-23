@@ -1,0 +1,18 @@
+services:
+  goddd:
+    # 正式部署删除 build 字段
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: goddd:latest
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      - TZ=Asia/Shanghai
+    volumes:
+      # 配置文件目录，容器内通过 -conf 默认读取 ./configs
+      - ./configs:/app/configs
+    logging:
+      options:
+        max-size: "100m"
+        max-file: "3"
