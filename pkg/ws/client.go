@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"maps"
 	"net/http"
-	"runtime/debug"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -353,7 +352,7 @@ func (c *Client) handleAuth(message Message) error {
 func (c *Client) safeHandle(handler Handler, message Message) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			slog.Error("message handler panic", "client_id", c.ID(), "msg_type", message.Type(), "error", r, "stack", debug.Stack())
+			slog.Error("message handler panic", "client_id", c.ID(), "msg_type", message.Type(), "error", r)
 			err = nil
 		}
 	}()

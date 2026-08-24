@@ -67,6 +67,8 @@ func SetupSlog(cfg Config) (*slog.Logger, func()) {
 			zapslog.NewHandler(
 				NewJSONLogger(cfg.Debug, r, sampler).Core(),
 				zapslog.WithCaller(cfg.Debug),
+				// 外层有 Slog 事件分发包装,堆栈需多跳一帧,否则 error 日志的 stacktrace 首帧会落入 log/slog 内部
+				zapslog.WithCallerSkip(1),
 			),
 			WithEvents(cfg.Events),
 		),

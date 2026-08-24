@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"log/slog"
 	"runtime"
-	"runtime/debug"
 	"sync"
 	"time"
 )
@@ -58,7 +57,7 @@ func (g *G) GoRun(fn func()) {
 		defer g.wg.Done()
 		defer func() {
 			if err := recover(); err != nil {
-				err := fmt.Errorf("PANIC[%v] TRACE[%s]", err, debug.Stack())
+				err := fmt.Errorf("PANIC[%v] TRACE: %s", err, PanicStack())
 				g.trace.Error(err.Error())
 			}
 		}()
@@ -73,7 +72,7 @@ func GoSafe(fn func()) {
 			funcName := runtime.FuncForPC(pc).Name()
 			slog.Info("goroutine exit", "func", funcName)
 			if err := recover(); err != nil {
-				err := fmt.Errorf("PANIC[%v] TRACE[%s]", err, debug.Stack())
+				err := fmt.Errorf("PANIC[%v] TRACE: %s", err, PanicStack())
 				slog.Error(err.Error())
 			}
 		}()
