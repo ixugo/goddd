@@ -123,15 +123,15 @@ func Logger(ignoreFn ...IngoreOption) gin.HandlerFunc {
 			"duration_ms", time.Since(now).Milliseconds(),
 		}
 		if code >= 200 && code < 400 {
-			slog.InfoContext(c.Request.Context(), "OK", out...)
+			slog.InfoContext(c.Request.Context(), "request", out...)
 			return
 		}
 		// 约定: 返回给客户端的错误，记录的 key 为 responseErr
 		errStr, _ := c.Get(ResponseErr)
-		if !(code == 404 || code == 401) {
+		if code != 404 && code != 401 {
 			out = append(out, "err", errStr)
 		}
-		slog.WarnContext(c.Request.Context(), "Bad", out...)
+		slog.WarnContext(c.Request.Context(), "request", out...)
 	}
 }
 

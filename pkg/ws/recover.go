@@ -2,14 +2,13 @@ package ws
 
 import (
 	"log/slog"
-	"runtime/debug"
 )
 
 // recoverLog 捕获 panic 并记录错误日志，供各协程顶部 defer 调用。
 // 库内协程与业务回调的 panic 不应击垮整个进程，仅留日志供排查。
 func recoverLog(msg string, args ...any) {
 	if r := recover(); r != nil {
-		slog.Error(msg, append(args, "error", r, "stack", debug.Stack())...)
+		slog.Error(msg, append(args, "err", r)...)
 	}
 }
 
