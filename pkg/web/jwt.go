@@ -1,12 +1,13 @@
 package web
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt/v4"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/ixugo/goddd/pkg/reason"
 )
 
@@ -92,16 +93,16 @@ func AuthMiddleware(secret string, handler ...HandlerOption) gin.HandlerFunc {
 		}
 		const prefix = "Bearer "
 		if len(auth) <= len(prefix) || !strings.EqualFold(auth[:len(prefix)], prefix) {
-			AbortWithStatusJSON(c, reason.ErrUnauthorizedToken.SetMsg("身份验证失败"))
+			AbortWithStatusJSON(c, reason.ErrUnauthorized.WithMsg("身份验证失败"))
 			return
 		}
 		claims, err := ParseToken(auth[len(prefix):], secret)
 		if err != nil {
-			AbortWithStatusJSON(c, reason.ErrUnauthorizedToken.SetMsg("身份验证失败"))
-			return
-		}
-		if err := claims.Valid(); err != nil {
-			AbortWithStatusJSON(c, reason.ErrUnauthorizedToken.SetMsg("请重新登录"))
+			if errors.Is(err, jwt.ErrTokenExpired) {
+				AbortWithStatusJSON(c, reason.ErrUnauthorized.WithMsg("请重新登录"))
+				return
+			}
+			AbortWithStatusJSON(c, reason.ErrUnauthorized.WithMsg("身份验证失败"))
 			return
 		}
 
@@ -166,7 +167,7 @@ func AuthLevel(level int, ignoreFn ...IngoreOption) gin.HandlerFunc {
 
 		l := GetLevel(c)
 		if l > level || l == 0 {
-			Fail(c, reason.ErrBadRequest.SetMsg("权限不足"))
+			Fail(c, reason.ErrBadRequest.WithMsg("权限不足"))
 			c.Abort()
 			return
 		}
@@ -174,12 +175,12 @@ func AuthLevel(level int, ignoreFn ...IngoreOption) gin.HandlerFunc {
 	}
 }
 
-// ParseToken 解析 token
+// ParseToken 解析 token，签名与过期时间等声明校验由 jwt 库一并完成
 func ParseToken(tokenString string, secret string) (*Claims, error) {
 	var claims Claims
 	_, err := jwt.ParseWithClaims(tokenString, &claims, func(*jwt.Token) (any, error) {
 		return []byte(secret), nil
-	}, jwt.WithoutClaimsValidation())
+	})
 	return &claims, err
 }
 
@@ -229,9 +230,9 @@ func NewToken(data map[string]any, secret string, opts ...TokenOptions) (string,
 	claims := Claims{
 		Data: data,
 		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    "goddd.golang.space",                       // 签发人
 			ExpiresAt: jwt.NewNumericDate(now.Add(6 * time.Hour)), // 失效时间
 			IssuedAt:  jwt.NewNumericDate(now),                    // 签发时间
-			Issuer:    "goddd.golang.space",                       // 签发人
 		},
 	}
 	for _, opt := range opts {

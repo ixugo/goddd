@@ -1,6 +1,10 @@
 # Makefile 使用文档
 # https://www.gnu.org/software/make/manual/html_node/index.html
 
+# 生成 RSA 私钥和公钥
+# $ openssl genpkey -algorithm RSA -out private.key -pkeyopt rsa_keygen_bits:2048
+# $ openssl rsa -in private.key -outform PEM -pubout -out public.key
+
 # include .envrc
 SHELL = /bin/bash
 
@@ -25,6 +29,7 @@ title:
 # ==================================================================================== #
 # DEVELOPMENT
 # ==================================================================================== #
+
 
 ## init: 安装开发环境
 init:
