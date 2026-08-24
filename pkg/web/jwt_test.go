@@ -1,6 +1,7 @@
 package web
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
 )
 
 func TestJWT(t *testing.T) {
@@ -20,17 +22,17 @@ func TestJWT(t *testing.T) {
 		t.Fatal(err)
 	}
 	cli, err := ParseToken(token, secret)
+	if err != nil {
+		t.Fatal(err)
+	}
 	v := cli.Data[KeyLevel].(float64)
 	if v != 1 {
 		t.Fatal("level not equal")
 	}
 
-	if err := cli.Valid(); err != nil {
-		t.Fatal(err)
-	}
 	time.Sleep(time.Second)
-	if err := cli.Valid(); err == nil {
-		t.Fatal("valid faild")
+	if _, err := ParseToken(token, secret); !errors.Is(err, jwt.ErrTokenExpired) {
+		t.Fatal("expected token expired error")
 	}
 }
 
