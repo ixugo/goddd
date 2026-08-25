@@ -198,9 +198,9 @@ func HandlerResponseMsg(resp http.Response) error {
 	}
 	var out ResponseMsg
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return reason.ErrServer.SetMsg(out.Msg)
+		return reason.ErrServer.WithMsg(out.Msg)
 	}
-	return reason.ErrServer.SetMsg(resp.Status)
+	return reason.ErrServer.WithMsg(resp.Status)
 }
 
 func HanddleJSONErr(err error) error {

@@ -391,7 +391,7 @@ In the wrapped `web.WrapH`, errors are correctly logged and returned to the fron
 func findUser(in *Input) (*Output, error) {
 	// Database operation error
 	if err != nil {
-		return nil, reason.ErrDB.SetMsg() // The response type is a DB layer error, and the Msg function can modify the user-friendly message
+		return nil, reason.ErrDB.WithMsg() // The response type is a DB layer error, and the Msg function can modify the user-friendly message
 	}
 	// Business logic error
 	if err != nil {

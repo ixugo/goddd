@@ -80,16 +80,16 @@ type CreateEntityInput struct {
 
 ```go
 // 默认 400 — 大多数业务错误
-reason.ErrBadRequest.SetMsg("参数不合法")
+reason.ErrBadRequest.WithMsg("参数不合法")
 reason.ErrDB.Withf("查询失败: %s", err)
-reason.ErrNotFound.SetMsg("资源未找到")
-reason.ErrServer.SetMsg("服务器发生错误")
+reason.ErrNotFound.WithMsg("资源未找到")
+reason.ErrServer.WithMsg("服务器发生错误")
 
 // 显式 401 — 认证失败
-reason.ErrUnauthorizedToken.SetMsg("用户已过期")   // SetHTTPStatus(401)
+reason.ErrUnauthorized.WithMsg("用户已过期")   // SetHTTPStatus(401)
 
 // 显式 429 — 限流
-reason.ErrRateLimit.SetMsg("请求频率过高")          // SetHTTPStatus(429)
+reason.ErrRateLimit.WithMsg("请求频率过高")          // SetHTTPStatus(429)
 ```
 
 - `SetMsg()` — 用户可见提示

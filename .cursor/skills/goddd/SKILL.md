@@ -68,8 +68,8 @@ description: >
 | `ErrServer` | 服务器错误 | 400 |
 | `ErrJSON` / `ErrUsedLogic` / `ErrPermissionDenied` / `ErrTimeout` | 其它业务错误 | 400 |
 | `ErrFileUpload` / `ErrFileTooLarge` / `ErrContentTooLarge` | 文件相关 | 400 |
-| `ErrUnauthorizedToken` | 认证失败 | 401 |
-| `ErrRateLimit` | 限流 | 429 |
+| `ErrUnauthorized` | 认证失败 | 401 |
+| `ErrTooManyRequests` | 限流 | 429 |
 
 方法：`SetMsg(msg)` 用户提示、`Withf(fmt, ...)` 开发 details、`SetHTTPStatus(code)` 覆盖状态码
 
@@ -406,9 +406,9 @@ func registerTask(r gin.IRouter, api TaskAPI, handler ...gin.HandlerFunc) {
 Core 层返回 `reason.Error`，`web.WrapH` 自动映射 HTTP 状态码：
 
 ```go
-return nil, reason.ErrBadRequest.SetMsg("参数不合法")     // → 400
+return nil, reason.ErrBadRequest.WithMsg("参数不合法")     // → 400
 return nil, reason.ErrDB.Withf("查询失败: %s", err)       // → 400
-return nil, reason.ErrUnauthorizedToken.SetMsg("未登录")   // → 401
+return nil, reason.ErrUnauthorized.WithMsg("未登录")   // → 401
 ```
 
 - `SetMsg()` — 给用户的友好提示

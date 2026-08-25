@@ -604,7 +604,7 @@ core 层导出的函数或 API 层返回的错误，应该返回 reason.Error �
 func findUser(in *Input)  (*Output,error){
 	// 数据库操作发生错误
 	if err != nil {
-		return nil, reason.ErrDB.SetMsg() // 错误的 respon 类型是 db 层错误，Msg 函数可以更改给用户的友好提示
+		return nil, reason.ErrDB.WithMsg() // 错误的 respon 类型是 db 层错误，Msg 函数可以更改给用户的友好提示
 	}
 	// 业务发生错误
 	if err != nil {
