@@ -218,7 +218,7 @@ func versionToStr(str string) string {
 }
 ```
 
-创建 「store/versiondb」 目录，创建「db.go」 文件写入
+创建 「stores/versiondb」 目录，创建「db.go」 文件写入
 
 ```go
 type DB struct {
@@ -328,7 +328,7 @@ func (v VersionAPI) getVersion(_ *gin.Context, _ *struct{}) (any, error) {
 |------|------|------|
 | 领域目录 | 全小写无分隔 | `version`、`tenant` |
 | 领域文件 | `<领域名>.<用途>.go` | `version.model.go`、`version.param.go` |
-| Store 目录 | `store/<领域名>db` | `store/versiondb` |
+| Store 目录 | `stores/<领域名>db` | `stores/versiondb` |
 | Store 文件 | `db.go`(入口/迁移) + `<领域名>.go`(CRUD) | `db.go`、`version.go` |
 | 领域模型 | PascalCase | `Version`、`Tenant` |
 | 入参结构体 | `<操作><领域>Input` | `CreateVersionInput` |
@@ -471,7 +471,7 @@ func (a OrderAPI) listOrders(c *gin.Context, in *ListOrderInput) (*ListOrderOutp
 │   ├── token               # JWT 令牌、权限相关
 │   ├── uniqueid            # 全局唯一 ID 生成器
 │   └── version             # 数据库版本控制，避免每次启动都执行 gorm 迁移
-│       ├── store/versiondb
+│       ├── stores/versiondb
 │       └── versionapi
 ├── internal                # 私有业务
 │   ├── app                 # wire 依赖注入组装
@@ -880,7 +880,7 @@ func RegisterVersion(r gin.IRouter, verAPI VersionAPI, handler ...gin.HandlerFun
 
 ## 性能优化
 
-`pkg/orm` 的 `Update` 等通用封装为了兼容通用场景，会有一定性能损耗。**高频数据库更新操作应当在 `store/<xxx>db` 层直接实现具体 SQL，避免直接使用通用 `Update` 封装。** 例如:
+`pkg/orm` 的 `Update` 等通用封装为了兼容通用场景，会有一定性能损耗。**高频数据库更新操作应当在 `stores/<xxx>db` 层直接实现具体 SQL，避免直接使用通用 `Update` 封装。** 例如:
 
 ```go
 // 不推荐：高性能高频场景，避免使用 orm.UpdateWithContext

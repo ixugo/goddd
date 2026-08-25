@@ -18,9 +18,43 @@ func New{{.Name}}(db *gorm.DB) {{.Name}} {
 	return {{.Name}}{db:db}
 }
 
+{{- $defaultOrder := ""}}
+{{- range .Lines}}{{- if eq .Name "CreatedAt"}}{{- $defaultOrder = "created_at DESC"}}{{- end}}{{- end}}
+{{- if eq $defaultOrder ""}}{{- range .Lines}}{{- if eq .Name "ID"}}{{- $defaultOrder = "id DESC"}}{{- end}}{{- end}}{{- end}}
+
 // List implements {{.PackageName}}.{{.Name}}Storer.
-func (d {{.Name}})List(ctx context.Context, bs *[]*{{.PackageName}}.{{.Name}},page orm.Pager,opts...orm.QueryOption) (int64,error){
-	return orm.ListWithContext(ctx,d.db, bs, page, opts...)
+func (d {{.Name}})List(ctx context.Context, bs *[]*{{.PackageName}}.{{.Name}},in *{{.PackageName}}.List{{.Name}}Input) (int64,error){
+	in.SortSafelist = append(in.SortSafelist, {{range .Lines}}{{if eq .Name "ID"}}"id","-id",{{end}}{{if eq .Name "CreatedAt"}}"created_at","-created_at",{{end}}{{end}})
+	db := apply{{.Name}}Filter(d.db, in)
+{{if ne $defaultOrder ""}}	orderBy := "{{$defaultOrder}}"
+	if col := in.MustSortColumn(); col != "" {
+		orderBy = col
+	}
+	db = db.Order(orderBy){{else}}	if col := in.MustSortColumn(); col != "" {
+		db = db.Order(col)
+	}{{end}}
+	return orm.ListWithContext(ctx, db, bs, in)
+}
+
+// apply{{.Name}}Filter 根据 ListInput 非零字段构建查询条件。
+// LIKE、范围等非等值条件请在此函数中手动补充。
+func apply{{.Name}}Filter(db *gorm.DB, in *{{.PackageName}}.List{{.Name}}Input) *gorm.DB {
+{{range .Lines}}{{if or (eq .Name "ID") (eq .Name "CreatedAt") (eq .Name "DeletedAt") (eq .Name "UpdatedAt")}}{{else}}{{if eq .Type "string"}}	if in.{{.Name}} != "" {
+		db = db.Where("{{.Name | ToUnderscore}} = ?", in.{{.Name}})
+	}
+{{else if or (eq .Type "int") (eq .Type "int8") (eq .Type "int16") (eq .Type "int32") (eq .Type "int64") (eq .Type "float32") (eq .Type "float64")}}	if in.{{.Name}} != 0 {
+		db = db.Where("{{.Name | ToUnderscore}} = ?", in.{{.Name}})
+	}
+{{end}}{{end}}{{end}}	return db
+}
+
+// GetByID 按主键查询
+func (d {{.Name}})GetByID(ctx context.Context,id {{.IDType}}) (*{{.PackageName}}.{{.Name}},error) {
+	var out {{.PackageName}}.{{.Name}}
+	if err := d.db.WithContext(ctx).Where("id = ?", id).Take(&out).Error; err != nil {
+		return nil, err
+	}
+	return &out, nil
 }
 
 // Get implements {{.PackageName}}.{{.Name}}Storer.
@@ -44,8 +78,11 @@ func (d {{.Name}})Delete(ctx context.Context,model *{{.PackageName}}.{{.Name}},o
 }
 
 // Count implements {{.PackageName}}.{{.Name}}Storer.
-func (d {{.Name}})Count(ctx context.Context,opts...orm.QueryOption) (int64,error) {
-	return orm.CountWithContext[{{.PackageName}}.{{.Name}}](ctx,d.db, opts...)
+func (d {{.Name}})Count(ctx context.Context,in *{{.PackageName}}.List{{.Name}}Input) (int64,error) {
+	db := apply{{.Name}}Filter(d.db, in)
+	var count int64
+	err := db.WithContext(ctx).Model(new({{.PackageName}}.{{.Name}})).Count(&count).Error
+	return count, err
 }
 
 // Session 事务组合

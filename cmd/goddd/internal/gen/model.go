@@ -27,10 +27,12 @@ type ModelTmpl struct {
 // Table 单个结构体的模板数据。
 type Table struct {
 	PackageName    string
+	ModuleName     string
 	Name           string
 	Lines          []Line
 	IsNotDB        bool
 	IsStringID     bool
+	IDType         string
 	ExistsUniqueID bool
 }
 
@@ -252,11 +254,19 @@ func generateModelCode(domain *Domain) (*ModelTmpl, error) {
 
 			lines = append(lines, line)
 		}
+		idType := "int"
+		for _, line := range lines {
+			if line.Name == "ID" {
+				idType = line.Type
+				break
+			}
+		}
 		otmpl.Models = append(otmpl.Models, Table{
 			Name:           model.Name,
 			Lines:          lines,
 			IsNotDB:        model.IsNotDB,
 			IsStringID:     model.IsStringID,
+			IDType:         idType,
 			ExistsUniqueID: model.ExistsUniqueID,
 		})
 	}

@@ -119,7 +119,7 @@ Once configured, the sync script runs automatically on document changes. Skipped
 |----------|-----------|---------|
 | Domain directory | Lowercase, no separators | `version`, `tenant` |
 | Domain files | `<domain>.<purpose>.go` | `version.model.go`, `version.param.go` |
-| Store directory | `store/<domain>db` | `store/versiondb` |
+| Store directory | `stores/<domain>db` | `stores/versiondb` |
 | Store files | `db.go` (entry/migration) + `<domain>.go` (CRUD) | `db.go`, `version.go` |
 | Domain model | PascalCase | `Version`, `Tenant` |
 | Input struct | `<Action><Domain>Input` | `CreateVersionInput` |
@@ -261,7 +261,7 @@ Best Practices for This Project: https://github.com/gowvp/gb28181
 │   ├── token               # JWT tokens and permissions
 │   ├── uniqueid            # Global unique ID generator
 │   └── version             # DB schema version control to avoid gorm migration on every start
-│       ├── store/versiondb
+│       ├── stores/versiondb
 │       └── versionapi
 ├── internal                # Private business code
 │   ├── app                 # Wire dependency-injection assembly
@@ -653,7 +653,7 @@ func versionToStr(str string) string {
 }
 ```
 
-Under "store/versiondb," create the `db.go` file with the following content:
+Under "stores/versiondb," create the `db.go` file with the following content:
 
 ```go
 type DB struct {

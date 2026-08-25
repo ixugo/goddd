@@ -252,18 +252,19 @@ func handlerDomainDB(out *Domain, bufMap map[string]*bytes.Buffer) error {
 	if err := tpl.ExecuteTemplate(buf, "db.go.tmpl", tp); err != nil {
 		panic(err)
 	}
-	bufMap[fmt.Sprintf("internal/core/%s/store/%sdb/db.go", out.PackageName, out.PackageName)] = buf
+	bufMap[fmt.Sprintf("internal/core/%s/stores/%sdb/db.go", out.PackageName, out.PackageName)] = buf
 
 	for _, v := range tp.Models {
 		if v.IsNotDB {
 			continue
 		}
 		v.PackageName = out.PackageName
+		v.ModuleName = out.ModuleName
 		buf := bytes.NewBuffer(nil)
 		if err := tpl.ExecuteTemplate(buf, "db.engine.go.tmpl", v); err != nil {
 			panic(err)
 		}
-		bufMap[fmt.Sprintf("internal/core/%s/store/%sdb/%s.go", out.PackageName, out.PackageName, CamelCaseToUnderscore(v.Name))] = buf
+		bufMap[fmt.Sprintf("internal/core/%s/stores/%sdb/%s.db.go", out.PackageName, out.PackageName, CamelCaseToUnderscore(v.Name))] = buf
 	}
 
 	return nil
@@ -281,7 +282,7 @@ func handlerDomainCache(out *Domain, bufMap map[string]*bytes.Buffer) error {
 	if err := tpl.ExecuteTemplate(buf, "cache.go.tmpl", tp); err != nil {
 		panic(err)
 	}
-	bufMap[fmt.Sprintf("internal/core/%s/store/%scache/cache.go", out.PackageName, out.PackageName)] = buf
+	bufMap[fmt.Sprintf("internal/core/%s/stores/%scache/cache.go", out.PackageName, out.PackageName)] = buf
 
 	for _, v := range tp.Models {
 		if v.IsNotDB {
@@ -292,7 +293,7 @@ func handlerDomainCache(out *Domain, bufMap map[string]*bytes.Buffer) error {
 		if err := tpl.ExecuteTemplate(buf, "cache.engine.go.tmpl", v); err != nil {
 			panic(err)
 		}
-		bufMap[fmt.Sprintf("internal/core/%s/store/%scache/%s.go", out.PackageName, out.PackageName, CamelCaseToUnderscore(v.Name))] = buf
+		bufMap[fmt.Sprintf("internal/core/%s/stores/%scache/%s.cache.go", out.PackageName, out.PackageName, CamelCaseToUnderscore(v.Name))] = buf
 	}
 
 	return nil

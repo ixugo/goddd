@@ -4,23 +4,52 @@ import (
 	"context"
 	"testing"
 
-	"github.com/ixugo/goddd/pkg/orm"
-	"github.com/ixugo/goddd/pkg/web"
+	"{{.ModuleName}}/internal/core/{{.PackageName}}"
 )
 
-func Test{{.Name}}Get(t *testing.T) {
-	db, mock, err := generateMockDB()
-	if err != nil {
-		t.Fatal(err)
-	}
-	userDB := New{{.Name}}(db)
+// Test{{.Name}}CRUD 验证 {{.Name}} 的 List、Count、GetByID
+func Test{{.Name}}CRUD(t *testing.T) {
+	t.Parallel()
+	db := setupTestDB(t, new({{.PackageName}}.{{.Name}}))
+	store := New{{.Name}}(db)
+	ctx := context.Background()
 
-	mock.ExpectQuery(`SELECT \* FROM "{{.Name | Plural}}" WHERE id=\$1 (.+) LIMIT \$2`).WithArgs("jack", 1)
-	var out {{.PackageName}}.{{.Name}}
-	if err := userDB.Get(context.Background(), &out, orm.Where("id=?", "jack"));err!=nil{
-		t.Fatal(err)
+	m := {{.PackageName}}.{{.Name}}{}
+	if err := store.Create(ctx, &m); err != nil {
+		t.Fatalf("Create 失败: %v", err)
 	}
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Fatal("ExpectationsWereMet err:", err)
-	}
+
+	t.Run("List", func(t *testing.T) {
+		in := &{{.PackageName}}.List{{.Name}}Input{}
+		in.Size = 10
+		var list []*{{.PackageName}}.{{.Name}}
+		total, err := store.List(ctx, &list, in)
+		if err != nil {
+			t.Fatalf("List 失败: %v", err)
+		}
+		if total != 1 || len(list) != 1 {
+			t.Fatalf("期望 total=1 len=1, got total=%d len=%d", total, len(list))
+		}
+	})
+
+	t.Run("Count", func(t *testing.T) {
+		in := &{{.PackageName}}.List{{.Name}}Input{}
+		count, err := store.Count(ctx, in)
+		if err != nil {
+			t.Fatalf("Count 失败: %v", err)
+		}
+		if count != 1 {
+			t.Fatalf("期望 count=1, got %d", count)
+		}
+	})
+
+	t.Run("GetByID", func(t *testing.T) {
+		got, err := store.GetByID(ctx, m.ID)
+		if err != nil {
+			t.Fatalf("GetByID 失败: %v", err)
+		}
+		if got.ID != m.ID {
+			t.Fatalf("期望 ID=%v, got %v", m.ID, got.ID)
+		}
+	})
 }

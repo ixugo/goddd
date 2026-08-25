@@ -1,18 +1,15 @@
 package {{.PackageName}}db
 
 import (
-	"github.com/DATA-DOG/go-sqlmock"
-	"gorm.io/driver/postgres"
+	"testing"
+
+	"github.com/ixugo/goddd/pkg/testx"
 	"gorm.io/gorm"
 )
 
-func generateMockDB() (*gorm.DB, sqlmock.Sqlmock, error) {
-	db, mock, err := sqlmock.New()
-	if err != nil {
-		return nil, nil, err
-	}
-	gormDB, err := gorm.Open(postgres.New(postgres.Config{
-		Conn: db,
-	}), &gorm.Config{})
-	return gormDB, mock, err
+// setupTestDB 为单个测试准备独立的 Postgres 数据库。
+// 容器跨测试复用,每个测试用例独占随机名数据库,结束自动删库。
+func setupTestDB(t *testing.T, models ...any) *gorm.DB {
+	t.Helper()
+	return testx.NewDB(t, models...)
 }

@@ -25,25 +25,30 @@ func(c *{{.Name}}) cacheKey(key any) string {
 
 
 // List implements {{.PackageName}}.{{.Name}}Storer.
-func (c *{{.Name}})List(ctx context.Context, bs *[]*{{.PackageName}}.{{.Name}},page orm.Pager,opts...orm.QueryOption) (int64,error){
-	return c.store.{{.Name}}().List(ctx,bs,page,opts...)
+func (c *{{.Name}})List(ctx context.Context, bs *[]*{{.PackageName}}.{{.Name}},in *{{.PackageName}}.List{{.Name}}Input) (int64,error){
+	return c.store.{{.Name}}().List(ctx,bs,in)
+}
+
+// GetByID 按主键查询，走缓存
+func (c *{{.Name}})GetByID(ctx context.Context,id {{.IDType}}) (*{{.PackageName}}.{{.Name}},error) {
+	key := c.cacheKey(id)
+	var cached {{.PackageName}}.{{.Name}}
+	if err := c.{{$tableName}}.Get(ctx, key, &cached); err == nil {
+		return &cached, nil
+	}
+	out, err := c.store.{{.Name}}().GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	c.{{$tableName}}.SetNX(ctx, key, out)
+	return out, nil
 }
 
 // Get implements {{.PackageName}}.{{.Name}}Storer.
-// 注意: 若想走缓存，则 model 的 CacheKey 必须实现且必须存在值
-// 当 CacheKey 为 id 且出现 orm.Where("id=?",id) 时，查询条件会变成
-// SELECT * FROM `users` WHERE `id` = 1 AND `users`.`id` = 1
-// 两个值一样则不会受到影响
 func (c *{{.Name}})Get(ctx context.Context,model *{{.PackageName}}.{{.Name}},opts...orm.QueryOption) error {
-	if model.CacheKey() != "" {
-		if err := c.{{$tableName}}.Get(ctx, c.cacheKey(model.CacheKey() ), model);err == nil {
-			return nil
-		}
-	}
 	if err := c.store.{{.Name}}().Get(ctx,model,opts...);err!=nil{
 		return err
 	}
-	c.{{$tableName}}.SetNX(ctx,c.cacheKey(model.CacheKey() ),  model)
 	return nil
 }
 
@@ -75,8 +80,8 @@ func (c *{{.Name}})Delete(ctx context.Context,model *{{.PackageName}}.{{.Name}},
 }
 
 // Count implements {{.PackageName}}.{{.Name}}Storer.
-func (c *{{.Name}})Count(ctx context.Context,opts...orm.QueryOption) (int64,error) {
-	return c.store.{{.Name}}().Count(ctx, opts...)
+func (c *{{.Name}})Count(ctx context.Context,in *{{.PackageName}}.List{{.Name}}Input) (int64,error) {
+	return c.store.{{.Name}}().Count(ctx, in)
 }
 
 // Session 事务组合

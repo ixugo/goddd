@@ -2,7 +2,6 @@
 package {{.PackageName}}
 
 import "github.com/ixugo/goddd/pkg/web"
-import "github.com/ixugo/goddd/pkg/orm"
 
 type List{{.Name}}Input struct{
 	web.PagerFilter
@@ -10,13 +9,9 @@ type List{{.Name}}Input struct{
 {{end}}{{end}}
 }
 
-func (i *List{{.Name}}Input) ToQuery() *orm.Query {
-   // TODO: 实现 ToQuery 条件
-   return orm.NewQuery(1).OrderBy("created_at DESC")
-}
 
 type Update{{.Name}}Input struct{
-	ID {{if .IsStringID}}string{{else}}int{{end}} `uri:"id"`
+	ID {{.IDType}} `uri:"id"`
  {{range .Lines}}{{if or (eq .Name "ID") (eq .Name "CreatedAt") (eq .Name "DeletedAt") (eq .Name "UpdatedAt")}}{{else}}	{{.Name}} {{.Type}} `json:"{{.Name | ToUnderscore}}"` {{.Comment|ToComment}}
 {{end}}{{end}}
 }
@@ -27,9 +22,9 @@ type Create{{.Name}}Input struct{
 }
 
 type Get{{.Name}}Input struct{
-	ID {{if .IsStringID}}string{{else}}int{{end}} `uri:"id"`
+	ID {{.IDType}} `uri:"id"`
 }
 
 type Delete{{.Name}}Input struct{
-	ID {{if .IsStringID}}string{{else}}int{{end}} `uri:"id"`
+	ID {{.IDType}} `uri:"id"`
 }
