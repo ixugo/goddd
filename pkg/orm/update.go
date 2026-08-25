@@ -115,7 +115,7 @@ func FirstWithContext(ctx context.Context, db *gorm.DB, out any, opts ...QueryOp
 	for _, opt := range opts {
 		db = opt(db)
 	}
-	return db.WithContext(ctx).First(out).Error
+	return db.WithContext(ctx).Take(out).Error
 }
 
 // Update 通用更新

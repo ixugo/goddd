@@ -9,7 +9,7 @@ description: >
   使用 web.WrapH/PagerFilter/DateFilter/WithContext 等框架工具、
   Core 需要后台任务/定时任务/心跳检测/goroutine、优雅停机、Wire 循环依赖、
   Core 生命周期分离、SessionHandler、
-  修改 store/xxxcache 缓存层（判断内存缓存 vs Redis 缓存、SETNX/SETEX 防竞态、
+  修改 stores/xxxcache 缓存层（判断内存缓存 vs Redis 缓存、SETNX/SETEX 防竞态、
   WarmUp 预热）、领域内子包间依赖方向、子包是否需要接口隔离、子包循环依赖处理。
   即使用户没有提到"goddd"，只要涉及六边形架构、领域驱动、依赖倒置、CRUD 生成、
   Core 职责过重、缓存层改造、子包拆分依赖等概念，都应使用此技能。
@@ -28,7 +28,7 @@ description: >
 | `references/api-design-patterns.md` | 设计新接口、审查接口规范 | 资源命名、标准方法、自定义方法、错误处理、分页过滤、校验、限流、路由模板 |
 | `references/web-toolkit.md` | 使用 `pkg/web` 任意函数 | WrapH、PagerFilter/DateFilter、JWT、中间件、SSE、Validator、响应封装 |
 | `references/adapter-pattern.md` | 新增领域间依赖 | Port/Adapter 定义位置、Option 注入、Wire 装配、port.go/model.go 分工 |
-| `references/cache-layer.md` | 修改 `store/xxxcache/` | 内存 vs Redis、redis.Cmdable、SETNX 防竞态、singleflight、WarmUp、穿透防护 |
+| `references/cache-layer.md` | 修改 `stores/xxxcache/` | 内存 vs Redis、redis.Cmdable、SETNX 防竞态、singleflight、WarmUp、穿透防护 |
 | `references/lifecycle-split.md` | Core 需后台 goroutine 且 Wire 循环依赖 | Core 值类型 + SessionHandler、方法分配、`(Core, func())`、反模式 |
 | `references/sort.md` | 实现拖拽排序 | 有序 ID 数组 → 收集 sort 值 → 重分配 → 事务更新 |
 | `references/with-context.md` | Core/Adapter 需 HTTP 请求信息 | `web.WithContext` → Core 透传 → Adapter 类型断言 |
@@ -139,7 +139,7 @@ description: >
 │  ├─ <entity>.model.go  领域模型 (GORM 映射)               │
 │  ├─ <entity>.param.go  List/Create/Update Input 参数      │
 │  ├─ <provider>adapter/ 对外提供的适配器实现                 │
-│  └─ store/<domain>db/  数据库实现 (被动适配器)             │
+│  └─ stores/<domain>db/ 数据库实现 (被动适配器)             │
 └──────────────────────────────────────────────────────────┘
 ```
 
@@ -281,7 +281,7 @@ domain/                 ← 领域根包（定义端口接口、模型、共享�
 ├── sub-a/              ← 单向依赖 domain
 ├── sub-b/              ← 单向依赖 domain
 ├── sub-infra/          ← 实现 domain.Publisher 等接口
-└── store/domaindb/     ← 实现 domain.Storer
+└── stores/domaindb/    ← 实现 domain.Storer
 ```
 
 子包之间若无交叉依赖，全部通过根包共享类型和接口定义。若 sub-a 需调用 sub-b 可直接 import；若反向也需要，则一方定义 narrow interface 打破循环。
@@ -353,7 +353,7 @@ Wire：`func NewXxxCore(...) (xxx.Core, func()) { ... }`，返回值类型 Core 
 
 ## Store 缓存层规范
 
-修改 `store/<domain>cache/` 时，**首先**判断缓存类型：
+修改 `stores/<domain>cache/` 时，**首先**判断缓存类型：
 
 | 类型 | 依赖 | 适用场景 |
 |------|------|---------|
@@ -425,3 +425,7 @@ return nil, reason.ErrUnauthorized.WithMsg("未登录")   // → 401
 - 请求/响应结构体字段增删改
 - model 字段与 JSON 映射变更（重命名、类型变更）
 - 新增接口后尚无对应 `.go.yaml` 文件
+
+## 版本变化
+
+旧版本目录名为 store，如果遇到应该迁移为 stores

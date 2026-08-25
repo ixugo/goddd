@@ -1,10 +1,10 @@
 # Store 缓存层规范
 
-godddx 生成的 `store/<domain>cache/` 默认使用 `conc.Cacher`（进程内内存 TTL 缓存）。当需要 **Redis 缓存**（多副本共享、长 TTL、高频读场景）时，按本文档规范改造。
+godddx 生成的 `stores/<domain>cache/` 默认使用 `conc.Cacher`（进程内内存 TTL 缓存）。当需要 **Redis 缓存**（多副本共享、长 TTL、高频读场景）时，按本文档规范改造。
 
 ## 判断缓存类型
 
-修改 `store/<domain>cache/` 时，**首先**判断是内存缓存还是 Redis 缓存：
+修改 `stores/<domain>cache/` 时，**首先**判断是内存缓存还是 Redis 缓存：
 
 | 类型 | 依赖 | 适用场景 |
 |------|------|---------|
@@ -137,15 +137,41 @@ func (c *Entity) setCache(ctx context.Context, model *xxx.Entity) {
     }
 }
 
+// GetByID 按主键查询，走缓存
+func (c *Entity) GetByID(ctx context.Context, id string) (*xxx.Entity, error) {
+    cacheKey := c.cacheKey(id)
+    data, err := c.rdb.Get(ctx, cacheKey).Bytes()
+    if err == nil {
+        var out xxx.Entity
+        if json.Unmarshal(data, &out) == nil {
+            return &out, nil
+        }
+    }
+    v, err, _ := (*Cache)(c).sf.Do(id, func() (any, error) {
+        out, err := c.store.Entity().GetByID(ctx, id)
+        if err != nil {
+            return nil, err
+        }
+        if b, _ := json.Marshal(out); b != nil {
+            c.rdb.SetNX(ctx, cacheKey, b, keyTTL)
+        }
+        return out, nil
+    })
+    if err != nil {
+        return nil, err
+    }
+    return v.(*xxx.Entity), nil
+}
+
 // 不走缓存的方法直接透传
-func (c *Entity) List(ctx context.Context, ...) (int64, error) {
-    return c.store.Entity().List(ctx, ...)
+func (c *Entity) List(ctx context.Context, bs *[]*xxx.Entity, in *xxx.ListEntityInput) (int64, error) {
+    return c.store.Entity().List(ctx, bs, in)
 }
 func (c *Entity) Get(ctx context.Context, model *xxx.Entity, opts ...orm.QueryOption) error {
     return c.store.Entity().Get(ctx, model, opts...)
 }
-func (c *Entity) Count(ctx context.Context, opts ...orm.QueryOption) (int64, error) {
-    return c.store.Entity().Count(ctx, opts...)
+func (c *Entity) Count(ctx context.Context, in *xxx.ListEntityInput) (int64, error) {
+    return c.store.Entity().Count(ctx, in)
 }
 ```
 
@@ -222,7 +248,7 @@ if err == nil {
 ## 要点
 
 - WarmUp 在 `NewXxxCore` 中调用，Redis 不可达时仅打日志不阻塞启动
-- 不走缓存的方法（List、Count、通用 Get）直接透传到 DB 层
+- `GetByID` 走缓存（与内存缓存版行为一致），`List`、`Count`、通用 `Get` 直接透传到 DB 层
 - TTL 按业务需要设置，长期不变的数据可设 365 天
 - 多副本部署下 Update 用 `Set` + TTL 覆盖（而非 DEL），确保最终一致
 - **singleflight 防击穿**：Cache 结构体持有 `singleflight.Group`，读穿透时用 `sf.Do(key, fn)` 包裹 DB 查询 + SetNX，同一 key 并发穿透只查一次 DB
