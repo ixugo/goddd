@@ -57,7 +57,7 @@ func TestWithMsg(t *testing.T) {
 
 func TestSetMsg_Deprecated(t *testing.T) {
 	e := NewError("setmsg_e1", "e1")
-	e2 := e.SetMsg("e2")
+	e2 := e.WithMsg("e2")
 	if e2.GetMessage() != "e2" {
 		t.Fatal("SetMsg 应与 WithMsg 行为一致")
 	}

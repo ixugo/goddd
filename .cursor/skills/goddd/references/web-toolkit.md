@@ -56,11 +56,11 @@ type ImportGreetsInput struct {
 
 func (a GreetAPI) importGreets(c *gin.Context, in *greet.ImportGreetsInput) (*greet.ImportGreetsResult, error) {
     if in.File == nil {
-        return nil, reason.ErrBadRequest.SetMsg("file 参数缺失")
+        return nil, reason.ErrBadRequest.WithMsg("file 参数缺失")
     }
     file, err := in.File.Open()
     if err != nil {
-        return nil, reason.ErrBadRequest.SetMsg("读取文件失败")
+        return nil, reason.ErrBadRequest.WithMsg("读取文件失败")
     }
     defer file.Close()
     // 后续用 file 做 csv.NewReader(file) 或 bufio.Scanner 解析
@@ -201,11 +201,11 @@ type ResponseMsg struct {
 WrapH 内部自动处理错误，Core 层返回 `reason.Error` 类型：
 
 ```go
-reason.ErrBadRequest.SetMsg("参数不合法")              // → 400（默认）
+reason.ErrBadRequest.WithMsg("参数不合法")              // → 400（默认）
 reason.ErrDB.Withf("查询失败: %s", err)                // → 400（默认）
-reason.ErrServer.SetMsg("服务器错误")                  // → 400（默认）
-reason.ErrUnauthorizedToken.SetMsg("用户已过期")        // → 401（显式 SetHTTPStatus）
-reason.ErrRateLimit.SetMsg("请求频率过高")              // → 429（显式 SetHTTPStatus）
+reason.ErrServer.WithMsg("服务器错误")                  // → 400（默认）
+reason.ErrUnauthorized.WithMsg("用户已过期")        // → 401（显式 SetHTTPStatus）
+reason.ErrRateLimit.WithMsg("请求频率过高")              // → 429（显式 SetHTTPStatus）
 ```
 
 - `SetMsg()` 设置给用户看的友好提示

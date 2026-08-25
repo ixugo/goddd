@@ -41,7 +41,7 @@ func (d Xxx) UpdateSortBatch(ctx context.Context, items []SortItem) error {
 ```go
 func (c Core) SortXxx(ctx context.Context, in *SortXxxInput) error {
     if len(in.IDs) == 0 {
-        return reason.ErrBadRequest.SetMsg("ids 不能为空")
+        return reason.ErrBadRequest.WithMsg("ids 不能为空")
     }
 
     items := make([]*Xxx, 0, len(in.IDs))
@@ -51,7 +51,7 @@ func (c Core) SortXxx(ctx context.Context, in *SortXxxInput) error {
     }
 
     if len(items) != len(in.IDs) {
-        return reason.ErrBadRequest.SetMsg("部分 ID 不存在")
+        return reason.ErrBadRequest.WithMsg("部分 ID 不存在")
     }
 
     sorts := make([]int64, 0, len(items))

@@ -23,7 +23,7 @@ func RateLimiter(r rate.Limit, b int, ignoreFn ...IngoreOption) gin.HandlerFunc 
 					return
 				}
 			}
-			AbortWithStatusJSON(c, reason.ErrRateLimit.SetMsg("服务器繁忙"))
+			AbortWithStatusJSON(c, reason.ErrTooManyRequests.WithMsg("服务器繁忙"))
 			return
 		}
 		c.Next()
