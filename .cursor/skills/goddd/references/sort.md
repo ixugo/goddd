@@ -14,7 +14,7 @@ type SortXxxInput struct {
 }
 ```
 
-## 2. Store 层 — 批量更新
+## 2. Store 层
 
 ```go
 type SortItem struct {
@@ -22,6 +22,14 @@ type SortItem struct {
     Sort int64
 }
 
+// GetByIDs 按 ID 集合查询，不暴露 orm.QueryOption 给 Core 层。
+func (d Xxx) GetByIDs(ctx context.Context, ids []int64) ([]*Xxx, error) {
+    var items []*Xxx
+    err := d.db.WithContext(ctx).Where("id IN ?", ids).Find(&items).Error
+    return items, err
+}
+
+// UpdateSortBatch 事务内批量更新 sort 值。
 func (d Xxx) UpdateSortBatch(ctx context.Context, items []SortItem) error {
     return d.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
         for _, item := range items {
@@ -44,10 +52,9 @@ func (c Core) SortXxx(ctx context.Context, in *SortXxxInput) error {
         return reason.ErrBadRequest.WithMsg("ids 不能为空")
     }
 
-    items := make([]*Xxx, 0, len(in.IDs))
-    query := orm.NewQuery(1).Where("id IN ?", in.IDs)
-    if _, err := c.store.Xxx().Find(ctx, &items, web.NewPagerFilterMaxSize(), query.Encode()...); err != nil {
-        return reason.ErrDB.Withf(`Find items err[%s]`, err.Error())
+    items, err := c.store.Xxx().GetByIDs(ctx, in.IDs)
+    if err != nil {
+        return reason.ErrDB.Withf(`GetByIDs err[%s]`, err.Error())
     }
 
     if len(items) != len(in.IDs) {
@@ -96,7 +103,8 @@ group.PUT("/sort", web.WrapH(api.sortXxx))
 
 ## 注意事项
 
-1. Store 接口中声明 `UpdateSortBatch` 方法
+1. Store 接口中声明 `GetByIDs` 和 `UpdateSortBatch` 方法（手动添加，非生成）
 2. 查询列表时使用 `OrderBy("sort ASC")` 保证按排序值返回
 3. 数据库字段 `sort` 使用 gorm tag `autoIncrement` 自增
 4. 导入 `slices` 包用于排序
+5. Core 层不使用 `orm.NewQuery`/`orm.QueryOption`，通过专用 Store 方法封装查询条件

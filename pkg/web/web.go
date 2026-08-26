@@ -79,10 +79,14 @@ func (f PagerFilter) MustSortColumn() string {
 	return column + " " + f.SortDirection()
 }
 
-// SortColumn 通过对 SortColumn 设置值，仅对允许的值做排序处理
+// SortColumn 校验排序字段是否在白名单中，自动处理 `-` 前缀（表示 DESC）
 func (f PagerFilter) SortColumn() (string, bool) {
-	if f.Sort != "" && slices.Contains(f.SortSafelist, f.Sort) {
-		return strings.TrimPrefix(f.Sort, "-"), true
+	if f.Sort == "" {
+		return "", false
+	}
+	col := strings.TrimPrefix(f.Sort, "-")
+	if slices.Contains(f.SortSafelist, col) {
+		return col, true
 	}
 	return "", false
 }
