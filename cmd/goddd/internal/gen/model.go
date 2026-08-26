@@ -33,6 +33,7 @@ type Table struct {
 	IsNotDB        bool
 	IsStringID     bool
 	IDType         string
+	HasID          bool
 	ExistsUniqueID bool
 }
 
@@ -255,9 +256,11 @@ func generateModelCode(domain *Domain) (*ModelTmpl, error) {
 			lines = append(lines, line)
 		}
 		idType := "int"
+		hasID := false
 		for _, line := range lines {
 			if line.Name == "ID" {
 				idType = line.Type
+				hasID = true
 				break
 			}
 		}
@@ -267,6 +270,7 @@ func generateModelCode(domain *Domain) (*ModelTmpl, error) {
 			IsNotDB:        model.IsNotDB,
 			IsStringID:     model.IsStringID,
 			IDType:         idType,
+			HasID:          hasID,
 			ExistsUniqueID: model.ExistsUniqueID,
 		})
 	}

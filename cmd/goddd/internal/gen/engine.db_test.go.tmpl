@@ -7,7 +7,7 @@ import (
 	"{{.ModuleName}}/internal/core/{{.PackageName}}"
 )
 
-// Test{{.Name}}CRUD 验证 {{.Name}} 的 List、Count、GetByID
+// Test{{.Name}}CRUD 验证 {{.Name}} 的 Create、List、Count、GetByID、Update、Delete
 func Test{{.Name}}CRUD(t *testing.T) {
 	t.Parallel()
 	db := setupTestDB(t, new({{.PackageName}}.{{.Name}}))
@@ -50,6 +50,37 @@ func Test{{.Name}}CRUD(t *testing.T) {
 		}
 		if got.ID != m.ID {
 			t.Fatalf("期望 ID=%v, got %v", m.ID, got.ID)
+		}
+	})
+
+	t.Run("Update", func(t *testing.T) {
+		out := &{{.PackageName}}.{{.Name}}{ID: m.ID}
+		if err := store.Update(ctx, out, func(b *{{.PackageName}}.{{.Name}}) error {
+			return nil
+		}); err != nil {
+			t.Fatalf("Update 失败: %v", err)
+		}
+		if out.ID != m.ID {
+			t.Fatalf("期望 ID=%v, got %v", m.ID, out.ID)
+		}
+	})
+
+	t.Run("Delete", func(t *testing.T) {
+		out := &{{.PackageName}}.{{.Name}}{ID: m.ID}
+		if err := store.Delete(ctx, out); err != nil {
+			t.Fatalf("Delete 失败: %v", err)
+		}
+		// 验证已删除
+		_, err := store.GetByID(ctx, m.ID)
+		if err == nil {
+			t.Fatalf("删除后 GetByID 应报错")
+		}
+	})
+
+	t.Run("Delete_Idempotent", func(t *testing.T) {
+		out := &{{.PackageName}}.{{.Name}}{ID: m.ID}
+		if err := store.Delete(ctx, out); err != nil {
+			t.Fatalf("幂等删除不应报错, got: %v", err)
 		}
 	})
 }

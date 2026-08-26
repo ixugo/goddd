@@ -181,7 +181,7 @@ When business logic involves data from multiple domains, choose the appropriate 
 | Pattern | Coupling | Use Case |
 |---------|----------|----------|
 | SQL Pattern | High | Query aggregation — Store layer writes JOIN queries across domain tables |
-| Command Pattern | Medium | Write aggregation — Domain A depends on Domain B directly, uses `tx` for transaction consistency |
+| Command Pattern (NewWithTx) | Medium | Write aggregation — share a single transaction via `orm.Tx` + `NewWithTx` |
 | API Layer Aggregation | Medium | API layer coordinates multiple Cores, each runs independently, results assembled in API layer |
 | Adapter Pattern | Low | Domains decoupled via Option-injected interfaces, each manages its own transactions |
 
@@ -201,17 +201,19 @@ func (d OrderDB) FindOrdersWithUser(ctx context.Context, userID string) ([]Order
 }
 ```
 
-**Command Pattern**
+**Command Pattern (NewWithTx)**
 
-Store interface extends transactional methods with `tx *gorm.DB` parameter:
+Create transactional Store copies via `orm.Tx`, multiple Stores share one transaction:
 
 ```go
-func (c *Core) CreateOrderAndDeduct(ctx context.Context, in CreateOrderInput) error {
-    return c.db.Transaction(func(tx *gorm.DB) error {
-        if err := c.store.CreateOrder(ctx, tx, in.Order); err != nil {
+func (a *OrderAdapter) CreateOrderAndDeduct(ctx context.Context, in CreateOrderInput) error {
+    return orm.Transaction(a.db, func(tx orm.Tx) error {
+        txOrder, _ := a.orderStore.NewWithTx(tx)
+        txStock, _ := a.stockStore.NewWithTx(tx)
+        if err := txOrder.Create(ctx, in.Order); err != nil {
             return err
         }
-        return c.store.DeductStock(ctx, tx, in.ProductID, in.Quantity)
+        return txStock.Deduct(ctx, in.ProductID, in.Quantity)
     })
 }
 ```

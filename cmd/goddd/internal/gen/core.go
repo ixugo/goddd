@@ -177,7 +177,7 @@ func handlerDomainModel(out *Domain, bufMap map[string]*bytes.Buffer) error {
 	}
 	buf := bytes.NewBuffer(nil)
 
-	tpl := template.Must(template.New("abc").Funcs(funcMap).ParseFS(files, "model.go.tmpl", "model.engine.go.tmpl"))
+	tpl := template.Must(template.New("abc").Funcs(funcMap).ParseFS(files, "model.go.tmpl", "engine.model.go.tmpl"))
 
 	if err := tpl.ExecuteTemplate(buf, "model.go.tmpl", tp); err != nil {
 		panic(err)
@@ -190,7 +190,7 @@ func handlerDomainModel(out *Domain, bufMap map[string]*bytes.Buffer) error {
 		}
 		v.PackageName = out.PackageName
 		buf := bytes.NewBuffer(nil)
-		if err := tpl.ExecuteTemplate(buf, "model.engine.go.tmpl", v); err != nil {
+		if err := tpl.ExecuteTemplate(buf, "engine.model.go.tmpl", v); err != nil {
 			panic(err)
 		}
 		bufMap[fmt.Sprintf("internal/core/%s/%s.model.go", out.PackageName, CamelCaseToUnderscore(v.Name))] = buf
@@ -206,7 +206,7 @@ func handlerDomainCore(out *Domain, bufMap map[string]*bytes.Buffer) error {
 	}
 	buf := bytes.NewBuffer(nil)
 
-	tpl := template.Must(template.New("abc").Funcs(funcMap).ParseFS(files, "core.go.tmpl", "core.engine.go.tmpl", "param.engine.go.tmpl"))
+	tpl := template.Must(template.New("abc").Funcs(funcMap).ParseFS(files, "core.go.tmpl", "engine.core.go.tmpl", "engine.param.go.tmpl"))
 
 	if err := tpl.ExecuteTemplate(buf, "core.go.tmpl", tp); err != nil {
 		panic(err)
@@ -219,7 +219,7 @@ func handlerDomainCore(out *Domain, bufMap map[string]*bytes.Buffer) error {
 		}
 		v.PackageName = out.PackageName
 		buf := bytes.NewBuffer(nil)
-		if err := tpl.ExecuteTemplate(buf, "core.engine.go.tmpl", v); err != nil {
+		if err := tpl.ExecuteTemplate(buf, "engine.core.go.tmpl", v); err != nil {
 			panic(err)
 		}
 		bufMap[fmt.Sprintf("internal/core/%s/%s.go", out.PackageName, CamelCaseToUnderscore(v.Name))] = buf
@@ -231,7 +231,7 @@ func handlerDomainCore(out *Domain, bufMap map[string]*bytes.Buffer) error {
 		}
 		v.PackageName = out.PackageName
 		buf := bytes.NewBuffer(nil)
-		if err := tpl.ExecuteTemplate(buf, "param.engine.go.tmpl", v); err != nil {
+		if err := tpl.ExecuteTemplate(buf, "engine.param.go.tmpl", v); err != nil {
 			panic(err)
 		}
 		bufMap[fmt.Sprintf("internal/core/%s/%s.param.go", out.PackageName, CamelCaseToUnderscore(v.Name))] = buf
@@ -247,12 +247,20 @@ func handlerDomainDB(out *Domain, bufMap map[string]*bytes.Buffer) error {
 	}
 	buf := bytes.NewBuffer(nil)
 
-	tpl := template.Must(template.New("abc").Funcs(funcMap).ParseFS(files, "db.engine.go.tmpl", "db.go.tmpl", "db_test.go.tmpl", "db.engine_test.go.tmpl"))
+	tpl := template.Must(template.New("abc").Funcs(funcMap).ParseFS(files, "engine.db.go.tmpl", "db.go.tmpl", "db_test.go.tmpl", "engine.db_test.go.tmpl"))
 
 	if err := tpl.ExecuteTemplate(buf, "db.go.tmpl", tp); err != nil {
 		panic(err)
 	}
 	bufMap[fmt.Sprintf("internal/core/%s/stores/%sdb/db.go", out.PackageName, out.PackageName)] = buf
+
+	{
+		buf := bytes.NewBuffer(nil)
+		if err := tpl.ExecuteTemplate(buf, "db_test.go.tmpl", tp); err != nil {
+			panic(err)
+		}
+		bufMap[fmt.Sprintf("internal/core/%s/stores/%sdb/db_test.go", out.PackageName, out.PackageName)] = buf
+	}
 
 	for _, v := range tp.Models {
 		if v.IsNotDB {
@@ -261,10 +269,16 @@ func handlerDomainDB(out *Domain, bufMap map[string]*bytes.Buffer) error {
 		v.PackageName = out.PackageName
 		v.ModuleName = out.ModuleName
 		buf := bytes.NewBuffer(nil)
-		if err := tpl.ExecuteTemplate(buf, "db.engine.go.tmpl", v); err != nil {
+		if err := tpl.ExecuteTemplate(buf, "engine.db.go.tmpl", v); err != nil {
 			panic(err)
 		}
 		bufMap[fmt.Sprintf("internal/core/%s/stores/%sdb/%s.db.go", out.PackageName, out.PackageName, CamelCaseToUnderscore(v.Name))] = buf
+
+		tbuf := bytes.NewBuffer(nil)
+		if err := tpl.ExecuteTemplate(tbuf, "engine.db_test.go.tmpl", v); err != nil {
+			panic(err)
+		}
+		bufMap[fmt.Sprintf("internal/core/%s/stores/%sdb/%s.db_test.go", out.PackageName, out.PackageName, CamelCaseToUnderscore(v.Name))] = tbuf
 	}
 
 	return nil
@@ -277,7 +291,7 @@ func handlerDomainCache(out *Domain, bufMap map[string]*bytes.Buffer) error {
 	}
 	buf := bytes.NewBuffer(nil)
 
-	tpl := template.Must(template.New("abc").Funcs(funcMap).ParseFS(files, "cache.go.tmpl", "cache.engine.go.tmpl"))
+	tpl := template.Must(template.New("abc").Funcs(funcMap).ParseFS(files, "cache.go.tmpl", "engine.cache.go.tmpl"))
 
 	if err := tpl.ExecuteTemplate(buf, "cache.go.tmpl", tp); err != nil {
 		panic(err)
@@ -290,7 +304,7 @@ func handlerDomainCache(out *Domain, bufMap map[string]*bytes.Buffer) error {
 		}
 		v.PackageName = out.PackageName
 		buf := bytes.NewBuffer(nil)
-		if err := tpl.ExecuteTemplate(buf, "cache.engine.go.tmpl", v); err != nil {
+		if err := tpl.ExecuteTemplate(buf, "engine.cache.go.tmpl", v); err != nil {
 			panic(err)
 		}
 		bufMap[fmt.Sprintf("internal/core/%s/stores/%scache/%s.cache.go", out.PackageName, out.PackageName, CamelCaseToUnderscore(v.Name))] = buf

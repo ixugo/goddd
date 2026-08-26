@@ -63,7 +63,7 @@ func (a {{$PackageName}}API) get{{.Name}}(c *gin.Context,in *{{$packageName}}.Ge
 }
 
 func (a {{$PackageName}}API) update{{.Name}}(c *gin.Context,in *{{$packageName}}.Update{{.Name}}Input)(*{{$packageName}}.{{.Name}},error){
-	return a.{{$packageName}}Core.Update{{.Name}}(c.Request.Context(), in,in.ID)
+	return a.{{$packageName}}Core.Update{{.Name}}(c.Request.Context(), in)
 }
 
 func (a {{$PackageName}}API) create{{.Name}}(c *gin.Context,in *{{$packageName}}.Create{{.Name}}Input)(*{{$packageName}}.{{.Name}},error){

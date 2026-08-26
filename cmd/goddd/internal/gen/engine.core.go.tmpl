@@ -6,22 +6,17 @@ import "github.com/ixugo/goddd/pkg/orm"
 import "github.com/ixugo/goddd/pkg/web"
 import "github.com/ixugo/goddd/pkg/reason"
 import "github.com/jinzhu/copier"
-import "gorm.io/gorm"
 
 
-// {{.Name}}Storer Instantiation interface
+// {{.Name}}Storer 数据持久化接口
 type {{.Name}}Storer interface{
-	List(context.Context, *[]*{{.Name}}, *List{{.Name}}Input) (int64,error)
-	Get(context.Context,*{{.Name}},...orm.QueryOption) error
-	Create(context.Context,*{{.Name}}) error
-	Update(context.Context,*{{.Name}},func(*{{.Name}}),...orm.QueryOption) error
-	Delete(context.Context,*{{.Name}}, ...orm.QueryOption) error
-	Count(context.Context, *List{{.Name}}Input) (int64,error)
-
-	Session(context.Context, ...func(*gorm.DB) error) error
-	UpdateWithSession(*gorm.DB, *{{.Name}}, func(b *{{.Name}}) error, ...orm.QueryOption) error
-
-	GetByID(context.Context, {{.IDType}}) (*{{.Name}},error)
+	NewWithTx(orm.Tx) ({{.Name}}Storer, error)
+	Create(context.Context, *{{.Name}}) error
+	Update(context.Context, *{{.Name}}, func(*{{.Name}}) error) error
+	Delete(context.Context, *{{.Name}}) error
+	List(context.Context, *[]*{{.Name}}, *List{{.Name}}Input) (int64, error)
+	Count(context.Context, *List{{.Name}}Input) (int64, error)
+	GetByID(context.Context, {{.IDType}}) (*{{.Name}}, error)
 }
 
 // List{{.Name}}s 分页查询
@@ -46,7 +41,7 @@ func (c Core) Get{{.Name}}(ctx context.Context,id {{.IDType}}) (*{{.Name}},error
 	return out,nil
 }
 
-// Create{{.Name}} Insert into database
+// Create{{.Name}}
 func (c Core) Create{{.Name}}(ctx context.Context,in *Create{{.Name}}Input) (*{{.Name}},error) {
 	var out {{.Name}}
 	if err :=copier.Copy(&out, in);err!=nil{
@@ -60,24 +55,39 @@ func (c Core) Create{{.Name}}(ctx context.Context,in *Create{{.Name}}Input) (*{{
 	return &out,nil
 }
 
-// Update{{.Name}} Update object information
-func (c Core) Update{{.Name}}(ctx context.Context,in *Update{{.Name}}Input,id {{.IDType}}) (*{{.Name}},error) {
-	var out {{.Name}}
-	if err :=c.store.{{.Name}}().Update(ctx,&out,func(b *{{.Name}}){
+// Update{{.Name}}
+func (c Core) Update{{.Name}}(ctx context.Context,in *Update{{.Name}}Input) (*{{.Name}},error) {
+{{- if .HasID}}
+	out := &{{.Name}}{ID: in.ID}
+{{- else}}
+	// TODO: 无 ID 字段，可能是复合主键，请手动指定查询条件
+	var _undefined_primary_key_must_fix_this = COMPILE_ERROR_NO_ID_FIELD
+	out := &{{.Name}}{}
+	_ = _undefined_primary_key_must_fix_this
+{{- end}}
+	if err :=c.store.{{.Name}}().Update(ctx,out,func(b *{{.Name}}) error {
 		if err :=copier.Copy(b, in);err!=nil{
 			slog.ErrorContext( ctx,"Copy","err",err)
 		}
-	},orm.Where("id=?",id));err!=nil{
-		return nil,reason.ErrDB.Withf(`Update id[%v] err[%s]`, id,err.Error())
+		return nil
+	});err!=nil{
+		return nil,reason.ErrDB.Withf(`Update id[%v] err[%s]`, in.ID,err.Error())
 	}
-	return &out,nil
+	return out,nil
 }
 
-// Delete{{.Name}} Delete object
+// Delete{{.Name}} 按主键删除，幂等
 func (c Core) Delete{{.Name}}(ctx context.Context,id {{.IDType}}) (*{{.Name}},error) {
-	var out {{.Name}}
-	if err := c.store.{{.Name}}().Delete(ctx, &out, orm.Where("id=?",id));err!=nil{
+{{- if .HasID}}
+	out := &{{.Name}}{ID: id}
+{{- else}}
+	// TODO: 无 ID 字段，可能是复合主键，请手动指定查询条件
+	var _undefined_primary_key_must_fix_this = COMPILE_ERROR_NO_ID_FIELD
+	out := &{{.Name}}{}
+	_ = _undefined_primary_key_must_fix_this
+{{- end}}
+	if err := c.store.{{.Name}}().Delete(ctx, out);err!=nil{
 		return nil,reason.ErrDB.Withf(`Del id[%v] err[%s]`,id, err.Error())
 	}
-	return &out,nil
+	return out,nil
 }
