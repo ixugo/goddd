@@ -122,8 +122,8 @@ func (c *Entity) Create(ctx context.Context, model *xxx.Entity) error {
 }
 
 // Update 写完 DB 后用最新值覆盖缓存。
-func (c *Entity) Update(ctx context.Context, model *xxx.Entity, changeFn func(*xxx.Entity), opts ...orm.QueryOption) error {
-    if err := c.store.Entity().Update(ctx, model, changeFn, opts...); err != nil {
+func (c *Entity) Update(ctx context.Context, model *xxx.Entity, changeFn func(*xxx.Entity) error) error {
+    if err := c.store.Entity().Update(ctx, model, changeFn); err != nil {
         return err
     }
     c.setCache(ctx, model)
@@ -163,12 +163,23 @@ func (c *Entity) GetByID(ctx context.Context, id string) (*xxx.Entity, error) {
     return v.(*xxx.Entity), nil
 }
 
+// NewWithTx 事务操作绕过缓存，返回底层 db store 的事务副本。
+func (c *Entity) NewWithTx(tx orm.Tx) (xxx.EntityStorer, error) {
+    return c.store.Entity().NewWithTx(tx)
+}
+
+// Delete 删除后清除缓存。
+func (c *Entity) Delete(ctx context.Context, model *xxx.Entity) error {
+    if err := c.store.Entity().Delete(ctx, model); err != nil {
+        return err
+    }
+    c.rdb.Del(ctx, c.cacheKey(model.Key))
+    return nil
+}
+
 // 不走缓存的方法直接透传
 func (c *Entity) List(ctx context.Context, bs *[]*xxx.Entity, in *xxx.ListEntityInput) (int64, error) {
     return c.store.Entity().List(ctx, bs, in)
-}
-func (c *Entity) Get(ctx context.Context, model *xxx.Entity, opts ...orm.QueryOption) error {
-    return c.store.Entity().Get(ctx, model, opts...)
 }
 func (c *Entity) Count(ctx context.Context, in *xxx.ListEntityInput) (int64, error) {
     return c.store.Entity().Count(ctx, in)

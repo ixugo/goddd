@@ -110,7 +110,7 @@ type PagerFilter struct {
 |------|------|
 | `Offset() int` | 计算偏移量 `(Page-1)*Size` |
 | `Limit() int` | 每页数量，限制 1~10000 |
-| `SortColumn() (string, bool)` | 按白名单校验排序列 |
+| `SortColumn() (string, bool)` | 去 `-` 前缀后按白名单校验排序列（safelist 只需定义 `"id"` 无需 `"-id"`） |
 | `SortDirection() string` | 返回 ASC 或 DESC |
 | `MustSortColumn() string` | 返回排序列+方向，不校验白名单 |
 

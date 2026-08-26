@@ -187,6 +187,68 @@ func NewTaskCore(db *gorm.DB) task.Core {
 
 ---
 
+## EntityStorer 接口规范
+
+每个实体生成的 Storer 接口定义在 `internal/core/<domain>/<entity>.go`：
+
+```go
+type EntityStorer interface {
+    NewWithTx(orm.Tx) (EntityStorer, error)
+    Create(context.Context, *Entity) error
+    Update(context.Context, *Entity, func(*Entity) error) error
+    Delete(context.Context, *Entity) error
+    List(context.Context, *[]*Entity, *ListEntityInput) (int64, error)
+    Count(context.Context, *ListEntityInput) (int64, error)
+    GetByID(context.Context, int) (*Entity, error)
+}
+```
+
+### 关键设计约束
+
+| 规则 | 说明 |
+|------|------|
+| NewWithTx 跨域事务 | 传入 `orm.Tx` 返回事务副本，多个 Store 共享同一事务 |
+| Update 原子性 | Store 内部用 `SELECT ... FOR UPDATE` + `Save`，保证读写原子 |
+| Update 锁查询 | 使用 `Take(model)` 而非 `First(model)`，避免多余 ORDER BY |
+| Delete 幂等 | `Clauses(clause.Returning{}).Delete(model)`，重复删除不报错 |
+| 主键必填 panic | `model.ID == 0` 时 panic，强制调用方填充主键 |
+| 无 ORM 泄露 | Core 层接口不含 `*gorm.DB`，仅通过 `orm.Tx` 抽象事务 |
+| GetByID 命名 | 单条查询命名为 `GetByID`（非 QueryByID） |
+| SortSafelist | 只需定义列名（如 `"id"`），`SortColumn()` 自动去除 `-` 前缀 |
+
+### 跨域事务（NewWithTx 模式）
+
+```go
+// 在 Adapter 层协调跨域事务
+tx, err := orm.Begin(db)
+defer tx.Rollback()
+
+txUserStore, _ := userStorer.NewWithTx(tx)
+txOrderStore, _ := orderStorer.NewWithTx(tx)
+
+txUserStore.Update(ctx, user, fn)
+txOrderStore.Create(ctx, order)
+
+tx.Commit()
+
+// 便捷写法
+orm.Transaction(db, func(tx orm.Tx) error {
+    txUser, _ := userStorer.NewWithTx(tx)
+    txUser.Update(ctx, model, fn)
+    return nil
+})
+```
+
+### Store 实现要点（db 层）
+
+- `NewWithTx`：克隆 struct，内部 db 替换为 `orm.GormDB(tx)`
+- 不显式写 `.Where("id = ?", model.ID)`，GORM 从非零主键自动推导 WHERE
+- Update 事务内：`tx.Clauses(clause.Locking{Strength: "UPDATE"}).Take(model)` → `changeFn(model)` → `tx.Save(model)`
+- Delete：`d.db.WithContext(ctx).Clauses(clause.Returning{}).Delete(model)`
+- Cache 层 `NewWithTx` 直接透传底层 db store 的事务副本（事务内绕过缓存）
+
+---
+
 ## 参数定义规范
 
 **核心原则**：归属字段（TenantID、CreatedBy）由 API 层填充，`json:"-"` / `form:"-"` 标记，编辑时不可修改。
@@ -206,8 +268,17 @@ type CreateEntityInput struct {
 }
 
 type UpdateEntityInput struct {
+    ID   int    `uri:"id"`
     Name string `json:"name"`
-    // 不含归属字段
+    // 不含归属字段；ID 来自路由参数
+}
+
+type GetEntityInput struct {
+    ID int `uri:"id"`
+}
+
+type DeleteEntityInput struct {
+    ID int `uri:"id"`
 }
 ```
 
