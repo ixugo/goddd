@@ -39,15 +39,15 @@ func (c Core) Valid(ctx context.Context, token string) error {
 	to.Hash = hash[:]
 	if err := c.store.Token().Get(ctx, &to, orm.Where("hash = ?", hash[:])); err != nil {
 		if orm.IsErrRecordNotFound(err) {
-			return reason.ErrUnauthorizedToken.SetMsg("请重新登录")
+			return reason.ErrUnauthorized.WithMsg("请重新登录")
 		}
 		return reason.ErrDB.Withf("token get err[%s]", err.Error())
 	}
 	if to.ExpiredAt.Before(time.Now()) {
 		if to.Reason != "" {
-			return reason.ErrUnauthorizedToken.SetMsg(to.Reason)
+			return reason.ErrUnauthorized.WithMsg(to.Reason)
 		}
-		return reason.ErrUnauthorizedToken.SetMsg("请重新登录")
+		return reason.ErrUnauthorized.WithMsg("请重新登录")
 	}
 	return nil
 }
