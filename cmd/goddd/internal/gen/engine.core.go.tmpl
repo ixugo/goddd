@@ -14,15 +14,14 @@ type {{.Name}}Storer interface{
 	Create(context.Context, *{{.Name}}) error
 	Update(context.Context, *{{.Name}}, func(*{{.Name}}) error) error
 	Delete(context.Context, *{{.Name}}) error
-	List(context.Context, *[]*{{.Name}}, *List{{.Name}}Input) (int64, error)
+	List(context.Context, *List{{.Name}}Input) ([]*{{.Name}}, int64, error)
 	Count(context.Context, *List{{.Name}}Input) (int64, error)
 	GetByID(context.Context, {{.IDType}}) (*{{.Name}}, error)
 }
 
 // List{{.Name}}s 分页查询
 func (c Core) List{{.Name}}s(ctx context.Context,in *List{{.Name}}Input) ([]*{{.Name}},int64,error) {
-	items := make([]*{{.Name}},0, in.Limit())
-	total,err := c.store.{{.Name}}().List(ctx,&items,in)
+	items,total,err := c.store.{{.Name}}().List(ctx,in)
 	if err != nil {
 		return nil,0,reason.ErrDB.Withf(`List in[%+v] err[%s]`, in, err.Error())
 	}

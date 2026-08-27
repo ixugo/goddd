@@ -65,7 +65,7 @@ func (d {{.Name}})Delete(ctx context.Context,model *{{.PackageName}}.{{.Name}}) 
 {{- if eq $defaultOrder ""}}{{- range .Lines}}{{- if eq .Name "ID"}}{{- $defaultOrder = "id DESC"}}{{- end}}{{- end}}{{- end}}
 
 // List 分页查询
-func (d {{.Name}})List(ctx context.Context, bs *[]*{{.PackageName}}.{{.Name}},in *{{.PackageName}}.List{{.Name}}Input) (int64,error){
+func (d {{.Name}})List(ctx context.Context,in *{{.PackageName}}.List{{.Name}}Input) ([]*{{.PackageName}}.{{.Name}},int64,error){
 	in.SortSafelist = append(in.SortSafelist, {{range .Lines}}{{if eq .Name "ID"}}"id",{{end}}{{if eq .Name "CreatedAt"}}"created_at",{{end}}{{end}})
 	db := apply{{.Name}}Filter(d.db, in)
 {{if ne $defaultOrder ""}}	orderBy := "{{$defaultOrder}}"
@@ -75,7 +75,14 @@ func (d {{.Name}})List(ctx context.Context, bs *[]*{{.PackageName}}.{{.Name}},in
 	db = db.Order(orderBy){{else}}	if col := in.MustSortColumn(); col != "" {
 		db = db.Order(col)
 	}{{end}}
-	return orm.ListWithContext(ctx, db, bs, in)
+	var total int64
+	items := make([]*{{.PackageName}}.{{.Name}}, 0)
+	db = db.Model(new({{.PackageName}}.{{.Name}})).WithContext(ctx)
+	if err := db.Count(&total).Error; err != nil || total <= 0 {
+		return items, total, err
+	}
+	err := db.Limit(in.Limit()).Offset(in.Offset()).Find(&items).Error
+	return items, total, err
 }
 
 // Count 按过滤条件计数

@@ -48,8 +48,8 @@ func (c *{{.Name}})Delete(ctx context.Context,model *{{.PackageName}}.{{.Name}})
 }
 
 // List 分页查询，不走缓存
-func (c *{{.Name}})List(ctx context.Context, bs *[]*{{.PackageName}}.{{.Name}},in *{{.PackageName}}.List{{.Name}}Input) (int64,error){
-	return c.store.{{.Name}}().List(ctx,bs,in)
+func (c *{{.Name}})List(ctx context.Context,in *{{.PackageName}}.List{{.Name}}Input) ([]*{{.PackageName}}.{{.Name}},int64,error){
+	return c.store.{{.Name}}().List(ctx,in)
 }
 
 // Count 计数，不走缓存

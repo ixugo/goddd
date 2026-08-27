@@ -22,8 +22,7 @@ func Test{{.Name}}CRUD(t *testing.T) {
 	t.Run("List", func(t *testing.T) {
 		in := &{{.PackageName}}.List{{.Name}}Input{}
 		in.Size = 10
-		var list []*{{.PackageName}}.{{.Name}}
-		total, err := store.List(ctx, &list, in)
+		list, total, err := store.List(ctx, in)
 		if err != nil {
 			t.Fatalf("List 失败: %v", err)
 		}
