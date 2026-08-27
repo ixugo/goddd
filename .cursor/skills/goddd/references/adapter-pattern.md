@@ -183,3 +183,44 @@ type MessageBrief struct {
     Creator  *useradapter.Brief  `json:"creator"`
 }
 ```
+
+## 跨域事务协调（Adapter 持有多个 Storer）
+
+当两个对等域需要原子写操作时，由 Adapter 协调事务：
+
+```go
+// order/orderadapter/orderadapter.go
+
+type OrderTxCoordinator struct {
+    orderStore order.Storer
+    userStore  user.Storer
+}
+
+func NewOrderTxCoordinator(orderStore order.Storer, userStore user.Storer) *OrderTxCoordinator {
+    return &OrderTxCoordinator{orderStore: orderStore, userStore: userStore}
+}
+
+func (c *OrderTxCoordinator) CreateOrderAndDeduct(ctx context.Context, in Input) error {
+    tx, err := c.orderStore.Begin()
+    if err != nil {
+        return err
+    }
+    defer tx.Rollback()
+
+    txOrder, _ := c.orderStore.Order().WithTx(tx)
+    txUser, _ := c.userStore.User().WithTx(tx)
+
+    if err := txOrder.Create(ctx, in.Order); err != nil {
+        return err
+    }
+    if err := txUser.DeductBalance(ctx, in.UserID, in.Amount); err != nil {
+        return err
+    }
+    return tx.Commit()
+}
+```
+
+要点：
+- 两域共享同一个底层 `*gorm.DB`，任一 Storer 的 `Begin()` 均可
+- Adapter 定义在**发起方**子包
+- Wire 注入时将两域的 Storer 传入 Adapter

@@ -7,7 +7,6 @@ package conc
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"runtime"
 	"sync"
@@ -21,6 +20,7 @@ type G struct {
 
 type Tracer interface {
 	Error(msg string, args ...any)
+	Info(msg string, args ...any)
 }
 
 func New(l Tracer) *G {
@@ -56,9 +56,11 @@ func (g *G) GoRun(fn func()) {
 	go func() {
 		defer g.wg.Done()
 		defer func() {
+			pc, _, _, _ := runtime.Caller(1)
+			funcName := runtime.FuncForPC(pc).Name()
+			g.trace.Info("goroutine exit", "func", funcName)
 			if err := recover(); err != nil {
-				err := fmt.Errorf("PANIC[%v] TRACE: %s", err, PanicStack())
-				g.trace.Error(err.Error())
+				g.trace.Error("goroutine panic", "err", err, "func", funcName)
 			}
 		}()
 		fn()
@@ -72,8 +74,7 @@ func GoSafe(fn func()) {
 			funcName := runtime.FuncForPC(pc).Name()
 			slog.Info("goroutine exit", "func", funcName)
 			if err := recover(); err != nil {
-				err := fmt.Errorf("PANIC[%v] TRACE: %s", err, PanicStack())
-				slog.Error(err.Error())
+				slog.Error("goroutine panic", "err", err, "func", funcName)
 			}
 		}()
 		fn()
@@ -81,6 +82,10 @@ func GoSafe(fn func()) {
 }
 
 type DefaultTracer struct{}
+
+func (DefaultTracer) Info(msg string, args ...any) {
+	slog.Info(msg, args...)
+}
 
 func (DefaultTracer) Error(msg string, args ...any) {
 	slog.Error(msg, args...)

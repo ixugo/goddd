@@ -163,9 +163,9 @@ func (c *Entity) GetByID(ctx context.Context, id string) (*xxx.Entity, error) {
     return v.(*xxx.Entity), nil
 }
 
-// NewWithTx 事务操作绕过缓存，返回底层 db store 的事务副本。
-func (c *Entity) NewWithTx(tx orm.Tx) (xxx.EntityStorer, error) {
-    return c.store.Entity().NewWithTx(tx)
+// WithTx 事务操作绕过缓存，返回底层 db store 的事务副本。
+func (c *Entity) WithTx(tx orm.Tx) (xxx.EntityStorer, error) {
+    return c.store.Entity().WithTx(tx)
 }
 
 // Delete 删除后清除缓存。

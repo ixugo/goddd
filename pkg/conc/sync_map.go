@@ -138,8 +138,5 @@ func (m *Map[K, V]) Values() []V {
 
 // Clear 清空所有键值对
 func (m *Map[K, V]) Clear() {
-	m.data.Range(func(key, _ any) bool {
-		m.data.Delete(key)
-		return true
-	})
+	m.data.Clear()
 }
