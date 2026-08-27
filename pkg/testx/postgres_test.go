@@ -1,42 +1,50 @@
 package testx
 
 import (
+	"database/sql"
 	"testing"
 )
 
-// pgProbe 仅供 postgres 基建自测的探针模型
-type pgProbe struct {
-	ID int `gorm:"primaryKey"`
+// openProbe 按 DSN 打开探针连接,随测试结束自动关闭
+func openProbe(t *testing.T, dsn string) *sql.DB {
+	t.Helper()
+	db, err := sql.Open("pgx", dsn)
+	if err != nil {
+		t.Fatalf("打开探针连接失败: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	return db
 }
 
-// TestNewDB 验证 NewDB 交付的库可正常建表与读写
-func TestNewDB(t *testing.T) {
+// TestNewPostgres 验证交付的 DSN 可连、可读写
+func TestNewPostgres(t *testing.T) {
 	t.Parallel()
-	db := NewDB(t, new(pgProbe))
+	db := openProbe(t, NewPostgres(t))
 
-	if err := db.Create(&pgProbe{}).Error; err != nil {
-		t.Fatalf("写入失败: %v", err)
+	if err := db.Ping(); err != nil {
+		t.Fatalf("DSN 不可连: %v", err)
 	}
-	var count int64
-	if err := db.Model(new(pgProbe)).Count(&count).Error; err != nil {
-		t.Fatalf("查询失败: %v", err)
-	}
-	if count != 1 {
-		t.Fatalf("期望 count=1, got %d", count)
+	if _, err := db.Exec("CREATE TABLE probe (id int)"); err != nil {
+		t.Fatalf("建表失败: %v", err)
 	}
 }
 
-// TestNewDBIsolation 验证两次 NewDB 产出相互隔离的数据库:
+// TestNewPostgresIsolation 验证两次调用产出相互隔离的库:
 // 甲库所建之表,乙库不可见
-func TestNewDBIsolation(t *testing.T) {
+func TestNewPostgresIsolation(t *testing.T) {
 	t.Parallel()
-	dbA := NewDB(t, new(pgProbe))
-	dbB := NewDB(t)
+	dbA := openProbe(t, NewPostgres(t))
+	dbB := openProbe(t, NewPostgres(t))
 
-	if !dbA.Migrator().HasTable(new(pgProbe)) {
-		t.Fatal("期望甲库存在 pg_probes 表")
+	if _, err := dbA.Exec("CREATE TABLE probe (id int)"); err != nil {
+		t.Fatalf("甲库建表失败: %v", err)
 	}
-	if dbB.Migrator().HasTable(new(pgProbe)) {
-		t.Fatal("期望乙库不存在 pg_probes 表,隔离失效")
+	var n int
+	err := dbB.QueryRow("SELECT count(*) FROM information_schema.tables WHERE table_name = 'probe'").Scan(&n)
+	if err != nil {
+		t.Fatalf("乙库查表失败: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("期望乙库无 probe 表, got %d,隔离失效", n)
 	}
 }

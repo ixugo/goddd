@@ -1,5 +1,6 @@
-// Package testx 提供数据库集成测试的基础设施:复用同一个 Postgres 容器,
-// 每个测试用例创建独立的随机数据库并以 AutoMigrate 建表,测试结束后自动删库。
+// Package testx 提供集成测试的基础设施:以 docker 容器启动依赖服务并返回连接信息。
+// 固定名容器跨测试进程复用以加速重复运行;各存储的客户端库封装隔离于子包
+// (如 testx/postgres),仅需连接信息的调用方不受客户端依赖传染。
 package testx
 
 import (
@@ -10,10 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ixugo/goddd/pkg/orm"
 	"github.com/ixugo/goddd/pkg/testx/docker"
-	gormpostgres "gorm.io/driver/postgres"
-	"gorm.io/gorm"
+	_ "github.com/jackc/pgx/v5/stdlib" // 注册 pgx 为 database/sql 驱动,供建库删库等管理操作直连
 )
 
 // 测试容器与数据库的固定参数,镜像取 alpine 变体以缩短 CI 拉取时间
@@ -27,11 +26,11 @@ const (
 	pingInterval = 200 * time.Millisecond
 )
 
-// NewDB 为单个测试准备一套干净的 Postgres 数据库。
+// NewPostgres 为单个测试准备一套干净的 Postgres 数据库,返回其 DSN。
 // 固定名容器跨测试进程复用(测试结束有意保留容器以加速下次运行),
 // 每个测试用例在容器内创建随机名数据库实现隔离,t.Cleanup 负责删库。
-// models 传入领域模型指针,内部以 AutoMigrate 完成建表。
-func NewDB(t *testing.T, models ...any) *gorm.DB {
+// 客户端库由调用方按所用技术栈自选;gorm 版便利封装见子包 testx/postgres。
+func NewPostgres(t *testing.T) string {
 	t.Helper()
 
 	c, err := docker.StartContainer(pgImage, pgName, pgPort,
@@ -51,30 +50,15 @@ func NewDB(t *testing.T, models ...any) *gorm.DB {
 	}
 
 	dsn := fmt.Sprintf("postgres://%s:%s@%s/%s?sslmode=disable", pgUser, pgPassword, c.HostPort, dbName)
-	db, err := orm.New(gormpostgres.New(gormpostgres.Config{DriverName: "pgx", DSN: dsn}), orm.Config{
-		MaxIdleConns: 2,
-		MaxOpenConns: 4,
-	})
-	if err != nil {
-		t.Fatalf("连接测试库失败: %v", err)
-	}
-
-	if err := db.AutoMigrate(models...); err != nil {
-		t.Fatalf("AutoMigrate 失败: %v", err)
-	}
-
 	t.Cleanup(func() {
-		sqlDB, err := db.DB()
-		if err == nil {
-			_ = sqlDB.Close()
-		}
-		if _, err := master.ExecContext(ctx, "DROP DATABASE "+dbName); err != nil {
+		// FORCE 强制断开调用方可能未关闭的连接,保证删库必达(Postgres 13+)
+		if _, err := master.ExecContext(ctx, "DROP DATABASE "+dbName+" WITH (FORCE)"); err != nil {
 			t.Logf("删除测试库 %s 失败: %v", dbName, err)
 		}
 		_ = master.Close()
 	})
 
-	return db
+	return dsn
 }
 
 // StopPostgres 停止并删除 Postgres 测试容器。
