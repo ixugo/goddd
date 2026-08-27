@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/ixugo/goddd/domain/version"
-	"github.com/ixugo/goddd/pkg/testx"
+	"github.com/ixugo/goddd/pkg/testx/postgres"
 	"gorm.io/gorm"
 )
 
@@ -13,7 +13,7 @@ import (
 // 启动流程依赖此行为跳过首次运行的版本检查
 func TestFirstWithoutTable(t *testing.T) {
 	t.Parallel()
-	db := testx.NewDB(t)
+	db := postgres.NewDB(t)
 
 	var v version.Version
 	err := NewDB(db).First(&v)
@@ -25,8 +25,8 @@ func TestFirstWithoutTable(t *testing.T) {
 // TestAddAndFirst 验证 First 按 id 倒序返回最新一条版本记录
 func TestAddAndFirst(t *testing.T) {
 	t.Parallel()
-	db := testx.NewDB(t, new(version.Version))
-	store := NewDB(db)
+	db := postgres.NewDB(t)
+	store := NewDB(db).AutoMigrate(true)
 
 	for _, ver := range []string{"v1.0.0", "v1.1.0"} {
 		if err := store.Add(&version.Version{Version: ver, Remark: "test"}); err != nil {

@@ -10,7 +10,7 @@ import (
 
 	"github.com/ixugo/goddd/domain/token"
 	"github.com/ixugo/goddd/pkg/orm"
-	"github.com/ixugo/goddd/pkg/testx"
+	"github.com/ixugo/goddd/pkg/testx/postgres"
 )
 
 // hashOf 生成测试用令牌哈希,模拟真实 Token 的 SHA-256 存储形式
@@ -36,8 +36,8 @@ func newToken(scope, userID, seed string, expired bool) token.Token {
 // TestCreateAndGet 验证令牌写入后可按哈希条件取回
 func TestCreateAndGet(t *testing.T) {
 	t.Parallel()
-	db := testx.NewDB(t, new(token.Token))
-	store := NewDB(db).Token()
+	db := postgres.NewDB(t)
+	store := NewDB(db).AutoMigrate(true).Token()
 	ctx := context.Background()
 
 	want := newToken("api", "u1", "token-1", false)
@@ -61,8 +61,8 @@ func TestCreateAndGet(t *testing.T) {
 // RETURNING 子句在 SQLite 上行为与 Postgres 有差异,此测试必须在真库上运行。
 func TestExpire(t *testing.T) {
 	t.Parallel()
-	db := testx.NewDB(t, new(token.Token))
-	store := NewDB(db).Token()
+	db := postgres.NewDB(t)
+	store := NewDB(db).AutoMigrate(true).Token()
 	ctx := context.Background()
 
 	alive := newToken("api", "u1", "token-alive", false)
@@ -95,8 +95,8 @@ func TestExpire(t *testing.T) {
 // TestDeleteAllForUser 验证按用户清空令牌且 RETURNING 返回全部哈希
 func TestDeleteAllForUser(t *testing.T) {
 	t.Parallel()
-	db := testx.NewDB(t, new(token.Token))
-	store := NewDB(db).Token()
+	db := postgres.NewDB(t)
+	store := NewDB(db).AutoMigrate(true).Token()
 	ctx := context.Background()
 
 	a := newToken("api", "u1", "token-a", false)
@@ -132,8 +132,8 @@ func TestDeleteAllForUser(t *testing.T) {
 // TestDeleteExpired 验证仅清理过期令牌,存活令牌不受影响
 func TestDeleteExpired(t *testing.T) {
 	t.Parallel()
-	db := testx.NewDB(t, new(token.Token))
-	store := NewDB(db).Token()
+	db := postgres.NewDB(t)
+	store := NewDB(db).AutoMigrate(true).Token()
 	ctx := context.Background()
 
 	dead := newToken("api", "u1", "token-expired", true)

@@ -10,7 +10,7 @@ import (
 // Test{{.Name}}CRUD 验证 {{.Name}} 的 Create、List、Count、GetByID、Update、Delete
 func Test{{.Name}}CRUD(t *testing.T) {
 	t.Parallel()
-	db := setupTestDB(t, new({{.PackageName}}.{{.Name}}))
+	db := setupTestDB(t)
 	store := New{{.Name}}(db)
 	ctx := context.Background()
 

@@ -3,13 +3,15 @@ package {{.PackageName}}db
 import (
 	"testing"
 
-	"github.com/ixugo/goddd/pkg/testx"
+	"github.com/ixugo/goddd/pkg/testx/postgres"
 	"gorm.io/gorm"
 )
 
-// setupTestDB 为单个测试准备独立的 Postgres 数据库。
+// setupTestDB 为单个测试准备独立的 Postgres 数据库并完成建表。
 // 容器跨测试复用,每个测试用例独占随机名数据库,结束自动删库。
-func setupTestDB(t *testing.T, models ...any) *gorm.DB {
+func setupTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	return testx.NewDB(t, models...)
+	db := postgres.NewDB(t)
+	NewDB(db).AutoMigrate(true)
+	return db
 }
