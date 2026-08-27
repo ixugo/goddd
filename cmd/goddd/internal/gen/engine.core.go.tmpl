@@ -10,7 +10,7 @@ import "github.com/jinzhu/copier"
 
 // {{.Name}}Storer 数据持久化接口
 type {{.Name}}Storer interface{
-	NewWithTx(orm.Tx) ({{.Name}}Storer, error)
+	WithTx(orm.Tx) ({{.Name}}Storer, error)
 	Create(context.Context, *{{.Name}}) error
 	Update(context.Context, *{{.Name}}, func(*{{.Name}}) error) error
 	Delete(context.Context, *{{.Name}}) error

@@ -389,9 +389,10 @@ db.Where("name = '" + input.Name + "'").First(&user)
 | 模式 | 耦合度 | 适用场景 |
 |------|--------|----------|
 | SQL 模式 | 高 | 查询聚合，Store 层直接连表查询其他领域的数据 |
-| 命令编程模式（NewWithTx） | 中 | 写操作聚合，通过 `orm.Tx` + `NewWithTx` 共享事务 |
+| 命令编程模式（WithTx） | 中 | 写操作聚合，通过 `orm.Tx` + `WithTx` 共享事务 |
 | API 层聚合模式 | 中 | API 层协调多个 Core，各 Core 独立执行，结果在 API 层组装 |
 | 适配器模式 | 低 | 领域间通过 Option 注入接口解耦，各自管理事务 |
+| 事件通知（观察者） | 低 | 一对多异步/同步通知，`pkg/event.Bus[T]` 泛型广播 |
 
 **SQL 模式**
 
@@ -409,20 +410,28 @@ func (d OrderDB) FindOrdersWithUser(ctx context.Context, userID string) ([]Order
 }
 ```
 
-**命令编程模式（NewWithTx）**
+**命令编程模式（WithTx）**
 
-通过 `orm.Tx` 接口创建事务副本，多个 Store 共享同一事务：
+通过 `Storer.Begin()` 开启事务，`WithTx` 创建事务副本，多个 Store 共享同一事务：
 
 ```go
-func (a *OrderAdapter) CreateOrderAndDeduct(ctx context.Context, in CreateOrderInput) error {
-    return orm.Transaction(a.db, func(tx orm.Tx) error {
-        txOrder, _ := a.orderStore.NewWithTx(tx)
-        txStock, _ := a.stockStore.NewWithTx(tx)
-        if err := txOrder.Create(ctx, in.Order); err != nil {
-            return err
-        }
-        return txStock.Deduct(ctx, in.ProductID, in.Quantity)
-    })
+func (c Core) CreateOrderAndDeduct(ctx context.Context, in CreateOrderInput) error {
+    tx, err := c.store.Begin()
+    if err != nil {
+        return err
+    }
+    defer tx.Rollback()
+
+    txOrder, _ := c.store.Order().WithTx(tx)
+    txStock, _ := c.store.Stock().WithTx(tx)
+
+    if err := txOrder.Create(ctx, in.Order); err != nil {
+        return err
+    }
+    if err := txStock.Deduct(ctx, in.ProductID, in.Quantity); err != nil {
+        return err
+    }
+    return tx.Commit()
 }
 ```
 

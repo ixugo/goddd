@@ -72,7 +72,7 @@ func (c *{{.Name}})GetByID(ctx context.Context,id {{.IDType}}) (*{{.PackageName}
 	return out, nil
 }
 
-// NewWithTx 事务操作绕过缓存，返回底层 db store 的事务副本。
-func (c *{{.Name}}) NewWithTx(tx orm.Tx) ({{.PackageName}}.{{.Name}}Storer, error) {
-	return c.store.{{.Name}}().NewWithTx(tx)
+// WithTx 事务操作绕过缓存，返回底层 db store 的事务副本。
+func (c *{{.Name}}) WithTx(tx orm.Tx) ({{.PackageName}}.{{.Name}}Storer, error) {
+	return c.store.{{.Name}}().WithTx(tx)
 }

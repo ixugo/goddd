@@ -181,9 +181,10 @@ When business logic involves data from multiple domains, choose the appropriate 
 | Pattern | Coupling | Use Case |
 |---------|----------|----------|
 | SQL Pattern | High | Query aggregation — Store layer writes JOIN queries across domain tables |
-| Command Pattern (NewWithTx) | Medium | Write aggregation — share a single transaction via `orm.Tx` + `NewWithTx` |
+| Command Pattern (WithTx) | Medium | Write aggregation — share a single transaction via `orm.Tx` + `WithTx` |
 | API Layer Aggregation | Medium | API layer coordinates multiple Cores, each runs independently, results assembled in API layer |
 | Adapter Pattern | Low | Domains decoupled via Option-injected interfaces, each manages its own transactions |
+| Event Notification (Observer) | Low | One-to-many sync/async broadcast via `pkg/event.Bus[T]` generics |
 
 **SQL Pattern**
 
@@ -201,20 +202,28 @@ func (d OrderDB) FindOrdersWithUser(ctx context.Context, userID string) ([]Order
 }
 ```
 
-**Command Pattern (NewWithTx)**
+**Command Pattern (WithTx)**
 
-Create transactional Store copies via `orm.Tx`, multiple Stores share one transaction:
+Start a transaction via `Storer.Begin()`, create transactional Store copies with `WithTx`:
 
 ```go
-func (a *OrderAdapter) CreateOrderAndDeduct(ctx context.Context, in CreateOrderInput) error {
-    return orm.Transaction(a.db, func(tx orm.Tx) error {
-        txOrder, _ := a.orderStore.NewWithTx(tx)
-        txStock, _ := a.stockStore.NewWithTx(tx)
-        if err := txOrder.Create(ctx, in.Order); err != nil {
-            return err
-        }
-        return txStock.Deduct(ctx, in.ProductID, in.Quantity)
-    })
+func (c Core) CreateOrderAndDeduct(ctx context.Context, in CreateOrderInput) error {
+    tx, err := c.store.Begin()
+    if err != nil {
+        return err
+    }
+    defer tx.Rollback()
+
+    txOrder, _ := c.store.Order().WithTx(tx)
+    txStock, _ := c.store.Stock().WithTx(tx)
+
+    if err := txOrder.Create(ctx, in.Order); err != nil {
+        return err
+    }
+    if err := txStock.Deduct(ctx, in.ProductID, in.Quantity); err != nil {
+        return err
+    }
+    return tx.Commit()
 }
 ```
 

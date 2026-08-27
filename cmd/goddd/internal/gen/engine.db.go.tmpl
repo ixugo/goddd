@@ -107,7 +107,7 @@ func apply{{.Name}}Filter(db *gorm.DB, in *{{.PackageName}}.List{{.Name}}Input) 
 {{end}}{{end}}{{end}}	return db
 }
 
-// NewWithTx 使用已有事务创建 Store 副本，用于跨域事务协调。
-func (d {{.Name}}) NewWithTx(tx orm.Tx) ({{.PackageName}}.{{.Name}}Storer, error) {
+// WithTx 使用已有事务创建 Store 副本，用于跨域事务协调。
+func (d {{.Name}}) WithTx(tx orm.Tx) ({{.PackageName}}.{{.Name}}Storer, error) {
 	return {{.Name}}{db: orm.GormDB(tx)}, nil
 }
