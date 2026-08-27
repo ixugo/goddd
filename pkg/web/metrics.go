@@ -2,12 +2,9 @@ package web
 
 import (
 	"expvar"
-	"runtime"
 	"strconv"
-	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/ixugo/goddd/pkg/queue"
 )
 
 // 您可能想了解:
@@ -37,29 +34,5 @@ func Metrics() gin.HandlerFunc {
 			urls.Add(c.Request.Method+" "+c.FullPath(), 1)
 		}
 		statusCodes.Add(strconv.Itoa(status), 1)
-	}
-}
-
-type GoroutineNum struct {
-	Time string `json:"time"`
-	Num  int    `json:"num"`
-}
-
-// CountGoroutines 协程数量，间隔 duration 记录一次
-func CountGoroutines(d time.Duration, num uint8) {
-	ticker := time.NewTicker(d)
-	defer ticker.Stop()
-	goroutine := queue.NewCirQueue[GoroutineNum](num)
-
-	expvar.Publish("goroutine_num", expvar.Func(func() any {
-		return goroutine.Range()
-	}))
-
-	for {
-		goroutine.Push(GoroutineNum{
-			Time: time.Now().Format(time.DateTime),
-			Num:  runtime.NumGoroutine(),
-		})
-		<-ticker.C
 	}
 }

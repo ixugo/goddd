@@ -187,13 +187,29 @@ func NewTaskCore(db *gorm.DB) task.Core {
 
 ---
 
+## Storer 聚合接口
+
+每个领域生成的聚合接口定义在 `internal/core/<domain>/core.go`：
+
+```go
+type Storer interface {
+    Begin() (orm.Tx, error)
+    User() UserStorer
+}
+```
+
+- `Begin()` 由 DB 层实现（`orm.Begin(d.db)`），Cache 层透传
+- Core 层通过 `c.store.Begin()` 发起事务，无需接触 `*gorm.DB`
+
+---
+
 ## EntityStorer 接口规范
 
 每个实体生成的 Storer 接口定义在 `internal/core/<domain>/<entity>.go`：
 
 ```go
 type EntityStorer interface {
-    NewWithTx(orm.Tx) (EntityStorer, error)
+    WithTx(orm.Tx) (EntityStorer, error)
     Create(context.Context, *Entity) error
     Update(context.Context, *Entity, func(*Entity) error) error
     Delete(context.Context, *Entity) error
@@ -207,7 +223,8 @@ type EntityStorer interface {
 
 | 规则 | 说明 |
 |------|------|
-| NewWithTx 跨域事务 | 传入 `orm.Tx` 返回事务副本，多个 Store 共享同一事务 |
+| Storer.Begin() | 聚合接口提供事务入口，Core 层即可发起事务 |
+| WithTx 跨域事务 | 传入 `orm.Tx` 返回事务副本，多个 Store 共享同一事务 |
 | Update 原子性 | Store 内部用 `SELECT ... FOR UPDATE` + `Save`，保证读写原子 |
 | Update 锁查询 | 使用 `Take(model)` 而非 `First(model)`，避免多余 ORDER BY |
 | Delete 幂等 | `Clauses(clause.Returning{}).Delete(model)`，重复删除不报错 |
@@ -216,36 +233,136 @@ type EntityStorer interface {
 | GetByID 命名 | 单条查询命名为 `GetByID`（非 QueryByID） |
 | SortSafelist | 只需定义列名（如 `"id"`），`SortColumn()` 自动去除 `-` 前缀 |
 
-### 跨域事务（NewWithTx 模式）
+### 跨域事务（WithTx 模式）
+
+| 模式 | 耦合 | 适用场景 | 事务发起者 |
+|------|------|---------|-----------|
+| Adapter 协调 | 低 | 两个对等域，无主从关系 | Adapter 持有多个 Storer |
+| Core 内部编排 | 中 | 有明确主域（A 依赖 B） | 主域 Core 自行 Begin |
+
+#### 模式 A — Adapter 协调（对等域）
+
+Adapter 持有多个域的 Storer，由外部协调事务：
 
 ```go
-// 在 Adapter 层协调跨域事务
-tx, err := orm.Begin(db)
-defer tx.Rollback()
+type OrderAdapter struct {
+    orderStore order.Storer
+    userStore  user.Storer
+}
 
-txUserStore, _ := userStorer.NewWithTx(tx)
-txOrderStore, _ := orderStorer.NewWithTx(tx)
+func (a *OrderAdapter) CreateOrderAndDeduct(ctx context.Context, in Input) error {
+    tx, err := a.orderStore.Begin()
+    if err != nil {
+        return err
+    }
+    defer tx.Rollback()
 
-txUserStore.Update(ctx, user, fn)
-txOrderStore.Create(ctx, order)
+    txOrder, _ := a.orderStore.Order().WithTx(tx)
+    txUser, _ := a.userStore.User().WithTx(tx)
 
-tx.Commit()
-
-// 便捷写法
-orm.Transaction(db, func(tx orm.Tx) error {
-    txUser, _ := userStorer.NewWithTx(tx)
-    txUser.Update(ctx, model, fn)
-    return nil
-})
+    if err := txOrder.Create(ctx, in.Order); err != nil {
+        return err
+    }
+    if err := txUser.DeductBalance(ctx, in.UserID, in.Amount); err != nil {
+        return err
+    }
+    return tx.Commit()
+}
 ```
+
+#### 模式 B — Core 内部编排（主从域）
+
+主域 Core 通过 Option 注入从域的 EntityStorer，内部发起事务：
+
+```go
+type Core struct {
+    store      Storer
+    userStorer user.UserStorer  // Option 注入
+}
+
+func WithUserStorer(s user.UserStorer) Option {
+    return func(c *Core) { c.userStorer = s }
+}
+
+func (c Core) CreateOrderAndDeduct(ctx context.Context, in Input) error {
+    tx, err := c.store.Begin()
+    if err != nil {
+        return err
+    }
+    defer tx.Rollback()
+
+    txOrder, _ := c.store.Order().WithTx(tx)
+    txUser, _ := c.userStorer.WithTx(tx)
+
+    if err := txOrder.Create(ctx, in.Order); err != nil {
+        return err
+    }
+    if err := txUser.DeductBalance(ctx, in.UserID, in.Amount); err != nil {
+        return err
+    }
+    return tx.Commit()
+}
+```
+
+#### 选择依据
+
+- 两域无主从、仅在特定操作需要原子性 → **模式 A**
+- 有明确主域且频繁调用从域 → **模式 B**
+- 两种模式底层皆走 `Begin()` + `WithTx(tx)`，区别仅在"谁持有 Storer、谁发起事务"
+
+### 事件通知（观察者模式）
+
+`pkg/event` 提供类型安全的事件广播，基于泛型，无序列化开销。
+
+```go
+// 定义事件类型
+type UserDeletedEvent struct { UserID int }
+
+// Core 持有 Notifier 接口
+type Core struct {
+    store     Storer
+    onDeleted event.Notifier[UserDeletedEvent]
+}
+
+func WithOnDeleted(n event.Notifier[UserDeletedEvent]) Option {
+    return func(c *Core) { c.onDeleted = n }
+}
+
+// 业务方法内触发
+func (c Core) DeleteUser(ctx context.Context, id int) error {
+    c.store.User().Delete(ctx, &User{ID: id})
+    if c.onDeleted != nil {
+        return c.onDeleted.Notify(ctx, UserDeletedEvent{UserID: id})
+    }
+    return nil
+}
+```
+
+装配（Wire 层）：
+
+```go
+bus := event.NewBus[user.UserDeletedEvent]()
+bus.Register("home", homeBus.HandleUserDeleted)        // 同步处理
+bus.Register("river:audit", func(ctx context.Context, e user.UserDeletedEvent) error {
+    return riverClient.Insert(ctx, AuditArgs{UserID: e.UserID})  // 持久化入队
+})
+userCore := user.NewCore(store, user.WithOnDeleted(bus))
+```
+
+设计要点：
+- map 存储，天然无序——不依赖 handler 执行顺序
+- `Register(key, fn)` / `Unregister(key)` —— key 仅标识，不参与路由
+- handler 函数内可自由选择同步处理或调用 River 入队
+- 任一 handler 返回 err 则中止上抛（与 service Delegate 一致）
+- 未来需持久化时，handler 内部切换到 River，调用方零修改
 
 ### Store 实现要点（db 层）
 
-- `NewWithTx`：克隆 struct，内部 db 替换为 `orm.GormDB(tx)`
+- `WithTx`：克隆 struct，内部 db 替换为 `orm.GormDB(tx)`
 - 不显式写 `.Where("id = ?", model.ID)`，GORM 从非零主键自动推导 WHERE
 - Update 事务内：`tx.Clauses(clause.Locking{Strength: "UPDATE"}).Take(model)` → `changeFn(model)` → `tx.Save(model)`
 - Delete：`d.db.WithContext(ctx).Clauses(clause.Returning{}).Delete(model)`
-- Cache 层 `NewWithTx` 直接透传底层 db store 的事务副本（事务内绕过缓存）
+- Cache 层 `WithTx` 直接透传底层 db store 的事务副本（事务内绕过缓存）
 
 ---
 
@@ -499,4 +616,13 @@ return nil, reason.ErrUnauthorized.WithMsg("未登录")   // → 401
 
 ## 版本变化
 
-旧版本目录名为 store，如果遇到应该迁移为 stores
+遇到旧代码时按以下清单迁移：
+
+| 旧写法 | 新写法 | 说明 |
+|--------|--------|------|
+| `store/` 目录 | `stores/` | 复数形式，含 `xxxdb/` + `xxxcache/` |
+| `gin.CustomRecover` | `web.Recover` | 统一 recover 中间件 |
+| `.SetMsg("xxx")` | `.WithMsg("xxx")` | reason.Error 友好提示 |
+| `Session(*gorm.DB)` / `UpdateWithSession` | `WithTx(orm.Tx)` | 事务模式重构，Core 层不再依赖 gorm |
+| `.Where("id=?", model.ID).Delete(model)` | `.Delete(model)` | GORM 自动推导非零主键 WHERE |
+| `stores/xxxdb/entity.go` | `stores/xxxdb/entity.db.go` | 生成文件命名含层级后缀 `.db.go` |

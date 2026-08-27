@@ -8,9 +8,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// Deprecated: 请使用 GetEnabledAutoMigrate,SetEnabledAutoMigrate
-// EnabledAutoMigrate 是否开启自动迁移
-// 每次表迁移耗时，提供此全局变量，程序可根据需要是否迁移
+// Deprecated: 请使用 GetEnabledAutoMigrate / SetEnabledAutoMigrate
 var EnabledAutoMigrate bool
 
 func SetEnabledAutoMigrate(v bool) {
@@ -20,10 +18,6 @@ func SetEnabledAutoMigrate(v bool) {
 func GetEnabledAutoMigrate() bool {
 	return EnabledAutoMigrate
 }
-
-// Deprecated: 建议使用 JSONValueScanner
-// Scaner 所有模型内组合的结构体，必须满足该接口
-type Scaner sql.Scanner
 
 // JSONValueScanner 数据库类型定义为 json 的结构体应当实现此接口
 type JSONValueScanner interface {

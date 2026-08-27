@@ -2,19 +2,20 @@ package orm
 
 import (
 	"context"
-	"fmt"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
-// QueryOption ..
+// QueryOption 查询选项函数
 type QueryOption func(*gorm.DB) *gorm.DB
 
+// Query 链式查询条件构建器
 type Query struct {
 	data []QueryOption
 }
 
+// NewQuery 创建查询条件构建器
 func NewQuery(l int) *Query {
 	return &Query{
 		data: make([]QueryOption, 0, l),
@@ -27,24 +28,21 @@ func (q *Query) Where(query any, args ...any) *Query {
 }
 
 func (q *Query) OrderBy(value any) *Query {
-	q.data = append(q.data, OrderBy(value))
+	q.data = append(q.data, func(d *gorm.DB) *gorm.DB {
+		return d.Order(value)
+	})
 	return q
 }
 
 func (q *Query) Select(columns any) *Query {
-	q.data = append(q.data, Select(columns))
+	q.data = append(q.data, func(d *gorm.DB) *gorm.DB {
+		return d.Select(columns)
+	})
 	return q
 }
 
 func (q *Query) Encode() []QueryOption {
 	return q.data
-}
-
-// Unscoped 查询时忽略软删除
-func Unscoped() QueryOption {
-	return func(d *gorm.DB) *gorm.DB {
-		return d.Unscoped()
-	}
 }
 
 // Where 查询条件
@@ -54,60 +52,17 @@ func Where(query any, args ...any) QueryOption {
 	}
 }
 
-// Select 指定查询列
-func Select(columns any) QueryOption {
-	return func(d *gorm.DB) *gorm.DB {
-		return d.Select(columns)
+// CountWithContext 通用计数查询
+func CountWithContext[T any](ctx context.Context, db *gorm.DB, opts ...QueryOption) (int64, error) {
+	var count int64
+	tx := db.WithContext(ctx).Model(new(T))
+	for _, opt := range opts {
+		tx = opt(tx)
 	}
+	return count, tx.Count(&count).Error
 }
 
-// OrderBy 排序条件
-func OrderBy(value any) QueryOption {
-	return func(d *gorm.DB) *gorm.DB {
-		return d.Order(value)
-	}
-}
-
-// Universal 通用增删改查
-// Deprecated: 建议使用 godddx 生成代码，而非内嵌此接口
-type Universal[T any] interface {
-	Get(context.Context, *T, ...QueryOption) error
-	// olw
-	Edit(context.Context, *T, func(*T) error, ...QueryOption) error
-	Del(context.Context, *T, ...QueryOption) error
-	Add(context.Context, *T) error
-	Find(context.Context, *[]*T, Pager, ...QueryOption) (int64, error)
-
-	// new
-	Delete(context.Context, *T, ...QueryOption) error
-	Create(context.Context, *T) error
-	List(context.Context, *[]*T, Pager, ...QueryOption) (int64, error)
-	Update(context.Context, *T, func(*T) error, ...QueryOption) error
-}
-
-// UniversalSession 通用事务
-type UniversalSession[T any] interface {
-	Session(ctx context.Context, changeFns ...func(*gorm.DB) error) error
-	EditWithSession(tx *gorm.DB, model *T, changeFn func(*T) error, opts ...QueryOption) error
-}
-
-type Type[T any] struct {
-	db *gorm.DB
-}
-
-func NewType[T any](db *gorm.DB) Type[T] {
-	return Type[T]{db: db}
-}
-
-// First 通用查询
-func (t Type[T]) Get(ctx context.Context, out *T, opts ...QueryOption) error {
-	return FirstWithContext(ctx, t.db, out, opts...)
-}
-
-func First(db *gorm.DB, out any, opts ...QueryOption) error {
-	return FirstWithContext(context.TODO(), db, out, opts...)
-}
-
+// FirstWithContext 按条件查询单条记录（内部使用 Take 避免额外排序）
 func FirstWithContext(ctx context.Context, db *gorm.DB, out any, opts ...QueryOption) error {
 	if len(opts) == 0 {
 		panic("where is empty")
@@ -118,47 +73,7 @@ func FirstWithContext(ctx context.Context, db *gorm.DB, out any, opts ...QueryOp
 	return db.WithContext(ctx).Take(out).Error
 }
 
-// Update 通用更新
-func (t Type[T]) Update(ctx context.Context, model *T, changeFn func(*T) error, opts ...QueryOption) error {
-	return UpdateWithContext2(ctx, t.db, model, changeFn, opts...)
-}
-
-func (t Type[T]) Create(ctx context.Context, model *T) error {
-	return t.db.WithContext(ctx).Create(model).Error
-}
-
-func Update[T any](db *gorm.DB, model *T, changeFn func(*T), opts ...QueryOption) error {
-	return UpdateWithContext(context.TODO(), db, model, changeFn, opts...)
-}
-
-func CountWithContext[T any](ctx context.Context, db *gorm.DB, opts ...QueryOption) (int64, error) {
-	var count int64
-	tx := db.WithContext(ctx).Model(new(T))
-	for _, opt := range opts {
-		tx = opt(tx)
-	}
-	return count, tx.Count(&count).Error
-}
-
-func UpdateWithContext[T any](ctx context.Context, db *gorm.DB, model *T, changeFn func(*T), opts ...QueryOption) error {
-	if len(opts) == 0 {
-		panic("where is empty")
-	}
-	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		{
-			tx := tx.Clauses(clause.Locking{Strength: "UPDATE"})
-			for _, opt := range opts {
-				tx = opt(tx)
-			}
-			if err := tx.First(model).Error; err != nil {
-				return err
-			}
-		}
-		changeFn(model)
-		return tx.Save(model).Error
-	})
-}
-
+// UpdateWithContext2 事务内悲观锁更新（SELECT FOR UPDATE + Save），changeFn 可返回 error 中止事务
 func UpdateWithContext2[T any](ctx context.Context, db *gorm.DB, model *T, changeFn func(*T) error, opts ...QueryOption) error {
 	if len(opts) == 0 {
 		panic("where is empty")
@@ -169,7 +84,7 @@ func UpdateWithContext2[T any](ctx context.Context, db *gorm.DB, model *T, chang
 			for _, opt := range opts {
 				tx = opt(tx)
 			}
-			if err := tx.First(model).Error; err != nil {
+			if err := tx.Take(model).Error; err != nil {
 				return err
 			}
 		}
@@ -178,74 +93,4 @@ func UpdateWithContext2[T any](ctx context.Context, db *gorm.DB, model *T, chang
 		}
 		return tx.Save(model).Error
 	})
-}
-
-func UpdateWithSession[T any](tx *gorm.DB, model *T, fn func(*T) error, opts ...QueryOption) error {
-	if len(opts) == 0 {
-		panic("where is empty")
-	}
-	{
-		tx := tx.Clauses(clause.Locking{Strength: "UPDATE"})
-		for _, opt := range opts {
-			tx = opt(tx)
-		}
-		if err := tx.First(model).Error; err != nil {
-			return err
-		}
-	}
-	if err := fn(model); err != nil {
-		return err
-	}
-	return tx.Save(model).Error
-}
-
-// Delete 通用删除
-func (t Type[T]) Delete(ctx context.Context, model *T, opts ...QueryOption) error {
-	return DeleteWithContext(ctx, t.db, model, opts...)
-}
-
-func Delete(db *gorm.DB, model any, opts ...QueryOption) error {
-	return DeleteWithContext(context.TODO(), db, model, opts...)
-}
-
-func DeleteWithContext(ctx context.Context, db *gorm.DB, model any, opts ...QueryOption) error {
-	if len(opts) == 0 {
-		return fmt.Errorf("where is empty")
-	}
-	db = db.Clauses(clause.Returning{})
-	for _, opt := range opts {
-		db = opt(db)
-	}
-	return db.WithContext(ctx).Delete(model).Error
-}
-
-type Pager interface {
-	Limit() int
-	Offset() int
-}
-
-func (t Type[T]) List(ctx context.Context, out *[]*T, p Pager, opts ...QueryOption) (int64, error) {
-	return FindWithContext(ctx, t.db, out, p, opts...)
-}
-
-func List[T any](db *gorm.DB, out *[]*T, p Pager, opts ...QueryOption) (int64, error) {
-	return FindWithContext(context.TODO(), db, out, p, opts...)
-}
-
-func ListWithContext[T any](ctx context.Context, db *gorm.DB, out *[]*T, p Pager, opts ...QueryOption) (int64, error) {
-	limit := 9999
-	offset := 0
-	if p != nil {
-		limit = p.Limit()
-		offset = p.Offset()
-	}
-	db = db.Model(new(T)).WithContext(ctx)
-	for _, opt := range opts {
-		db = opt(db)
-	}
-	var total int64
-	if err := db.Count(&total).Error; err != nil || total <= 0 {
-		return total, err
-	}
-	return total, db.Limit(limit).Offset(offset).Find(out).Error
 }
