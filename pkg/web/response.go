@@ -40,7 +40,7 @@ func SetDebug() {
 // ResponseWriter ...
 type ResponseWriter interface {
 	JSON(code int, obj any)
-	File(filepath string)
+	// File(filepath string)
 	Set(any, any)
 	context.Context
 	AbortWithStatusJSON(code int, obj any)
