@@ -362,7 +362,7 @@ userCore := user.NewCore(store, user.WithOnDeleted(bus))
 - 不显式写 `.Where("id = ?", model.ID)`，GORM 从非零主键自动推导 WHERE
 - Update 事务内：`tx.Clauses(clause.Locking{Strength: "UPDATE"}).Take(model)` → `changeFn(model)` → `tx.Save(model)`
 - Delete：`d.db.WithContext(ctx).Clauses(clause.Returning{}).Delete(model)`
-- Cache 层 `WithTx` 直接透传底层 db store 的事务副本（事务内绕过缓存）
+- Cache 层 `WithTx` 返回保留缓存封装的事务副本：事务内写操作仅失效缓存（Del）、读操作直连 db，回滚不残留脏缓存
 
 ---
 
