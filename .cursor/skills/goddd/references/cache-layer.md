@@ -1,6 +1,6 @@
 # Store 缓存层规范
 
-godddx 生成的 `stores/<domain>cache/` 默认使用 `conc.Cacher`（进程内内存 TTL 缓存）。当需要 **Redis 缓存**（多副本共享、长 TTL、高频读场景）时，按本文档规范改造。
+goddd 生成的 `stores/<domain>cache/` 默认使用 `conc.Cacher`（进程内内存 TTL 缓存）。当需要 **Redis 缓存**（多副本共享、长 TTL、高频读场景）时，按本文档规范改造。
 
 ## 判断缓存类型
 
@@ -50,17 +50,21 @@ import (
 var _ xxx.Storer = (*Cache)(nil)
 
 func NewCache(store xxx.Storer, rdb redis.Cmdable) *Cache {
-    return &Cache{store: store, rdb: rdb}
+    c := &Cache{store: store, rdb: rdb}
+    // 子 storer 于构造时预建，访问器直返字段，热路径零分配
+    c.entity = &Entity{store: store.Entity(), rdb: rdb, sf: &c.sf}
+    return c
 }
 
 type Cache struct {
-    store xxx.Storer
-    rdb   redis.Cmdable
-    sf    singleflight.Group // 防缓存击穿：同一 key 并发穿透合并为一次 DB 查询
+    store  xxx.Storer
+    entity xxx.EntityStorer
+    rdb    redis.Cmdable
+    sf     singleflight.Group // 防缓存击穿：同一 key 并发穿透合并为一次 DB 查询
 }
 
 func (c *Cache) Entity() xxx.EntityStorer {
-    return &Entity{store: c.store.Entity(), rdb: c.rdb, sf: &c.sf}
+    return c.entity
 }
 ```
 
@@ -287,4 +291,5 @@ if err == nil {
 - 多副本部署下 Update 用 `Set` + TTL 覆盖（而非 DEL），确保最终一致
 - **singleflight 防击穿**：Cache 结构体持有 `singleflight.Group`，读穿透时用 `sf.Do(key, fn)` 包裹 DB 查询 + SetNX，同一 key 并发穿透只查一次 DB
 - **事务副本语义**：`WithTx` 返回保留缓存封装的副本，事务内写操作仅失效缓存（Del）、读操作直连 db，回滚不残留脏缓存
+- **访问器零分配**：`Entity()` 等访问器直返构造时预建的子 storer 字段，不在调用时 `&Entity{...}`。`WithTx` 返回指针无需改值类型：每事务一次非热路径，且结构体含多字段，值装箱入接口同样逃逸分配（与 service `NewWithTx` 返 `&store` 同理）
 - **redis.Cmdable 接口**：兼容 `*redis.Client`（单机）和 `*redis.ClusterClient`（集群），部署模式变更时无需改业务代码
