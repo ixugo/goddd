@@ -7,7 +7,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const version = "v1.7.8"
+const version = "v1.7.10"
 
 // NewRootCmd 构建并返回根命令。
 func NewRootCmd() *cobra.Command {

@@ -36,6 +36,6 @@ func (c *Cache) Begin() (orm.Tx, error) {
 {{range .Models}}{{ if .IsNotDB }}{{else}}
 // {{.Name}} implements {{$PackageName}}.{{.Name}}Storer
 func (c *Cache) {{.Name}}()  {{$PackageName}}.{{.Name}}Storer {
-	return (*{{.Name}})(c)
+	return &{{.Name}}{store: c.store.{{.Name}}(), cache: c.{{.Name | ToLowerCamelCase}}}
 }
 {{end}}{{end}}

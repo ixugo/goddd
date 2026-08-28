@@ -6,73 +6,96 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/ixugo/goddd/pkg/conc"
 	"github.com/ixugo/goddd/pkg/orm"
 )
 
 
-{{$tableName := .Name | ToLowerCamelCase}}
-
 var _ {{.PackageName}}.{{.Name}}Storer = (*{{.Name}})(nil)
 
-type {{.Name}} Cache
+// {{.Name}} 缓存层，写操作同步维护缓存。
+// inTx 标记事务副本：事务可能回滚，副本内写操作只做缓存失效、读操作直连 db，
+// 避免缓存残留未提交的数据。
+type {{.Name}} struct {
+	store {{.PackageName}}.{{.Name}}Storer
+	cache conc.Cacher
+	inTx  bool
+}
 
 func(c *{{.Name}}) cacheKey(key any) string {
 	return fmt.Sprintf("{{.Name | ToUpper}}:%v", key)
 }
 
+// refresh 写操作后刷新缓存：非事务直接写入；事务内仅删除失效，回滚不残留脏缓存。
+func (c *{{.Name}}) refresh(ctx context.Context, model *{{.PackageName}}.{{.Name}}) {
+	key := c.cacheKey(model.CacheKey())
+	if c.inTx {
+		c.cache.Del(ctx, key)
+		return
+	}
+	c.cache.Set(ctx, key, model)
+}
+
 // Create 创建后写入缓存
 func (c *{{.Name}})Create(ctx context.Context,model *{{.PackageName}}.{{.Name}}) error {
-	if err := c.store.{{.Name}}().Create(ctx, model);err!=nil{
+	if err := c.store.Create(ctx, model);err!=nil{
 		return err
 	}
-	c.{{$tableName}}.Set(ctx,c.cacheKey(model.CacheKey()),  model)
+	c.refresh(ctx, model)
 	return nil
 }
 
 // Update 更新后刷新缓存
 func (c *{{.Name}})Update(ctx context.Context,model *{{.PackageName}}.{{.Name}},changeFn func(*{{.PackageName}}.{{.Name}}) error) error {
-	if err := c.store.{{.Name}}().Update(ctx, model,changeFn);err!=nil{
+	if err := c.store.Update(ctx, model,changeFn);err!=nil{
 		return err
 	}
-	c.{{$tableName}}.Set(ctx, c.cacheKey(model.CacheKey()),  model)
+	c.refresh(ctx, model)
 	return nil
 }
 
 // Delete 删除后清除缓存
 func (c *{{.Name}})Delete(ctx context.Context,model *{{.PackageName}}.{{.Name}}) error {
-	if err := c.store.{{.Name}}().Delete(ctx, model);err!=nil{
+	if err := c.store.Delete(ctx, model);err!=nil{
 		return err
 	}
-	c.{{$tableName}}.Del(ctx,c.cacheKey(model.CacheKey()))
+	c.cache.Del(ctx,c.cacheKey(model.CacheKey()))
 	return nil
 }
 
 // List 分页查询，不走缓存
 func (c *{{.Name}})List(ctx context.Context,in *{{.PackageName}}.List{{.Name}}Input) ([]*{{.PackageName}}.{{.Name}},int64,error){
-	return c.store.{{.Name}}().List(ctx,in)
+	return c.store.List(ctx,in)
 }
 
 // Count 计数，不走缓存
 func (c *{{.Name}})Count(ctx context.Context,in *{{.PackageName}}.List{{.Name}}Input) (int64,error) {
-	return c.store.{{.Name}}().Count(ctx, in)
+	return c.store.Count(ctx, in)
 }
 
-// GetByID 按主键查询，走缓存
+// GetByID 按主键查询，走缓存；事务内直连 db，保证读到事务内的最新数据。
 func (c *{{.Name}})GetByID(ctx context.Context,id {{.IDType}}) (*{{.PackageName}}.{{.Name}},error) {
+	if c.inTx {
+		return c.store.GetByID(ctx, id)
+	}
 	key := c.cacheKey(id)
 	var cached {{.PackageName}}.{{.Name}}
-	if err := c.{{$tableName}}.Get(ctx, key, &cached); err == nil {
+	if err := c.cache.Get(ctx, key, &cached); err == nil {
 		return &cached, nil
 	}
-	out, err := c.store.{{.Name}}().GetByID(ctx, id)
+	out, err := c.store.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	c.{{$tableName}}.SetNX(ctx, key, out)
+	c.cache.SetNX(ctx, key, out)
 	return out, nil
 }
 
-// WithTx 事务操作绕过缓存，返回底层 db store 的事务副本。
+// WithTx 返回保留缓存封装的事务副本：事务内写操作失效缓存，读操作直连 db。
 func (c *{{.Name}}) WithTx(tx orm.Tx) ({{.PackageName}}.{{.Name}}Storer, error) {
-	return c.store.{{.Name}}().WithTx(tx)
+	store, err := c.store.WithTx(tx)
+	if err != nil {
+		return nil, err
+	}
+	return &{{.Name}}{store: store, cache: c.cache, inTx: true}, nil
 }
