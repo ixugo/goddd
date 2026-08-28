@@ -200,6 +200,7 @@ type Storer interface {
 
 - `Begin()` 由 DB 层实现（`orm.Begin(d.db)`），Cache 层透传
 - Core 层通过 `c.store.Begin()` 发起事务，无需接触 `*gorm.DB`
+- `User()` 访问器热路径零分配，两层各用其法：DB 层 `return User(d)` 类型转换（`type User DB` 复用底层结构，单指针字段属 directIface，装箱入接口不堆分配）；Cache 层结构体含多字段、转换必分配，故子 storer 于 `NewCache` 构造时预建为字段、访问器直返字段
 
 ---
 
@@ -225,6 +226,8 @@ type EntityStorer interface {
 |------|------|
 | Storer.Begin() | 聚合接口提供事务入口，Core 层即可发起事务 |
 | WithTx 跨域事务 | 传入 `orm.Tx` 返回事务副本，多个 Store 共享同一事务 |
+| WithTx 返回指针 | 每事务一次、非每调用热路径；Cache 层结构体含多字段，即便返回值类型装箱入接口同样逃逸分配，指针与值等价。与 service `NewWithTx` 返回 `&store` 一致 |
+| 访问器零分配 | db 层 `return Xxx(d)` 类型转换（`type Xxx DB`，单字段 directIface 零分配，**DB 结构体恒守单字段**）；cache 层子 storer 于 `NewCache` 预建为字段、直返字段 |
 | Update 原子性 | Store 内部用 `SELECT ... FOR UPDATE` + `Save`，保证读写原子 |
 | Update 锁查询 | 使用 `Take(model)` 而非 `First(model)`，避免多余 ORDER BY |
 | Delete 幂等 | `Clauses(clause.Returning{}).Delete(model)`，重复删除不报错 |
@@ -628,3 +631,40 @@ return nil, reason.ErrUnauthorized.WithMsg("未登录")   // → 401
 | `stores/xxxdb/entity.go` | `stores/xxxdb/entity.db.go` | 生成文件命名含层级后缀 `.db.go` |
 | `List(ctx, *[]*T, in) (int64, error)` | `List(ctx, in) ([]*T, int64, error)` | 出参改返回值 |
 | `orm.ListWithContext` / `orm.List` / `orm.Find` / `orm.Pager` | Store 内直接 `Count` + `Limit(in.Limit()).Offset(in.Offset()).Find` | `pkg/orm/old.go` 全部函数已弃用，禁止新增引用；分页逻辑由 Store 自实现，`Limit()/Offset()` 取自 `web.PagerFilter` |
+| cache 层访问器内 `return &Xxx{store: c.store.Xxx(), ...}` | 子 storer 于 `NewCache` 构造时预建为字段，访问器直返字段 | 每次调用堆分配，见下文「访问器零分配迁移」 |
+
+### 访问器零分配迁移
+
+**仅 cache 层有旧版问题**。在 `stores/xxxcache/cache.go` 中见到以下写法时，**主动提醒用户并改造**：
+
+旧版 cache 层（访问器内 new 指针）：
+
+```go
+func (c *Cache) User() user.UserStorer {
+    return &User{store: c.store.User(), cache: c.user} // 每次调用堆分配
+}
+```
+
+新版 cache 层（构造时预建）：
+
+```go
+type Cache struct {
+    store user.Storer
+    user  user.UserStorer
+}
+
+func NewCache(store user.Storer, cache conc.Cacher) *Cache {
+    return &Cache{
+        store: store,
+        user:  &User{store: store.User(), cache: cache},
+    }
+}
+
+func (c *Cache) User() user.UserStorer {
+    return c.user
+}
+```
+
+**db 层 `return Xxx(d)` 类型转换是正统写法，非旧版，勿改**：`type Xxx DB` 复用底层结构，单指针字段属 directIface，装箱入接口零分配。唯有一戒——`DB` 结构体恒守单字段（仅 `db *gorm.DB`），添字段则转换静默退化为堆分配。
+
+注意：`WithTx` 不在此列——它本就必须每事务创建副本，保持返回指针，勿改。

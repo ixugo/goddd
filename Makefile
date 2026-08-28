@@ -35,7 +35,7 @@ init:
 	@make title content="install dependencies..."
 	go install github.com/google/wire/cmd/wire@latest
 	go install github.com/divan/expvarmon@latest
-	go install github.com/ixugo/godddx@latest
+	go install github.com/ixugo/goddd/cmd/goddd@latest
 	go install github.com/rakyll/hey@latest
 	go install mvdan.cc/gofumpt@latest
 	@make title content="Successed!"
