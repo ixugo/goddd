@@ -12,7 +12,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// newGenCmd 构建 gen 子命令，将 godddx 的代码生成功能内化。
+// newGenCmd 构建 gen 子命令，将 goddd 的代码生成功能内化。
 func newGenCmd() *cobra.Command {
 	var (
 		filePaths  string

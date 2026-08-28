@@ -118,15 +118,15 @@ rm -rf .git && git init
 
 ```bash
 # 这里用 claude 演示，你可以用自己喜欢的 AI 编辑器
-# 可以用更具体的业务说明，安装有 goddd skills 时，会默认使用 godddx 生成代码
-claude -p "使用 godddx 创建一个新的领域 version，表结构包含 id,created_at,updated_at,version"
+# 可以用更具体的业务说明，安装有 goddd skills 时，会默认使用 goddd 生成代码
+claude -p "使用 goddd 创建一个新的领域 version，表结构包含 id,created_at,updated_at,version"
 ```
 
 **业务完成**
 
 ---
 
-### 不使用 godddx 时应该怎么做?
+### 不使用 goddd 时应该怎么做?
 
 以 godddx 生成效果为准，可以直接查看生成的相关代码。
 
