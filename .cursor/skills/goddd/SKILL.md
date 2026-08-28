@@ -213,7 +213,7 @@ type EntityStorer interface {
     Create(context.Context, *Entity) error
     Update(context.Context, *Entity, func(*Entity) error) error
     Delete(context.Context, *Entity) error
-    List(context.Context, *[]*Entity, *ListEntityInput) (int64, error)
+    List(context.Context, *ListEntityInput) ([]*Entity, int64, error)
     Count(context.Context, *ListEntityInput) (int64, error)
     GetByID(context.Context, int) (*Entity, error)
 }
@@ -626,3 +626,5 @@ return nil, reason.ErrUnauthorized.WithMsg("未登录")   // → 401
 | `Session(*gorm.DB)` / `UpdateWithSession` | `WithTx(orm.Tx)` | 事务模式重构，Core 层不再依赖 gorm |
 | `.Where("id=?", model.ID).Delete(model)` | `.Delete(model)` | GORM 自动推导非零主键 WHERE |
 | `stores/xxxdb/entity.go` | `stores/xxxdb/entity.db.go` | 生成文件命名含层级后缀 `.db.go` |
+| `List(ctx, *[]*T, in) (int64, error)` | `List(ctx, in) ([]*T, int64, error)` | 出参改返回值 |
+| `orm.ListWithContext` / `orm.List` / `orm.Find` / `orm.Pager` | Store 内直接 `Count` + `Limit(in.Limit()).Offset(in.Offset()).Find` | `pkg/orm/old.go` 全部函数已弃用，禁止新增引用；分页逻辑由 Store 自实现，`Limit()/Offset()` 取自 `web.PagerFilter` |

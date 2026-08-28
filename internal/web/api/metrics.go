@@ -32,7 +32,7 @@ type getMetricsAPIOutput struct {
 	TotalResponses   int64  `json:"total_responses"`    // 总响应数
 	RequestTop       []KV   `json:"request_top"`        // 请求TOP
 	StatusCodeTop    []KV   `json:"status_code_top"`    // 状态码TOP
-	Goroutines       any    `json:"goroutines"`         // 协程数量
+	Goroutines       int    `json:"goroutines"`         // 协程数量
 	NumGC            uint32 `json:"num_gc"`             // gc 次数
 	SysAlloc         uint64 `json:"sys_alloc"`          // 内存占用
 	StartAt          string `json:"start_at"`           // 运行时间
@@ -56,6 +56,7 @@ func (uc *Usecase) getMetricsAPI(_ *gin.Context, _ *struct{}) (*getMetricsAPIOut
 		TotalResponses:   resps,
 		RequestTop:       u,
 		StatusCodeTop:    s,
+		Goroutines:       runtime.NumGoroutine(),
 		NumGC:            stats.NumGC,
 		SysAlloc:         stats.Sys,
 		StartAt:          startRuntime.Format(time.DateTime),

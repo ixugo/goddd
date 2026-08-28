@@ -178,8 +178,8 @@ func (c *Entity) Delete(ctx context.Context, model *xxx.Entity) error {
 }
 
 // 不走缓存的方法直接透传
-func (c *Entity) List(ctx context.Context, bs *[]*xxx.Entity, in *xxx.ListEntityInput) (int64, error) {
-    return c.store.Entity().List(ctx, bs, in)
+func (c *Entity) List(ctx context.Context, in *xxx.ListEntityInput) ([]*xxx.Entity, int64, error) {
+    return c.store.Entity().List(ctx, in)
 }
 func (c *Entity) Count(ctx context.Context, in *xxx.ListEntityInput) (int64, error) {
     return c.store.Entity().Count(ctx, in)
