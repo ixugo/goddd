@@ -60,7 +60,7 @@ type Cache struct {
 }
 
 func (c *Cache) Entity() xxx.EntityStorer {
-    return (*Entity)(c)
+    return &Entity{store: c.store.Entity(), rdb: c.rdb, sf: &c.sf}
 }
 ```
 
@@ -84,14 +84,26 @@ const (
     keyTTL    = 24 * time.Hour
 )
 
-type Entity Cache
+// Entity 缓存层，写操作同步维护缓存。
+// inTx 标记事务副本：事务可能回滚，副本内写操作只做缓存失效、读操作直连 db，
+// 避免缓存残留未提交的数据。
+type Entity struct {
+    store xxx.EntityStorer
+    rdb   redis.Cmdable
+    sf    *singleflight.Group
+    inTx  bool
+}
 
 func (c *Entity) cacheKey(key string) string {
     return keyPrefix + key
 }
 
 // GetByKey 按业务键查 Redis，miss 时通过 singleflight 合并并发穿透，用 SETNX 回填。
+// 事务副本内直连 db，保证读到事务内的最新数据。
 func (c *Entity) GetByKey(ctx context.Context, key string) (*xxx.Entity, error) {
+    if c.inTx {
+        return c.store.GetByKey(ctx, key)
+    }
     cacheKey := c.cacheKey(key)
     data, err := c.rdb.Get(ctx, cacheKey).Bytes()
     if err == nil {
@@ -100,8 +112,8 @@ func (c *Entity) GetByKey(ctx context.Context, key string) (*xxx.Entity, error) 
             return &out, nil
         }
     }
-    v, err, _ := (*Cache)(c).sf.Do(key, func() (any, error) {
-        out, err := c.store.Entity().GetByKey(ctx, key)
+    v, err, _ := c.sf.Do(key, func() (any, error) {
+        out, err := c.store.GetByKey(ctx, key)
         if err != nil {
             return nil, err
         }
@@ -118,13 +130,17 @@ func (c *Entity) GetByKey(ctx context.Context, key string) (*xxx.Entity, error) 
 
 // Create 只写 DB，不写缓存，等首次读取时由 SetNX 回填。
 func (c *Entity) Create(ctx context.Context, model *xxx.Entity) error {
-    return c.store.Entity().Create(ctx, model)
+    return c.store.Create(ctx, model)
 }
 
-// Update 写完 DB 后用最新值覆盖缓存。
+// Update 写完 DB 后用最新值覆盖缓存；事务副本内仅删除失效，回滚不残留脏缓存。
 func (c *Entity) Update(ctx context.Context, model *xxx.Entity, changeFn func(*xxx.Entity) error) error {
-    if err := c.store.Entity().Update(ctx, model, changeFn); err != nil {
+    if err := c.store.Update(ctx, model, changeFn); err != nil {
         return err
+    }
+    if c.inTx {
+        c.rdb.Del(ctx, c.cacheKey(model.Key))
+        return nil
     }
     c.setCache(ctx, model)
     return nil
@@ -137,8 +153,11 @@ func (c *Entity) setCache(ctx context.Context, model *xxx.Entity) {
     }
 }
 
-// GetByID 按主键查询，走缓存
+// GetByID 按主键查询，走缓存；事务副本内直连 db，保证读到事务内的最新数据。
 func (c *Entity) GetByID(ctx context.Context, id string) (*xxx.Entity, error) {
+    if c.inTx {
+        return c.store.GetByID(ctx, id)
+    }
     cacheKey := c.cacheKey(id)
     data, err := c.rdb.Get(ctx, cacheKey).Bytes()
     if err == nil {
@@ -147,8 +166,8 @@ func (c *Entity) GetByID(ctx context.Context, id string) (*xxx.Entity, error) {
             return &out, nil
         }
     }
-    v, err, _ := (*Cache)(c).sf.Do(id, func() (any, error) {
-        out, err := c.store.Entity().GetByID(ctx, id)
+    v, err, _ := c.sf.Do(id, func() (any, error) {
+        out, err := c.store.GetByID(ctx, id)
         if err != nil {
             return nil, err
         }
@@ -163,14 +182,18 @@ func (c *Entity) GetByID(ctx context.Context, id string) (*xxx.Entity, error) {
     return v.(*xxx.Entity), nil
 }
 
-// WithTx 事务操作绕过缓存，返回底层 db store 的事务副本。
+// WithTx 返回保留缓存封装的事务副本：事务内写操作仅失效缓存、读操作直连 db。
 func (c *Entity) WithTx(tx orm.Tx) (xxx.EntityStorer, error) {
-    return c.store.Entity().WithTx(tx)
+    store, err := c.store.WithTx(tx)
+    if err != nil {
+        return nil, err
+    }
+    return &Entity{store: store, rdb: c.rdb, sf: c.sf, inTx: true}, nil
 }
 
 // Delete 删除后清除缓存。
 func (c *Entity) Delete(ctx context.Context, model *xxx.Entity) error {
-    if err := c.store.Entity().Delete(ctx, model); err != nil {
+    if err := c.store.Delete(ctx, model); err != nil {
         return err
     }
     c.rdb.Del(ctx, c.cacheKey(model.Key))
@@ -179,10 +202,10 @@ func (c *Entity) Delete(ctx context.Context, model *xxx.Entity) error {
 
 // 不走缓存的方法直接透传
 func (c *Entity) List(ctx context.Context, in *xxx.ListEntityInput) ([]*xxx.Entity, int64, error) {
-    return c.store.Entity().List(ctx, in)
+    return c.store.List(ctx, in)
 }
 func (c *Entity) Count(ctx context.Context, in *xxx.ListEntityInput) (int64, error) {
-    return c.store.Entity().Count(ctx, in)
+    return c.store.Count(ctx, in)
 }
 ```
 
@@ -230,8 +253,8 @@ func NewXxxCore(db *gorm.DB, rdb redis.Cmdable) xxx.Core {
 当查询的 key 在 DB 中不存在时，每次请求都会穿透到 DB。通过缓存空值防护：
 
 ```go
-v, err, _ := (*Cache)(c).sf.Do(key, func() (any, error) {
-    out, err := c.store.Entity().GetByKey(ctx, key)
+v, err, _ := c.sf.Do(key, func() (any, error) {
+    out, err := c.store.GetByKey(ctx, key)
     if err != nil {
         // DB 中不存在时缓存空标记，短 TTL 防止长期占用
         c.rdb.SetNX(ctx, cacheKey, []byte("null"), 30*time.Second)
@@ -263,4 +286,5 @@ if err == nil {
 - TTL 按业务需要设置，长期不变的数据可设 365 天
 - 多副本部署下 Update 用 `Set` + TTL 覆盖（而非 DEL），确保最终一致
 - **singleflight 防击穿**：Cache 结构体持有 `singleflight.Group`，读穿透时用 `sf.Do(key, fn)` 包裹 DB 查询 + SetNX，同一 key 并发穿透只查一次 DB
+- **事务副本语义**：`WithTx` 返回保留缓存封装的副本，事务内写操作仅失效缓存（Del）、读操作直连 db，回滚不残留脏缓存
 - **redis.Cmdable 接口**：兼容 `*redis.Client`（单机）和 `*redis.ClusterClient`（集群），部署模式变更时无需改业务代码
