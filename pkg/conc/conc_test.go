@@ -32,11 +32,16 @@ func closed(ch <-chan struct{}) func() bool {
 // spyTracer 是记录 Error 调用次数的 Tracer，用于断言 panic 被 recover 后产生了错误日志。
 // Error 会在多个 goroutine 里被调用，计数必须用 atomic 保证并发安全。
 type spyTracer struct {
-	count atomic.Int32
+	count     atomic.Int32
+	infoCount atomic.Int32
 }
 
 func (s *spyTracer) Error(string, ...any) {
 	s.count.Add(1)
+}
+
+func (s *spyTracer) Info(string, ...any) {
+	s.infoCount.Add(1)
 }
 
 // TestG 验证 GoRun 的 panic 兜底：
