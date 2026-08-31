@@ -13,7 +13,7 @@ import (
 
 // ============================================================
 // 以下函数/类型已弃用，仅保留向后兼容。
-// 新代码请使用 godddx 生成的 Store 层 + WithTx 模式。
+// 新代码请使用 goddd 生成的 Store 层 + WithTx 模式。
 // ============================================================
 
 // Deprecated: 请使用 JSONValueScanner
@@ -86,12 +86,12 @@ func DeleteWithContext(ctx context.Context, db *gorm.DB, model any, opts ...Quer
 	return db.WithContext(ctx).Delete(model).Error
 }
 
-// Deprecated: 请使用 godddx 生成的 Store 实现
+// Deprecated: 请使用 goddd 生成的 Store 实现
 type Type[T any] struct {
 	db *gorm.DB
 }
 
-// Deprecated: 请使用 godddx 生成的 Store 实现
+// Deprecated: 请使用 goddd 生成的 Store 实现
 func NewType[T any](db *gorm.DB) Type[T] {
 	return Type[T]{db: db}
 }
@@ -141,7 +141,7 @@ func (t Type[T]) List(ctx context.Context, out *[]*T, p Pager, opts ...QueryOpti
 	return ListWithContext(ctx, t.db, out, p, opts...)
 }
 
-// Deprecated: 请使用 godddx 生成代码，而非内嵌此接口
+// Deprecated: 请使用 goddd 生成代码，而非内嵌此接口
 type Universal[T any] interface {
 	Get(context.Context, *T, ...QueryOption) error
 	Edit(context.Context, *T, func(*T) error, ...QueryOption) error
@@ -221,22 +221,22 @@ func Unscoped() QueryOption {
 	}
 }
 
-// Deprecated: 请使用 godddx 生成的 Store 实现
+// Deprecated: 请使用 goddd 生成的 Store 实现
 type Engine struct {
 	db *gorm.DB
 }
 
-// Deprecated: 请使用 godddx 生成的 Store 实现
+// Deprecated: 请使用 goddd 生成的 Store 实现
 func NewEngine(db *gorm.DB) Engine {
 	return Engine{db: db}
 }
 
-// Deprecated: 请使用 godddx 生成的 Store 实现
+// Deprecated: 请使用 goddd 生成的 Store 实现
 func (e Engine) InsertOne(model Tabler) error {
 	return e.db.Create(model).Error
 }
 
-// Deprecated: 请使用 godddx 生成的 Store 实现
+// Deprecated: 请使用 goddd 生成的 Store 实现
 func (e Engine) DeleteOne(model Tabler, opts ...Option) error {
 	db := e.db.Model(model)
 	if len(opts) == 0 {
@@ -248,7 +248,7 @@ func (e Engine) DeleteOne(model Tabler, opts ...Option) error {
 	return db.Delete(model).Error
 }
 
-// Deprecated: 请使用 godddx 生成的 Store 实现
+// Deprecated: 请使用 goddd 生成的 Store 实现
 func (e Engine) UpdateOne(model Tabler, id int, data map[string]any) error {
 	db := e.db.Model(model)
 	WithID(id)(db)
@@ -259,13 +259,13 @@ func (e Engine) UpdateOne(model Tabler, id int, data map[string]any) error {
 	return err
 }
 
-// Deprecated: 请使用 godddx 生成的 Store 实现
+// Deprecated: 请使用 goddd 生成的 Store 实现
 func (e Engine) FirstOrCreate(b any) (bool, error) {
 	tx := e.db.FirstOrCreate(b)
 	return tx.RowsAffected == 1, tx.Error
 }
 
-// Deprecated: 请使用 godddx 生成的 Store 实现
+// Deprecated: 请使用 goddd 生成的 Store 实现
 func (e Engine) Find(model Tabler, bean any, opts ...Option) (total int64, err error) {
 	db := e.db.Model(model)
 	for i := range opts {
@@ -275,7 +275,7 @@ func (e Engine) Find(model Tabler, bean any, opts ...Option) (total int64, err e
 	return
 }
 
-// Deprecated: 请使用 godddx 生成的 Store 实现
+// Deprecated: 请使用 goddd 生成的 Store 实现
 func (e Engine) NextSeq(model Tabler) (nextID int, err error) {
 	db := e.db.Model(model)
 	err = db.Raw(fmt.Sprintf(`SELECT nextval('%s_id_seq'::regclass)`, model.TableName())).Scan(&nextID).Error

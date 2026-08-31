@@ -4,10 +4,13 @@ import (
 	"expvar"
 	"fmt"
 	"net"
+	"net/http"
 	"net/http/pprof"
 	"runtime"
 	"slices"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/arl/statsviz"
 	"github.com/gin-gonic/gin"
@@ -101,21 +104,32 @@ func SetupPProf(r gin.IRouter, ips *[]string) {
 	setupStatsviz(debug)
 }
 
+// setupStatsviz 延迟初始化 statsviz：首次访问才启动采集协程，避免无人查看时的持续内存开销。
+// 采集频率 5s（行业生产级 15s，此处为交互式调试面板适当提高）。
 func setupStatsviz(r gin.IRouter) {
-	srv, _ := statsviz.NewServer()
-	if srv == nil {
-		return
-	}
-
-	ws := srv.Ws()
-	index := srv.Index()
+	var (
+		once sync.Once
+		ws   http.HandlerFunc
+		idx  http.HandlerFunc
+	)
 
 	r.GET("/statsviz/*path", func(ctx *gin.Context) {
+		once.Do(func() {
+			srv, _ := statsviz.NewServer(statsviz.SendFrequency(5 * time.Second))
+			if srv != nil {
+				ws = srv.Ws()
+				idx = srv.Index()
+			}
+		})
+		if ws == nil {
+			ctx.Status(503)
+			return
+		}
 		if ctx.Param("path") == "/ws" {
 			ws(ctx.Writer, ctx.Request)
 			return
 		}
-		index(ctx.Writer, ctx.Request)
+		idx(ctx.Writer, ctx.Request)
 	})
 }
 
