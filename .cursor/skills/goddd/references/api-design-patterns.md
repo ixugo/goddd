@@ -128,6 +128,7 @@ type ListEntityInput struct {
 - `SortSafelist` 白名单防注入，`-` 降序 / `+` 升序
 - `NewPagerFilterMaxSize()` 不分页查询
 - `DateFilter` 毫秒时间戳，`StartAt()` / `EndAt()` 获取 `time.Time`
+- 空列表必须序列化为 `"items": []` 而非 `null`：Store 层用 `make([]*T, 0)` 初始化，禁止返回 nil 切片
 
 ---
 
@@ -156,6 +157,19 @@ if !v.Valid() {
 ```
 
 分工：`binding` 管格式，`Validator` 管业务（唯一、存在、权限、状态）。
+
+### 转换层 — `strconv` 错误必须处理
+
+`uri`/query 绑定的字符串转数值时，转换错误必须返回 400，禁止忽略：
+
+```go
+id, err := strconv.Atoi(c.Param("id"))
+if err != nil {
+    return nil, reason.ErrBadRequest.WithMsg("id 必须是数字")
+}
+```
+
+忽略错误会得到零值，拿零值去查询/删除/更新 = 数据事故（条件退化误伤全表）。
 
 
 
