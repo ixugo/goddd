@@ -1,7 +1,6 @@
 package orm
 
 import (
-	"errors"
 	"fmt"
 
 	"gorm.io/gorm"
@@ -26,18 +25,6 @@ func Begin(db *gorm.DB) (Tx, error) {
 		return nil, tx.Error
 	}
 	return &gormTx{db: tx}, nil
-}
-
-// Transaction 便捷方法：开启事务，执行 fn，自动 Commit/Rollback。
-func Transaction(db *gorm.DB, fn func(Tx) error) error {
-	tx, err := Begin(db)
-	if err != nil {
-		return err
-	}
-	if err := fn(tx); err != nil {
-		return errors.Join(err, tx.Rollback())
-	}
-	return tx.Commit()
 }
 
 // GormDB 从 Tx 中提取底层 *gorm.DB，仅供 Store 层实现使用。
