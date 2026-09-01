@@ -66,7 +66,8 @@ func (d {{.Name}})Delete(ctx context.Context,model *{{.PackageName}}.{{.Name}}) 
 
 // List 分页查询
 func (d {{.Name}})List(ctx context.Context,in *{{.PackageName}}.List{{.Name}}Input) ([]*{{.PackageName}}.{{.Name}},int64,error){
-	in.SortSafelist = append(in.SortSafelist, {{range .Lines}}{{if eq .Name "ID"}}"id",{{end}}{{if eq .Name "CreatedAt"}}"created_at",{{end}}{{end}})
+	safelist := [...]string{ {{range .Lines}}{{if eq .Name "ID"}}"id",{{end}}{{if eq .Name "CreatedAt"}}"created_at",{{end}}{{end}} }
+	in.SortSafelist = safelist[:]
 	db := apply{{.Name}}Filter(d.db, in)
 {{if ne $defaultOrder ""}}	orderBy := "{{$defaultOrder}}"
 	if col := in.MustSortColumn(); col != "" {
