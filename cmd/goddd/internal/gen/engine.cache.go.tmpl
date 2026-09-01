@@ -26,6 +26,12 @@ func(c *{{.Name}}) cacheKey(key any) string {
 	return fmt.Sprintf("{{.Name | ToUpper}}:%v", key)
 }
 
+// tombstone 删除墓碑：Delete 后写入的占位值。
+// 读穿透回填用 SetNX，若无墓碑，"查库（删前旧值）→ Del → SetNX" 的并发时序会把已删除数据复活进缓存；
+// 墓碑占位使迟到的 SetNX 失效。该值无法反序列化为模型，GetByID 命中后回源 db，行为等同缓存未命中。
+// 事务副本同样写墓碑：回滚只是多一次 db 回源，而缺墓碑则并发读可能把旧值回填复活。
+const tombstone = "__tombstone__"
+
 // refresh 写操作后刷新缓存：非事务直接写入；事务内仅删除失效，回滚不残留脏缓存。
 func (c *{{.Name}}) refresh(ctx context.Context, model *{{.PackageName}}.{{.Name}}) {
 	key := c.cacheKey(model.CacheKey())
@@ -54,12 +60,12 @@ func (c *{{.Name}})Update(ctx context.Context,model *{{.PackageName}}.{{.Name}},
 	return nil
 }
 
-// Delete 删除后清除缓存
+// Delete 删除后写入墓碑，阻止读穿透的 SetNX 把已删除的旧值回填复活
 func (c *{{.Name}})Delete(ctx context.Context,model *{{.PackageName}}.{{.Name}}) error {
 	if err := c.store.Delete(ctx, model);err!=nil{
 		return err
 	}
-	c.cache.Del(ctx,c.cacheKey(model.CacheKey()))
+	c.cache.Set(ctx,c.cacheKey(model.CacheKey()), tombstone)
 	return nil
 }
 
