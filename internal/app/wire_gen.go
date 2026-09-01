@@ -7,18 +7,19 @@
 package app
 
 import (
+	"log/slog"
+	"net/http"
+
 	"github.com/ixugo/goddd/domain/version/versionapi"
 	"github.com/ixugo/goddd/internal/conf"
 	"github.com/ixugo/goddd/internal/data"
 	"github.com/ixugo/goddd/internal/web/api"
-	"log/slog"
-	"net/http"
 )
 
 // Injectors from wire.go:
 
 func WireApp(bc *conf.Bootstrap, log *slog.Logger) (http.Handler, func(), error) {
-	db, err := data.SetupDB(bc)
+	db, cleanup, err := data.SetupDB(bc)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -31,5 +32,6 @@ func WireApp(bc *conf.Bootstrap, log *slog.Logger) (http.Handler, func(), error)
 	}
 	handler := api.NewHTTPHandler(usecase)
 	return handler, func() {
+		cleanup()
 	}, nil
 }
