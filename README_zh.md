@@ -422,8 +422,8 @@ func (c Core) CreateOrderAndDeduct(ctx context.Context, in CreateOrderInput) err
     }
     defer tx.Rollback()
 
-    txOrder, _ := c.store.Order().WithTx(tx)
-    txStock, _ := c.store.Stock().WithTx(tx)
+    txOrder := c.store.Order().WithTx(tx)
+    txStock := c.store.Stock().WithTx(tx)
 
     if err := txOrder.Create(ctx, in.Order); err != nil {
         return err

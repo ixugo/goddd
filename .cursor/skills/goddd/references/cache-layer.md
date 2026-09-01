@@ -187,12 +187,8 @@ func (c *Entity) GetByID(ctx context.Context, id string) (*xxx.Entity, error) {
 }
 
 // WithTx 返回保留缓存封装的事务副本：事务内写操作仅失效缓存、读操作直连 db。
-func (c *Entity) WithTx(tx orm.Tx) (xxx.EntityStorer, error) {
-    store, err := c.store.WithTx(tx)
-    if err != nil {
-        return nil, err
-    }
-    return &Entity{store: store, rdb: c.rdb, sf: c.sf, inTx: true}, nil
+func (c *Entity) WithTx(tx orm.Tx) xxx.EntityStorer {
+    return &Entity{store: c.store.WithTx(tx), rdb: c.rdb, sf: c.sf, inTx: true}
 }
 
 // Delete 删除后清除缓存。
