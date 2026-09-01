@@ -17,7 +17,7 @@ import (
 var ProviderSet = wire.NewSet(SetupDB)
 
 // SetupDB 初始化数据存储
-func SetupDB(c *conf.Bootstrap) (*gorm.DB, error) {
+func SetupDB(c *conf.Bootstrap) (*gorm.DB, func(), error) {
 	cfg := c.Data.Database
 	dial, isSQLite := getDialector(cfg.Dsn)
 	if isSQLite {
@@ -30,7 +30,15 @@ func SetupDB(c *conf.Bootstrap) (*gorm.DB, error) {
 		ConnMaxLifetime: cfg.ConnMaxLifetime.Duration(),
 		SlowThreshold:   cfg.SlowThreshold.Duration(),
 	})
-	return db, err
+
+	closeFn := func() {
+		sqlDB, err := db.DB()
+		if err != nil {
+			_ = sqlDB.Close()
+		}
+	}
+
+	return db, closeFn, err
 }
 
 // getDialector 返回 dial 和 是否 sqlite
