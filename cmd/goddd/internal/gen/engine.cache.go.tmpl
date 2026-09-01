@@ -92,10 +92,6 @@ func (c *{{.Name}})GetByID(ctx context.Context,id {{.IDType}}) (*{{.PackageName}
 }
 
 // WithTx 返回保留缓存封装的事务副本：事务内写操作失效缓存，读操作直连 db。
-func (c *{{.Name}}) WithTx(tx orm.Tx) ({{.PackageName}}.{{.Name}}Storer, error) {
-	store, err := c.store.WithTx(tx)
-	if err != nil {
-		return nil, err
-	}
-	return &{{.Name}}{store: store, cache: c.cache, inTx: true}, nil
+func (c *{{.Name}}) WithTx(tx orm.Tx) {{.PackageName}}.{{.Name}}Storer {
+	return &{{.Name}}{store: c.store.WithTx(tx), cache: c.cache, inTx: true}
 }

@@ -115,6 +115,7 @@ func apply{{.Name}}Filter(db *gorm.DB, in *{{.PackageName}}.List{{.Name}}Input) 
 }
 
 // WithTx 使用已有事务创建 Store 副本，用于跨域事务协调。
-func (d {{.Name}}) WithTx(tx orm.Tx) ({{.PackageName}}.{{.Name}}Storer, error) {
-	return {{.Name}}{db: orm.GormDB(tx)}, nil
+// orm.GormDB 对类型不符的 tx 直接 panic，属编程错误，故不返回 error。
+func (d {{.Name}}) WithTx(tx orm.Tx) {{.PackageName}}.{{.Name}}Storer {
+	return {{.Name}}{db: orm.GormDB(tx)}
 }
