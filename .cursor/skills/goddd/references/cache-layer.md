@@ -191,12 +191,13 @@ func (c *Entity) WithTx(tx orm.Tx) xxx.EntityStorer {
     return &Entity{store: c.store.WithTx(tx), rdb: c.rdb, sf: c.sf, inTx: true}
 }
 
-// Delete 删除后清除缓存。
+// Delete 删除后写入墓碑：阻止读穿透的 SetNX 把已删除的旧值回填复活。
+// 墓碑是非法模型值（如 "__tombstone__"），读侧反序列化失败后回源 db，行为等同缓存未命中。
 func (c *Entity) Delete(ctx context.Context, model *xxx.Entity) error {
     if err := c.store.Delete(ctx, model); err != nil {
         return err
     }
-    c.rdb.Del(ctx, c.cacheKey(model.Key))
+    c.rdb.Set(ctx, c.cacheKey(model.Key), "__tombstone__", ttl)
     return nil
 }
 
