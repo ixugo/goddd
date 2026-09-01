@@ -210,7 +210,7 @@ type Storer interface {
 
 ```go
 type EntityStorer interface {
-    WithTx(orm.Tx) (EntityStorer, error)
+    WithTx(orm.Tx) EntityStorer
     Create(context.Context, *Entity) error
     Update(context.Context, *Entity, func(*Entity) error) error
     Delete(context.Context, *Entity) error
@@ -260,8 +260,8 @@ func (a *OrderAdapter) CreateOrderAndDeduct(ctx context.Context, in Input) error
     }
     defer tx.Rollback()
 
-    txOrder, _ := a.orderStore.Order().WithTx(tx)
-    txUser, _ := a.userStore.User().WithTx(tx)
+    txOrder := a.orderStore.Order().WithTx(tx)
+    txUser := a.userStore.User().WithTx(tx)
 
     if err := txOrder.Create(ctx, in.Order); err != nil {
         return err
@@ -294,8 +294,8 @@ func (c Core) CreateOrderAndDeduct(ctx context.Context, in Input) error {
     }
     defer tx.Rollback()
 
-    txOrder, _ := c.store.Order().WithTx(tx)
-    txUser, _ := c.userStorer.WithTx(tx)
+    txOrder := c.store.Order().WithTx(tx)
+    txUser := c.userStorer.WithTx(tx)
 
     if err := txOrder.Create(ctx, in.Order); err != nil {
         return err

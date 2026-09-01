@@ -207,8 +207,8 @@ func (c *OrderTxCoordinator) CreateOrderAndDeduct(ctx context.Context, in Input)
     }
     defer tx.Rollback()
 
-    txOrder, _ := c.orderStore.Order().WithTx(tx)
-    txUser, _ := c.userStore.User().WithTx(tx)
+    txOrder := c.orderStore.Order().WithTx(tx)
+    txUser := c.userStore.User().WithTx(tx)
 
     if err := txOrder.Create(ctx, in.Order); err != nil {
         return err

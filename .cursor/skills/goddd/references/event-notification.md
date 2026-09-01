@@ -96,7 +96,7 @@ func (c Core) DeleteUser(ctx context.Context, id int) error {
     tx, _ := c.store.Begin()
     defer tx.Rollback()
 
-    txUser, _ := c.store.User().WithTx(tx)
+    txUser := c.store.User().WithTx(tx)
     txUser.Delete(ctx, &User{ID: id})
 
     if err := tx.Commit(); err != nil {
