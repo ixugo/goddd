@@ -32,6 +32,7 @@ description: >
 | `references/lifecycle-split.md` | Core 需后台 goroutine 且 Wire 循环依赖 | Core 值类型 + SessionHandler、方法分配、`(Core, func())`、反模式 |
 | `references/sort.md` | 实现拖拽排序 | 有序 ID 数组 → 收集 sort 值 → 重分配 → 事务更新 |
 | `references/with-context.md` | Core/Adapter 需 HTTP 请求信息 | `web.WithContext` → Core 透传 → Adapter 类型断言 |
+| `references/refactor-migration.md` | 重构/迁移旧代码到 goddd 架构 | 等价性检查清单：重构不能改变原有代码语义，发现旧 bug 单独提交 |
 
 ---
 

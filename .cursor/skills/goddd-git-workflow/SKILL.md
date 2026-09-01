@@ -254,3 +254,4 @@ git log $(git describe --tags --abbrev=0)..HEAD --pretty=format:"%s" | sort
 - 无新增 lint 告警
 - 相关测试通过
 - 不提交 `.env`、凭证等敏感文件
+- 不留压编译器的占位语句（如 `var _ = errors.New(...)`、只为消告警而设的空变量），编译告警要根治不要掩盖
