@@ -17,114 +17,17 @@ description: >
 
 # GoDDD 六边形架构开发指南
 
-> **遇到不确定的写法时，优先参考项目中已有的符合规范的领域代码。**
-
-## references 索引
-
-实现对应功能时**必须**先阅读对应文档：
-
-| 文档 | 必读时机 | 核心内容 |
-|------|---------|---------|
-| `references/api-design-patterns.md` | 设计新接口、审查接口规范 | 资源命名、标准方法、自定义方法、错误处理、分页过滤、校验、限流、路由模板 |
-| `references/web-toolkit.md` | 使用 `pkg/web` 任意函数 | WrapH、PagerFilter/DateFilter、JWT、中间件、SSE、Validator、响应封装 |
-| `references/adapter-pattern.md` | 新增领域间依赖 | Port/Adapter 定义位置、Option 注入、Wire 装配、port.go/model.go 分工 |
-| `references/cache-layer.md` | 修改 `stores/xxxcache/` | 内存 vs Redis、redis.Cmdable、SETNX 防竞态、singleflight、WarmUp、穿透防护 |
-| `references/lifecycle-split.md` | Core 需后台 goroutine 且 Wire 循环依赖 | Core 值类型 + SessionHandler、方法分配、`(Core, func())`、反模式 |
-| `references/sort.md` | 实现拖拽排序 | 有序 ID 数组 → 收集 sort 值 → 重分配 → 事务更新 |
-| `references/with-context.md` | Core/Adapter 需 HTTP 请求信息 | `web.WithContext` → Core 透传 → Adapter 类型断言 |
-| `references/refactor-migration.md` | 重构/迁移旧代码到 goddd 架构 | 等价性检查清单：重构不能改变原有代码语义，发现旧 bug 单独提交 |
+> **核心法则**：遇到具体业务实现或不确定细节时，**必须根据索引先读取 `references/` 下的对应专题文档**，严禁凭空推测。
 
 ---
 
-## 函数与类型速查索引
-
-### 请求处理（→ `web-toolkit.md`）
-
-| 函数/类型 | 用途 |
-|----------|------|
-| `web.WrapH(fn)` | `func(*gin.Context, *Input) (Output, error)` → `gin.HandlerFunc` |
-| `web.WrapHs(fn, mid...)` | 同 WrapH，附加前置中间件 |
-| `web.PagerFilter` | 分页（Page, Size, Sort），含 `Offset()`, `Limit()`, `SortColumn()` |
-| `web.NewPagerFilterMaxSize()` | 不分页全量查询 |
-| `web.DateFilter` | 日期范围（StartMs, EndMs），含 `StartAt()`, `EndAt()` |
-| `web.Validator` | 业务校验，`Check(ok, key, msg)`, `Valid() bool`, `List() []string` |
-
-### 响应与错误（→ `web-toolkit.md` + `api-design-patterns.md`）
-
-| 函数/类型 | 用途 |
-|----------|------|
-| `web.Success(c, data)` | 统一成功响应 |
-| `web.Fail(c, err)` | 统一错误响应，自动映射状态码 |
-| `web.AbortWithStatusJSON(c, err)` | 错误 + Abort（中间件用） |
-| `web.PageOutput[T]` | 分页响应 `{Items, Total}` |
-| `web.ScrollPageOutput[T]` | 滚动分页 `{Items, Next}` |
-
-### reason.Error 变量（→ `api-design-patterns.md`）
-
-| 变量 | 用途 | 状态码 |
-|------|------|-------|
-| `ErrBadRequest` | 请求参数有误 | 400 |
-| `ErrDB` | 数据库错误 | 400 |
-| `ErrNotFound` | 资源未找到 | 400 |
-| `ErrServer` | 服务器错误 | 400 |
-| `ErrJSON` / `ErrUsedLogic` / `ErrPermissionDenied` / `ErrTimeout` | 其它业务错误 | 400 |
-| `ErrFileUpload` / `ErrFileTooLarge` / `ErrContentTooLarge` | 文件相关 | 400 |
-| `ErrUnauthorized` | 认证失败 | 401 |
-| `ErrTooManyRequests` | 限流 | 429 |
-
-方法：`SetMsg(msg)` 用户提示、`Withf(fmt, ...)` 开发 details、`SetHTTPStatus(code)` 覆盖状态码
-
-### Context 与 URL（→ `web-toolkit.md` + `with-context.md`）
-
-| 函数 | 用途 |
-|------|------|
-| `web.WithContext(r)` | `*http.Request` → `web.Context` |
-| `web.GetBaseURL(r)` / `web.BaseURLJoin(r, paths...)` | 提取/拼接 URL |
-| `web.TraceID(ctx)` / `web.MustTraceID(ctx)` | 请求追踪 ID |
-
-### JWT 鉴权（→ `web-toolkit.md`）
-
-| 函数 | 用途 |
-|------|------|
-| `web.NewToken(data, secret, opts...)` / `web.ParseToken(token, secret)` | 创建/解析 JWT |
-| `web.AuthMiddleware(secret)` / `web.AuthLevel(level)` | 鉴权中间件 |
-| `web.NewClaimsData()` | Claims 链式构建 |
-| `web.GetUID` / `GetUsername` / `GetRoleID` / `GetLevel` / `GetToken` | 获取用户信息 |
-
-### 中间件（→ `web-toolkit.md`）
-
-| 函数 | 用途 |
-|------|------|
-| `web.Logger` / `LoggerWithBody` / `LoggerWithUseTime` | 请求日志 |
-| `web.RateLimiter` / `IPRateLimiterForGin` / `IDRateLimiter` | 限流 |
-| `web.Recover()` / `web.SetDeadline(d)` / `web.Metrics()` | 恢复/超时/指标 |
-
-### SSE（→ `web-toolkit.md`）
-
-| 函数/类型 | 用途 |
-|----------|------|
-| `web.NewSSE` / `SSE.Publish` / `SSE.Close` / `SSE.Stop` | SSE 生命周期 |
-| `web.SendChunk` / `SendChunkPro` / `SendSSE` | 流式发送 |
-| `web.NewEventMessage(event, data)` | 创建事件消息 |
-
-### 缓存操作（→ `cache-layer.md`）
-
-| 操作 | 命令 | 理由 |
-|------|------|------|
-| 读穿透回填 | `singleflight.Do` + `SetNX` | 合并并发，不覆盖新值 |
-| Create | 不写缓存 | 等读时 SetNX 回填 |
-| Update | `Set(key, val, ttl)` | 最新值覆盖 |
-| WarmUp | `SetNX` | 不覆盖运行期缓存 |
-
----
-
-## 架构概览
+## 架构概览与分层
 
 ```
 ┌──────────────────────────────────────────────────────────┐
 │                   API 层 (主动适配器)                      │
 │  internal/web/api/                                       │
-│  职责: HTTP 协议转换 → 调用 Core → 返回响应                │
+│  职责: HTTP 协议转换 → 填充归属字段 → 调用 Core → 返回响应   │
 └──────────────────────┬───────────────────────────────────┘
                        │ 依赖
                        ▼
@@ -132,540 +35,67 @@ description: >
 │               Core 层 (领域层/业务核心)                    │
 │  internal/core/<domain>/                                 │
 │                                                          │
-│  ├─ core.go            Core 结构体 + Storer 接口          │
-│  ├─ port.go            被动适配器接口                      │
-│  ├─ doc.go             领域说明                           │
-│  ├─ model.go           非 GORM 类型定义                   │
-│  ├─ <entity>.go        业务方法 + EntityStorer 接口        │
-│  ├─ <entity>.model.go  领域模型 (GORM 映射)               │
+│  ├─ core.go            Core 结构体 + Storer 聚合接口      │
+│  ├─ port.go            被动适配器接口 (外部系统/MQ等)       │
+│  ├─ doc.go             领域边界与用途说明                 │
+│  ├─ model.go           非 GORM 领域模型/常量定义           │
+│  ├─ <entity>.go        业务方法 + EntityStorer 实体接口    │
+│  ├─ <entity>.model.go  实体持久化模型 (GORM 映射)          │
 │  ├─ <entity>.param.go  List/Create/Update Input 参数      │
 │  ├─ <provider>adapter/ 对外提供的适配器实现                 │
-│  └─ stores/<domain>db/ 数据库实现 (被动适配器)             │
+│  ├─ stores/<domain>db/ 数据库实现 (实现 Storer 接口)       │
+│  └─ stores/<domain>cache/ 缓存实现 (实现 Storer 接口)     │
 └──────────────────────────────────────────────────────────┘
 ```
 
-**依赖方向**：API → Core ← Store/Adapter（外层依赖内层，内层通过接口反转依赖）
+**依赖方向**：API → Core ← Store/Adapter（外层依赖内层，内层通过接口反转依赖，Core 绝不感知具体 ORM 或 DB 驱动）。
 
 ---
 
-## 代码生成
+## References 专题文档索引
 
-CRUD 场景**必须**使用 `goddd gen` 生成代码。
+实现对应功能时**必须首先读取**对应的专题参考文档：
 
-### 步骤
-
-1. 在 `tables/<domain>/` 下创建表定义文件
-2. 结构体**必须包含** `ID`、`CreatedAt`、`UpdatedAt` 字段
-3. 若使用随机字符 ID，使用 `uniqueid.Core` 类型
-4. 同一领域多个结构体放在同一个 tables 文件中
-5. 执行生成：`goddd gen -f tables/<domain>/<entity>.go`
-6. 在 `internal/web/api/provider.go` 注册 Wire provider
-7. 调用生成的 `Register<Domain>` 函数注册路由
-8. 在领域目录下创建 `doc.go` 描述领域用途
-
-### 表定义示例
-
-```go
-type Task struct {
-    ID        uniqueid.Core `gorm:"primaryKey"`
-    Name      string
-    Status    int
-    CreatedBy string
-    Sort      int64  `gorm:"autoIncrement"`
-    CreatedAt time.Time
-    UpdatedAt time.Time
-}
-```
-
-### Wire 注册
-
-```go
-func NewTaskCore(db *gorm.DB) task.Core {
-    store := taskdb.NewDB(db).AutoMigrate(orm.GetEnabledAutoMigrate())
-    return task.NewCore(store)
-}
-```
+| 文档路径 | 必读时机 | 核心内容 |
+|---------|---------|---------|
+| `references/code-generation.md` | 新增 CRUD、定义数据库表模型、Wire 注册 | `tables/` 目录规范、主键与时间戳约束、`goddd gen` 命令、Wire 注入、路由注册 |
+| `references/domain-layer-architecture.md` | 实现/修改领域 Core、Store 接口与事务 | Storer 聚合接口、EntityStorer 规范、事务机制（`Begin/WithTx`）、访问器零分配原理、原子更新、幂等删除、Input 参数定义 |
+| `references/api-design-patterns.md` | 设计新接口、审查 API 规范、错误映射 | 资源命名、标准方法（List/Get/Create/Update/Delete）、自定义方法、错误体系、分页过滤、校验、限流 |
+| `references/web-toolkit.md` | 使用 `pkg/web` 中的工具函数与中间件 | WrapH 绑定规则、PagerFilter/DateFilter、JWT 鉴权、日志/限流/SSE 中间件、Validator |
+| `references/adapter-pattern.md` | 新增跨领域依赖、跨域事务协调 | Port/Adapter 定义位置、Option 注入模式、Wire 装配、跨域事务协调（模式 A 与模式 B） |
+| `references/cache-layer.md` | 修改或扩展 `stores/<domain>cache/` | 内存 vs Redis 缓存选型、SETNX/SETEX 防竞态、singleflight 防击穿、WarmUp 预热、事务副本语义 |
+| `references/package-dependency.md` | 领域内拆分子包、处理子包间依赖 | 子包单向依赖根包原则、同级子包直接引用、Narrow Interface 打破双向循环依赖 |
+| `references/event-notification.md` | 跨领域异步通知、解耦副作用 | `pkg/event` 泛型总线、观察者注册、Wire 注入、River 持久化异步队列集成 |
+| `references/sort.md` | 实现列表拖拽重排序 | 有序 ID 数组 → 收集现有 sort 升序 → 重分配赋值 → 事务批量更新 |
+| `references/with-context.md` | Core 或 Adapter 需要 HTTP 上下文信息 | `web.WithContext` 包装 → Core 透传标准 `ctx` → Adapter 类型断言解包 |
+| `references/lifecycle-split.md` | Core 需后台 goroutine 且 Wire 循环依赖 | Core 值类型 + SessionHandler 指针内嵌、生命周期与业务分离、优雅停机 |
+| `references/refactor-migration.md` | 重构/迁移旧代码到 goddd 架构 | SQL 条件、默认排序、错误控制流、空列表 `[]`、缓存失效等价性检查清单 |
 
 ---
 
-## Storer 聚合接口
-
-每个领域生成的聚合接口定义在 `internal/core/<domain>/core.go`：
-
-```go
-type Storer interface {
-    Begin() (orm.Tx, error)
-    User() UserStorer
-}
-```
-
-- `Begin()` 由 DB 层实现（`orm.Begin(d.db)`），Cache 层透传
-- Core 层通过 `c.store.Begin()` 发起事务，无需接触 `*gorm.DB`
-- `User()` 访问器热路径零分配，两层各用其法：DB 层 `return User(d)` 类型转换（`type User DB` 复用底层结构，单指针字段属 directIface，装箱入接口不堆分配）；Cache 层结构体含多字段、转换必分配，故子 storer 于 `NewCache` 构造时预建为字段、访问器直返字段
-
----
-
-## EntityStorer 接口规范
-
-每个实体生成的 Storer 接口定义在 `internal/core/<domain>/<entity>.go`：
-
-```go
-type EntityStorer interface {
-    WithTx(orm.Tx) EntityStorer
-    Create(context.Context, *Entity) error
-    Update(context.Context, *Entity, func(*Entity) error) error
-    Delete(context.Context, *Entity) error
-    List(context.Context, *ListEntityInput) ([]*Entity, int64, error)
-    Count(context.Context, *ListEntityInput) (int64, error)
-    GetByID(context.Context, int) (*Entity, error)
-}
-```
-
-### 关键设计约束
-
-| 规则 | 说明 |
-|------|------|
-| Storer.Begin() | 聚合接口提供事务入口，Core 层即可发起事务 |
-| WithTx 跨域事务 | 传入 `orm.Tx` 返回事务副本，多个 Store 共享同一事务 |
-| WithTx 返回指针 | 每事务一次、非每调用热路径；Cache 层结构体含多字段，即便返回值类型装箱入接口同样逃逸分配，指针与值等价。与 service `NewWithTx` 返回 `&store` 一致 |
-| 访问器零分配 | db 层 `return Xxx(d)` 类型转换（`type Xxx DB`，单字段 directIface 零分配，**DB 结构体恒守单字段**）；cache 层子 storer 于 `NewCache` 预建为字段、直返字段 |
-| Update 原子性 | Store 内部用 `SELECT ... FOR UPDATE` + `Save`，保证读写原子 |
-| Update 锁查询 | 使用 `Take(model)` 而非 `First(model)`，避免多余 ORDER BY |
-| Delete 幂等 | `Clauses(clause.Returning{}).Delete(model)`，重复删除不报错 |
-| 主键必填 panic | `model.ID == 0` 时 panic，强制调用方填充主键 |
-| 无 ORM 泄露 | Core 层接口不含 `*gorm.DB`，仅通过 `orm.Tx` 抽象事务 |
-| GetByID 命名 | 单条查询命名为 `GetByID`（非 QueryByID） |
-| SortSafelist | 只需定义列名（如 `"id"`），`SortColumn()` 自动去除 `-` 前缀 |
-
-### 跨域事务（WithTx 模式）
-
-| 模式 | 耦合 | 适用场景 | 事务发起者 |
-|------|------|---------|-----------|
-| Adapter 协调 | 低 | 两个对等域，无主从关系 | Adapter 持有多个 Storer |
-| Core 内部编排 | 中 | 有明确主域（A 依赖 B） | 主域 Core 自行 Begin |
-
-#### 模式 A — Adapter 协调（对等域）
-
-Adapter 持有多个域的 Storer，由外部协调事务：
-
-```go
-type OrderAdapter struct {
-    orderStore order.Storer
-    userStore  user.Storer
-}
-
-func (a *OrderAdapter) CreateOrderAndDeduct(ctx context.Context, in Input) error {
-    tx, err := a.orderStore.Begin()
-    if err != nil {
-        return err
-    }
-    defer tx.Rollback()
-
-    txOrder := a.orderStore.Order().WithTx(tx)
-    txUser := a.userStore.User().WithTx(tx)
-
-    if err := txOrder.Create(ctx, in.Order); err != nil {
-        return err
-    }
-    if err := txUser.DeductBalance(ctx, in.UserID, in.Amount); err != nil {
-        return err
-    }
-    return tx.Commit()
-}
-```
-
-#### 模式 B — Core 内部编排（主从域）
-
-主域 Core 通过 Option 注入从域的 EntityStorer，内部发起事务：
-
-```go
-type Core struct {
-    store      Storer
-    userStorer user.UserStorer  // Option 注入
-}
-
-func WithUserStorer(s user.UserStorer) Option {
-    return func(c *Core) { c.userStorer = s }
-}
-
-func (c Core) CreateOrderAndDeduct(ctx context.Context, in Input) error {
-    tx, err := c.store.Begin()
-    if err != nil {
-        return err
-    }
-    defer tx.Rollback()
-
-    txOrder := c.store.Order().WithTx(tx)
-    txUser := c.userStorer.WithTx(tx)
-
-    if err := txOrder.Create(ctx, in.Order); err != nil {
-        return err
-    }
-    if err := txUser.DeductBalance(ctx, in.UserID, in.Amount); err != nil {
-        return err
-    }
-    return tx.Commit()
-}
-```
-
-#### 选择依据
-
-- 两域无主从、仅在特定操作需要原子性 → **模式 A**
-- 有明确主域且频繁调用从域 → **模式 B**
-- 两种模式底层皆走 `Begin()` + `WithTx(tx)`，区别仅在"谁持有 Storer、谁发起事务"
-
-### 事件通知（观察者模式）
-
-`pkg/event` 提供类型安全的事件广播，基于泛型，无序列化开销。
-
-```go
-// 定义事件类型
-type UserDeletedEvent struct { UserID int }
-
-// Core 持有 Notifier 接口
-type Core struct {
-    store     Storer
-    onDeleted event.Notifier[UserDeletedEvent]
-}
-
-func WithOnDeleted(n event.Notifier[UserDeletedEvent]) Option {
-    return func(c *Core) { c.onDeleted = n }
-}
-
-// 业务方法内触发
-func (c Core) DeleteUser(ctx context.Context, id int) error {
-    c.store.User().Delete(ctx, &User{ID: id})
-    if c.onDeleted != nil {
-        return c.onDeleted.Notify(ctx, UserDeletedEvent{UserID: id})
-    }
-    return nil
-}
-```
-
-装配（Wire 层）：
-
-```go
-bus := event.NewBus[user.UserDeletedEvent]()
-bus.Register("home", homeBus.HandleUserDeleted)        // 同步处理
-bus.Register("river:audit", func(ctx context.Context, e user.UserDeletedEvent) error {
-    return riverClient.Insert(ctx, AuditArgs{UserID: e.UserID})  // 持久化入队
-})
-userCore := user.NewCore(store, user.WithOnDeleted(bus))
-```
-
-设计要点：
-- map 存储，天然无序——不依赖 handler 执行顺序
-- `Register(key, fn)` / `Unregister(key)` —— key 仅标识，不参与路由
-- handler 函数内可自由选择同步处理或调用 River 入队
-- 任一 handler 返回 err 则中止上抛（与 service Delegate 一致）
-- 未来需持久化时，handler 内部切换到 River，调用方零修改
-
-### Store 实现要点（db 层）
-
-- `WithTx`：克隆 struct，内部 db 替换为 `orm.GormDB(tx)`
-- 不显式写 `.Where("id = ?", model.ID)`，GORM 从非零主键自动推导 WHERE
-- Update 事务内：`tx.Clauses(clause.Locking{Strength: "UPDATE"}).Take(model)` → `changeFn(model)` → `tx.Save(model)`
-- Delete：`d.db.WithContext(ctx).Clauses(clause.Returning{}).Delete(model)`
-- Cache 层 `WithTx` 返回保留缓存封装的事务副本：事务内写操作仅失效缓存（Del）、读操作直连 db，回滚不残留脏缓存
-
----
-
-## 参数定义规范
-
-**核心原则**：归属字段（TenantID、CreatedBy）由 API 层填充，`json:"-"` / `form:"-"` 标记，编辑时不可修改。
-
-```go
-type ListEntityInput struct {
-    web.PagerFilter
-    web.DateFilter
-    Name      string `form:"name"`
-    TenantID  string `form:"-"`
-}
-
-type CreateEntityInput struct {
-    Name      string `json:"name" binding:"required,max=50"`
-    TenantID  string `json:"-"`
-    CreatedBy string `json:"-"`
-}
-
-type UpdateEntityInput struct {
-    ID   int    `uri:"id"`
-    Name string `json:"name"`
-    // 不含归属字段；ID 来自路由参数
-}
-
-type GetEntityInput struct {
-    ID int `uri:"id"`
-}
-
-type DeleteEntityInput struct {
-    ID int `uri:"id"`
-}
-```
-
-> 校验规范、分页过滤详见 `references/api-design-patterns.md`
-
----
-
-## 领域间解耦
-
-领域间**必须**通过适配器解耦，不能直接依赖其他领域的 Core。
-
-| 规则 | 说明 |
-|------|------|
-| Port 定义在**提供方** | 接口和模型在 `<provider>adapter/` 子包 |
-| Adapter 实现在**提供方** | 同上 |
-| 消费方通过 **Option 注入** | `NewCore(store, opts...)` |
-| 返回类型定义在**提供方子包** | 避免重复定义 |
-
-### Option 注入模式
-
-```go
-type Core struct {
-    store        Storer
-    userProvider useradapter.BriefProvider
-}
-
-type Option func(*Core)
-
-func WithUserProvider(p useradapter.BriefProvider) Option {
-    return func(c *Core) { c.userProvider = p }
-}
-
-func NewCore(store Storer, opts ...Option) Core {
-    c := Core{store: store}
-    for _, opt := range opts { opt(&c) }
-    return c
-}
-```
-
-> 完整代码模板（Port 定义、Adapter 实现、Wire 装配、port.go/model.go 分工）详见 `references/adapter-pattern.md`
-
----
-
-## 领域内子包依赖
-
-| 规则 | 说明 |
-|------|------|
-| 子包单向依赖根包 | 所有子包可 import 根包，根包不感知子包 |
-| 子包间可直接依赖 | 无需通过接口隔离 |
-| 禁止循环依赖 | 双向引用时一方用接口打破 |
-| 基础设施仍需接口 | MQ、DB 驱动等外部依赖接口定义在根包 `port.go` |
-
-### 判断是否需要接口
-
-```
-需要接口的场景：
-├── 实现方在领域外（MQ 客户端、DB 驱动、跨领域适配器）
-├── 子包间存在双向依赖（一方用接口打破循环）
-└── 需要可测试性（mock 外部服务）
-
-不需要接口的场景：
-├── 子包 A 单向依赖子包 B（直接 import）
-├── 子包依赖根包的类型/常量（直接引用）
-└── 子包内部的辅助函数/工具类型
-```
-
-### 示例拓扑
-
-```
-domain/                 ← 领域根包（定义端口接口、模型、共享类型）
-├── sub-a/              ← 单向依赖 domain
-├── sub-b/              ← 单向依赖 domain
-├── sub-infra/          ← 实现 domain.Publisher 等接口
-└── stores/domaindb/    ← 实现 domain.Storer
-```
-
-子包之间若无交叉依赖，全部通过根包共享类型和接口定义。若 sub-a 需调用 sub-b 可直接 import；若反向也需要，则一方定义 narrow interface 打破循环。
-
----
-
-## 排序功能实现
-
-拖拽排序：接收有序 ID 数组，重新分配 sort 值，不影响未传入记录。
-
-### 核心逻辑
-
-1. 查询传入 ID 的记录，获取现有 `sort` 值
-2. 将 `sort` 值升序排列
-3. 按传入 ID 顺序重新分配排序值
-4. 事务批量更新
-
-### 要点
-
-- 数据库字段 `sort` 使用 gorm tag `autoIncrement` 自增
-- Store 层用事务批量更新，Core 层编排逻辑，API 层只做协议转换
-- 校验所有 ID 存在，不存在则返回错误
-- 路由：`g.PUT("/sort", web.WrapH(api.sortXxx))`
-
-> 完整参数定义、Store/Core/API 三层代码模板详见 `references/sort.md`
-
----
-
-## WithContext：Core 层获取 HTTP 信息
-
-Core 不依赖 HTTP 框架，Adapter 需要 HTTP 元信息时，通过 `web.Context` 透传：
-
-- **API 层**：`ctx := web.WithContext(c.Request)`
-- **Core 层**：透传 `ctx context.Context`
-- **Adapter 层**：`if wc, ok := ctx.(web.Context); ok { ... }`
-
-### 设计要点
-
-| 特性 | 说明 |
-|------|------|
-| 零破坏性 | 实现 `context.Context`，现有签名无需修改 |
-| 渐进式采用 | 只改调用处（API）和使用处（Adapter），Core 层透传 |
-| 优雅降级 | 断言失败返回原始值，非 HTTP 场景正常工作 |
-
-> 完整背景分析、代码示例、适用/不适用场景详见 `references/with-context.md`
-
----
-
-## Core 生命周期分离
-
-**触发条件**：Core 需后台 goroutine，Wire 因值/指针类型冲突循环依赖。
-
-| 结构体 | 类型 | 职责 |
-|--------|------|------|
-| `Core` | 值类型 | 纯业务逻辑（查询 DB、计算、编排） |
-| `XxxHandler` | 指针，Core 内嵌 | goroutine 启动/停止、ctx 管理、优雅停机 |
-
-### 方法分配
-
-- **Core 方法**：查询 DB、纯业务计算
-- **Core 委托方法**：一行转发给 Handler（`c.ss.TrackHeartbeat(...)`）
-- **Handler 方法**：goroutine 内部私有逻辑
-
-Wire：`func NewXxxCore(...) (xxx.Core, func()) { ... }`，返回值类型 Core + 清理函数。
-
-> 完整结构定义、构造函数、反模式警告详见 `references/lifecycle-split.md`
-
----
-
-## Store 缓存层规范
-
-修改 `stores/<domain>cache/` 时，**首先**判断缓存类型：
-
-| 类型 | 依赖 | 适用场景 |
-|------|------|---------|
-| 内存缓存 | `conc.Cacher` | 单副本、短 TTL、数据量小 |
-| Redis 缓存 | `redis.Cmdable` | 多副本共享、长 TTL、高频读 |
-
-若为 Redis 缓存：删除 `conc.Cacher`，换 `redis.Cmdable`（接口类型，兼容单机/集群），SETNX 防竞态。
-
-```go
-func NewXxxCore(db *gorm.DB, rdb redis.Cmdable) xxx.Core {
-    dbStore := xxxdb.NewDB(db).AutoMigrate(orm.GetEnabledAutoMigrate())
-    store := xxxcache.NewCache(dbStore, rdb)
-    store.WarmUp(context.Background())
-    return xxx.NewCore(store)
-}
-```
-
-> 完整改造步骤、防竞态、穿透防护、Key 命名详见 `references/cache-layer.md`
-
----
-
-## API 层规范
-
-1. **只做协议转换**：参数绑定 → 填充归属字段 → 调用 Core → 返回响应
-2. **归属字段 API 层填充**：`json:"-"` / `form:"-"`
-3. **路由参数用 `uri` tag**：`struct{ ID string \`uri:"id"\` }`
-
-```go
-func registerTask(r gin.IRouter, api TaskAPI, handler ...gin.HandlerFunc) {
-    g := r.Group("/tasks", handler...)
-    g.GET("", web.WrapH(api.listTasks))
-    g.POST("", web.WrapH(api.createTask))
-    g.GET("/:id", web.WrapH(api.getTask))
-    g.PUT("/:id", web.WrapH(api.updateTask))
-    g.DELETE("/:id", web.WrapH(api.deleteTask))
-    g.PUT("/sort", web.WrapH(api.sortTasks))
-}
-```
-
-### WrapH 入参规则
-
-- POST/PUT/DELETE → 绑定 Request Body（`json` tag）
-- GET → 绑定 URL Query（`form` tag）
-- 文件上传 → multipart form 统一绑定，in 结构体内嵌 `File *multipart.FileHeader \`form:"file"\``，禁止 `c.Request.FormFile` 手取（模板见 `references/web-toolkit.md`）
-- 入参第二个参数必须是指针，`*struct{}` 表示无参数
-- 路由参数通过 `uri` tag 自动绑定：`struct{ ID string \`uri:"id"\` }`
-
-### 错误处理
-
-Core 层返回 `reason.Error`，`web.WrapH` 自动映射 HTTP 状态码：
-
-```go
-return nil, reason.ErrBadRequest.WithMsg("参数不合法")     // → 400
-return nil, reason.ErrDB.Withf("查询失败: %s", err)       // → 400
-return nil, reason.ErrUnauthorized.WithMsg("未登录")   // → 401
-```
-
-- `SetMsg()` — 给用户的友好提示
-- `Withf()` — 给开发者的 details（`SetRelease()` 后不输出）
-
-> 完整 API 设计规范（资源命名、标准方法、自定义方法、状态码、分页、校验、限流）详见 `references/api-design-patterns.md`
-
-### API 文档同步（联动 goddd-api-doc 技能）
-
-凡涉及以下变动，**必须**使用 `goddd-api-doc` 技能同步更新 `docs/api/*.go.yaml` 接口文档（不等用户要求）：
-
-- handler 函数签名变更（入参/出参类型）
-- 路由路径或 HTTP 方法变更
-- 请求/响应结构体字段增删改
-- model 字段与 JSON 映射变更（重命名、类型变更）
-- 新增接口后尚无对应 `.go.yaml` 文件
-
-## 版本变化
-
-遇到旧代码时按以下清单迁移：
-
-| 旧写法 | 新写法 | 说明 |
-|--------|--------|------|
-| `store/` 目录 | `stores/` | 复数形式，含 `xxxdb/` + `xxxcache/` |
-| `gin.CustomRecover` | `web.Recover` | 统一 recover 中间件 |
-| `.SetMsg("xxx")` | `.WithMsg("xxx")` | reason.Error 友好提示 |
-| `Session(*gorm.DB)` / `UpdateWithSession` | `WithTx(orm.Tx)` | 事务模式重构，Core 层不再依赖 gorm |
-| `.Where("id=?", model.ID).Delete(model)` | `.Delete(model)` | GORM 自动推导非零主键 WHERE |
-| `stores/xxxdb/entity.go` | `stores/xxxdb/entity.db.go` | 生成文件命名含层级后缀 `.db.go` |
-| `List(ctx, *[]*T, in) (int64, error)` | `List(ctx, in) ([]*T, int64, error)` | 出参改返回值 |
-| `orm.ListWithContext` / `orm.List` / `orm.Find` / `orm.Pager` | Store 内直接 `Count` + `Limit(in.Limit()).Offset(in.Offset()).Find` | `pkg/orm/old.go` 全部函数已弃用，禁止新增引用；分页逻辑由 Store 自实现，`Limit()/Offset()` 取自 `web.PagerFilter` |
-| cache 层访问器内 `return &Xxx{store: c.store.Xxx(), ...}` | 子 storer 于 `NewCache` 构造时预建为字段，访问器直返字段 | 每次调用堆分配，见下文「访问器零分配迁移」 |
-
-### 访问器零分配迁移
-
-**仅 cache 层有旧版问题**。在 `stores/xxxcache/cache.go` 中见到以下写法时，**主动提醒用户并改造**：
-
-旧版 cache 层（访问器内 new 指针）：
-
-```go
-func (c *Cache) User() user.UserStorer {
-    return &User{store: c.store.User(), cache: c.user} // 每次调用堆分配
-}
-```
-
-新版 cache 层（构造时预建）：
-
-```go
-type Cache struct {
-    store user.Storer
-    user  user.UserStorer
-}
-
-func NewCache(store user.Storer, cache conc.Cacher) *Cache {
-    return &Cache{
-        store: store,
-        user:  &User{store: store.User(), cache: cache},
-    }
-}
-
-func (c *Cache) User() user.UserStorer {
-    return c.user
-}
-```
-
-**db 层 `return Xxx(d)` 类型转换是正统写法，非旧版，勿改**：`type Xxx DB` 复用底层结构，单指针字段属 directIface，装箱入接口零分配。唯有一戒——`DB` 结构体恒守单字段（仅 `db *gorm.DB`），添字段则转换静默退化为堆分配。
-
-注意：`WithTx` 不在此列——它本就必须每事务创建副本，保持返回指针，勿改。
+## 核心速查与开发铁律
+
+### 1. 代码生成与表定义（→ `code-generation.md`）
+- 表模型放在 `tables/<domain>/<entity>.go`，必须含 `ID`、`CreatedAt`、`UpdatedAt`。
+- 执行生成：`goddd gen -f tables/<domain>/<entity>.go`。
+- 生成后于 `internal/web/api/provider.go` 注册 Wire，并在 `api.go` 注册路由。
+
+### 2. 存储与事务铁律（→ `domain-layer-architecture.md`）
+- **事务抽象**：Core 层通过 `c.store.Begin()` 获取 `orm.Tx`，再调用 `WithTx(tx)` 传递给各 Storer，不接触 `*gorm.DB`。
+- **访问器零分配**：DB 结构体恒守单字段（`db *gorm.DB`），`return Xxx(d)` 零分配；Cache 结构体多字段，子 storer 必须在 `NewCache` 构造时预建为字段直接返回。
+- **原子更新与幂等删除**：Update 必须在事务内 `SELECT ... FOR UPDATE` 加锁后通过 `changeFn` 修改；Delete 必须使用 `clause.Returning{}` 实现幂等。
+
+### 3. API 错误处理规范（→ `api-design-patterns.md`）
+- 错误使用 `reason.CustomError` 体系，统一使用不可变方法：
+  - `WithMsg("提示信息")`：覆盖面向用户的提示。
+  - `Withf("格式化信息", ...)`：追加开发者排查 details（生产环境不暴露）。
+  - `WithHTTPStatus(code)`：覆盖默认状态码。
+  - `WithCause(err)`：包裹底层错误链。
+- 状态码映射：客户端业务错误默认 400，未登录 401 (`ErrUnauthorized`)，无权限 403 (`ErrPermissionDenied`)，限流 429 (`ErrTooManyRequests`)，服务端/数据库异常 500 (`ErrDB` / `ErrServer`)。
+
+### 4. 缓存层防竞态（→ `cache-layer.md`）
+- 读穿透回填用 `singleflight.Do` + `SetNX`；Create 不写缓存；Update 写完 DB 用 `Set` 覆盖；WarmUp 用 `SetNX`。
+- `WithTx` 事务副本内：写操作仅失效缓存（Del/墓碑），读操作直连 DB。
+
+### 5. API 文档同步联动
+- 接口签名、路由、请求/响应结构体变更时，**必须联动 `goddd-api-doc` 技能** 同步更新 `docs/api/*.go.yaml`。

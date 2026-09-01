@@ -31,24 +31,22 @@ func WrapH[I, O any](fn func(*gin.Context, *I) (O, error)) gin.HandlerFunc
 ```
 
 将 `func(*gin.Context, *Input) (Output, error)` 包装为 `gin.HandlerFunc`，自动完成：
-- POST/PUT/DELETE/PATCH → 绑定 Request Body（`json` tag）
+- POST/PUT/DELETE/PATCH → 绑定 Request Body（`json` tag 或 multipart form）
 - GET → 绑定 URL Query（`form` tag）
-- 错误自动转为 HTTP 响应
+- 路由路径参数 → 自动绑定 `uri` tag
+- 错误自动转为统一 HTTP 响应
 - 入参第二个参数必须是指针，`*struct{}` 表示无参数
 
 ```go
-// 使用示例
 router.GET("/users", web.WrapH(api.findUsers))
 router.POST("/users", web.WrapH(api.addUser))
 ```
 
 #### 文件上传（multipart form）
 
-文件上传接口（如批量导入）禁止用 `*struct{}` 入参再手动 `c.Request.FormFile("file")` / `c.PostForm("xxx")` 取参。正确做法是把文件和其他字段写进同一个 in 结构体，让 WrapH 统一绑定：
+文件上传接口（如批量导入）禁止使用 `*struct{}` 入参再手动调用 `c.Request.FormFile("file")`。正确做法是将文件和普通字段写入同一个 in 结构体：
 
 ```go
-// ImportGreetsInput 批量导入的入参。
-// access_key 与 file 均通过 multipart form 一起提交。
 type ImportGreetsInput struct {
     AccessKey string                `form:"access_key" binding:"max=64"`
     File      *multipart.FileHeader `form:"file"`
@@ -63,15 +61,10 @@ func (a GreetAPI) importGreets(c *gin.Context, in *greet.ImportGreetsInput) (*gr
         return nil, reason.ErrBadRequest.WithMsg("读取文件失败")
     }
     defer file.Close()
-    // 后续用 file 做 csv.NewReader(file) 或 bufio.Scanner 解析
+    // 后续解析 file ...
+    return &greet.ImportGreetsResult{}, nil
 }
 ```
-
-要点：
-
-- 普通字段与文件字段全部走 multipart form，不再单独拼 query 参数
-- `File` 不加 `binding:"required"`，用 `in.File == nil` 手动判断
-
 
 ### WrapHs — 带中间件的路由包装
 
@@ -79,7 +72,7 @@ func (a GreetAPI) importGreets(c *gin.Context, in *greet.ImportGreetsInput) (*gr
 func WrapHs[I, O any](fn func(*gin.Context, *I) (O, error), mid ...gin.HandlerFunc) []gin.HandlerFunc
 ```
 
-同 WrapH，额外前置中间件。返回 `[]gin.HandlerFunc`，用于 `r.GET("/path", web.WrapHs(fn, mid1, mid2)...)`
+同 WrapH，附加前置中间件。返回 `[]gin.HandlerFunc`，用于 `r.GET("/path", web.WrapHs(fn, mid1, mid2)...)`
 
 ### CustomMethods — 自定义方法路由
 
@@ -87,7 +80,7 @@ func WrapHs[I, O any](fn func(*gin.Context, *I) (O, error), mid ...gin.HandlerFu
 func CustomMethods(g gin.IRouter, relativePath string, data map[string]func(*gin.Context))
 ```
 
-支持 `/:name/sound:muted` 等自定义方法路由。
+支持 `/:name/sound:muted` 等自定义方法路由（如 Google API 设计规范中的自定义方法）。
 
 ---
 
@@ -100,7 +93,7 @@ type PagerFilter struct {
     Page         int      `form:"page"`
     Size         int      `form:"size"`
     Sort         string   `form:"sort"`
-    SortSafelist []string `form:"-"`    // 允许的排序字段白名单
+    SortSafelist []string `json:"-"` // 允许的排序字段白名单
 }
 ```
 
@@ -108,11 +101,11 @@ type PagerFilter struct {
 
 | 方法 | 说明 |
 |------|------|
-| `Offset() int` | 计算偏移量 `(Page-1)*Size` |
-| `Limit() int` | 每页数量，限制 1~10000 |
+| `Offset() int` | 计算偏移量 `(Page-1)*Size`，Page < 1 自动修正为 1 |
+| `Limit() int` | 每页数量，限制在 1~10000 范围 |
 | `SortColumn() (string, bool)` | 去 `-` 前缀后按白名单校验排序列（safelist 只需定义 `"id"` 无需 `"-id"`） |
-| `SortDirection() string` | 返回 ASC 或 DESC |
-| `MustSortColumn() string` | 返回排序列+方向，不校验白名单 |
+| `SortDirection() string` | 返回 "ASC" 或 "DESC"（带 `-` 前缀返回 "DESC"） |
+| `MustSortColumn() string` | 返回排序列+方向（如 `"created_at DESC"`），不匹配白名单返回空字符串 |
 
 ### NewPagerFilterMaxSize
 
@@ -126,8 +119,8 @@ func NewPagerFilterMaxSize() PagerFilter
 
 ```go
 type DateFilter struct {
-    StartMs int64 `form:"start_ms"`   // 开始毫秒时间戳
-    EndMs   int64 `form:"end_ms"`     // 结束毫秒时间戳
+    StartMs int64 `form:"start_ms"` // 开始毫秒时间戳
+    EndMs   int64 `form:"end_ms"`   // 结束毫秒时间戳
 }
 ```
 
@@ -139,20 +132,6 @@ type DateFilter struct {
 | `EndAt() time.Time` | 毫秒时间戳转 time.Time |
 | `DefaultStartAt(date time.Time) time.Time` | 无效时返回默认值 |
 | `DefaultEndAt(date time.Time) time.Time` | 无效时返回默认值 |
-
-```go
-// 使用示例
-if in.StartMs > 0 && in.EndMs > 0 {
-    query.Where("created_at >= ? AND created_at <= ?", in.StartAt(), in.EndAt())
-}
-```
-
-### 辅助函数
-
-```go
-func Limit(v, minV, maxV int) int    // 将 v 限制在 [minV, maxV]
-func Offset(page, size int) int       // 计算分页偏移量
-```
 
 ---
 
@@ -172,68 +151,45 @@ type PageOutput[T any] struct {
 ```go
 type ScrollPageOutput[T any] struct {
     Items []T    `json:"items"`
-    Next  string `json:"next"`   // 下一页游标
+    Next  string `json:"next"` // 下一页游标
 }
 ```
 
 ### Success / Fail
 
 ```go
-func Success(c HTTPContext, bean any)                           // 200 JSON 响应
-func Fail(c ResponseWriter, err error, fn ...WithData)         // 错误 JSON 响应
-func AbortWithStatusJSON(c ResponseWriter, err error, fn ...WithData)  // 中止并返回错误
+func Success(c HTTPContext, bean any)
+func Fail(c ResponseWriter, err error, fn ...WithData)
+func AbortWithStatusJSON(c ResponseWriter, err error, fn ...WithData)
 ```
-
-### ResponseMsg
-
-```go
-type ResponseMsg struct {
-    Msg string `json:"msg"`
-}
-```
-
-通用消息响应。
 
 ---
 
 ## 错误处理
 
-WrapH 内部自动处理错误，Core 层返回 `reason.Error` 类型：
+WrapH 内部自动捕获错误，Core 层返回实现了 `reason.ErrorInfoer` 的错误类型（如 `reason.CustomError`）：
 
 ```go
-reason.ErrBadRequest.WithMsg("参数不合法")              // → 400（默认）
-reason.ErrDB.Withf("查询失败: %s", err)                // → 400（默认）
-reason.ErrServer.WithMsg("服务器错误")                  // → 400（默认）
-reason.ErrUnauthorized.WithMsg("用户已过期")        // → 401（显式 SetHTTPStatus）
-reason.ErrRateLimit.WithMsg("请求频率过高")              // → 429（显式 SetHTTPStatus）
+reason.ErrBadRequest.WithMsg("参数不合法")              // → 400
+reason.ErrNotFound.WithMsg("资源未找到")                // → 400
+reason.ErrUnauthorized.WithMsg("用户未登录")           // → 401
+reason.ErrPermissionDenied.WithMsg("权限不足")          // → 403
+reason.ErrTooManyRequests.WithMsg("请求频率过高")        // → 429
+reason.ErrDB.Withf("查询失败: %s", err)                // → 500
+reason.ErrServer.WithMsg("服务器发生错误")               // → 500
 ```
 
-- `SetMsg()` 设置给用户看的友好提示
-- `Withf()` 写入 details 给开发者（生产环境不输出）
+- `WithMsg()`：设置面向用户的友好提示
+- `Withf()`：追加 details 信息供开发者排查
+- `WithHTTPStatus()`：覆盖默认状态码
 
 环境切换：
 
 ```go
-web.SetRelease()   // 生产环境，details 不输出
-web.SetDebug()     // 开发环境，输出 details
-web.IsRelease()    // 检查是否生产环境
+web.SetRelease() // 生产环境，details 不输出
+web.SetDebug()   // 开发环境，输出 details
+web.IsRelease()  // 检查是否生产环境
 ```
-
-### HandlerResponseMsg
-
-```go
-func HandlerResponseMsg(resp http.Response) error
-```
-
-解析 HTTP 响应，非 200 时返回错误。
-
-### HanddleJSONErr
-
-```go
-func HanddleJSONErr(err error) error
-```
-
-将 JSON 解析错误转为可读错误信息。
 
 ---
 
@@ -251,25 +207,12 @@ type Context interface {
 }
 ```
 
-### WithContext
+### WithContext 与 URL 工具
 
 ```go
-func WithContext(r *http.Request) Context
-```
-
-将 `*http.Request` 包装为 `web.Context`，下游通过类型断言获取：
-
-```go
-if wc, ok := ctx.(web.Context); ok {
-    baseURL := wc.GetBaseURL()
-}
-```
-
-### URL 工具
-
-```go
+func WithContext(r *http.Request) Context                      // 包装 Request 为 web.Context
 func GetBaseURL(req *http.Request) string                      // 提取 scheme://host
-func BaseURLJoin(req *http.Request, paths ...string) string    // 拼接 scheme://host/fullpath
+func BaseURLJoin(req *http.Request, paths ...string) string    // 拼接 base URL 与子路径
 func GetHost(req *http.Request) string                         // 提取 host
 func GetScheme(req *http.Request) string                       // 提取 http/https
 func XForwardedPrefix(req *http.Request, path string) string   // 处理反向代理前缀
@@ -287,9 +230,8 @@ func SetTraceID(ctx *gin.Context, id string)        // 设置追踪 ID
 
 ## JWT 鉴权
 
-### 创建 Token
-
 ```go
+// 创建 Token
 data := web.NewClaimsData().
     SetUserID(1).
     SetUsername("admin").
@@ -299,114 +241,59 @@ data := web.NewClaimsData().
 
 token, err := web.NewToken(data, secret,
     web.WithExpires(24 * time.Hour),
-    web.WithIssuer("myapp"),
+    web.WithIssuer("goddd"),
 )
-```
 
-### 鉴权中间件
+// 中间件鉴权
+r.Use(web.AuthMiddleware(secret))
+r.Use(web.AuthLevel(2))
 
-```go
-r.Use(web.AuthMiddleware(secret))          // 基础 JWT 鉴权
-r.Use(web.AuthLevel(2))                    // 等级鉴权（等级越小权限越大）
-```
-
-### 从上下文获取用户信息
-
-```go
-uid := web.GetUID(c)            // 用户 ID
-username := web.GetUsername(c)  // 用户名
-roleID := web.GetRoleID(c)     // 角色 ID
-level := web.GetLevel(c)       // 权限等级
-token := web.GetToken(c)       // token 字符串
-val := web.GetInt(c, "key")    // 自定义 int 值
-```
-
-### 解析 Token
-
-```go
-claims, err := web.ParseToken(tokenString, secret)
+// 从上下文读取
+uid := web.GetUID(c)
+username := web.GetUsername(c)
+roleID := web.GetRoleID(c)
+level := web.GetLevel(c)
+tokenStr := web.GetToken(c)
 ```
 
 ---
 
 ## 日志中间件
 
-### Logger — 基础请求日志
-
 ```go
 r.Use(web.Logger(
-    web.IgnorePrefix("/health", "/debug"),
+    web.IgnorePrefix("/health", "/metrics"),
     web.IgnoreMethod("OPTIONS"),
-    web.IgnorePath("/metrics"),
 ))
+
+// 记录 body（debug 调试）
+r.Use(web.LoggerWithBody(1024, web.IgnorePrefix("/upload")))
+
+// 慢请求耗时警告
+r.Use(web.LoggerWithUseTime(time.Second, web.IgnorePrefix("/health")))
 ```
-
-### LoggerWithBody — 记录请求体和响应体
-
-```go
-r.Use(web.LoggerWithBody(1024,  // 限制 body 大小
-    web.IgnorePrefix("/upload"),
-))
-```
-
-### LoggerWithUseTime — 耗时记录
-
-```go
-r.Use(web.LoggerWithUseTime(time.Second,  // 超过 1s 打 warn
-    web.IgnorePrefix("/health"),
-))
-```
-
-### 忽略选项
-
-| 函数 | 说明 |
-|------|------|
-| `IgnoreBool(v bool)` | 固定布尔值忽略 |
-| `IgnoreMethod(method string)` | 忽略指定 HTTP 方法 |
-| `IgnorePrefix(prefix ...string)` | 忽略路径前缀 |
-| `IgnorePath(path ...string)` | 忽略完整路径 |
-| `IgoreContains(substrs ...string)` | 忽略路径含子串的请求 |
 
 ---
 
 ## 限流中间件
 
 ```go
-// 全局限流：每秒 100 请求，突发 200
+// 全局限流
 r.Use(web.RateLimiter(100, 200))
 
-// 按 IP 限流：每秒 10 请求，突发 20
+// 按 IP 限流
 r.Use(web.IPRateLimiterForGin(10, 20))
 
-// 按 ID 限流：返回检查函数
+// 按 ID 限流
 check := web.IDRateLimiter(1, 5, time.Minute)
 if !check(userID) {
     // 触发限流
 }
-
-// 请求体大小限制
-r.Use(web.LimitContentLength(10 * 1024 * 1024))  // 10MB
 ```
 
 ---
 
-## 缓存与 ETag
-
-```go
-// Cache-Control: max-age=3600
-r.Use(web.CacheControlMaxAge(3600))
-
-// ETag 自动计算和 304 响应
-r.Use(web.EtagHandler(
-    web.IgnorePrefix("/api"),
-))
-```
-
----
-
-## SSE
-
-### 创建和发布
+## SSE（Server-Sent Events）
 
 ```go
 sse := web.NewSSE(100, 30*time.Second)
@@ -418,40 +305,7 @@ sse.Publish(web.Event{
 })
 
 sse.Close()
-sse.Stop()  // 停止 SSE，不再接受新事件
-```
-
-### 作为 HTTP Handler
-
-```go
-r.GET("/events", func(c *gin.Context) {
-    sse.ServeHTTP(c.Writer, c.Request)
-})
-```
-
-### 分块发送
-
-```go
-ch := make(chan web.Chunk)
-go web.SendChunk(ch, c)       // 基础分块
-go web.SendChunkPro(ch, c)    // 高级分块（含更多状态信息）
-
-ch <- web.Chunk{Total: 100, Current: 50, Success: 48, Failure: 2}
-```
-
-### SSE 事件流发送
-
-```go
-ch := make(chan web.EventMessage)
-go web.SendSSE(ch, c)
-
-ch <- *web.NewEventMessage("update", map[string]any{"id": 1, "status": "done"})
-```
-
-### NewEventMessage
-
-```go
-msg := web.NewEventMessage("update", map[string]any{"id": 1, "status": "done"})
+sse.Stop()
 ```
 
 ---
@@ -464,58 +318,6 @@ v.Check(len(name) > 0, "name", "名称不能为空")
 v.Check(age >= 18, "age", "年龄不能小于 18")
 
 if !v.Valid() {
-    // v.List() 返回错误列表
-    // v.Result() 返回 (bool, []string)
+    return nil, reason.ErrBadRequest.With(v.List()...)
 }
-
-// 也可以手动添加错误
-v.AddError("email", "邮箱格式不正确")
-```
-
----
-
-## 性能分析
-
-```go
-// 注册 pprof 路由，仅允许指定 IP 访问
-ips := []string{"127.0.0.1", "192.168.1.100"}
-web.SetupPProf(r, &ips)
-
-// 启用互斥锁采样
-web.SetupMutexProfile(1)
-```
-
----
-
-## 其他工具
-
-### Recover — panic 恢复
-
-```go
-r.Use(web.Recover())
-```
-
-### SetDeadline — 超时控制
-
-```go
-r.Use(web.SetDeadline(30 * time.Second))
-```
-
-### Metrics — 请求指标
-
-```go
-r.Use(web.Metrics())
-web.CountGoroutines(10*time.Second, 100)  // 记录 goroutine 数量
-```
-
-### RecordResponse — 记录响应体
-
-```go
-r.Use(web.RecordResponse())
-```
-
-### AddHead — 添加 Vary 头
-
-```go
-r.Use(web.AddHead())  // Vary: Authorization
 ```

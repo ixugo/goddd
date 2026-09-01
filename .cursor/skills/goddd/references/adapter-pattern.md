@@ -1,15 +1,15 @@
-# 适配器模式与 Option 注入
+# 适配器模式与跨域解耦
 
 ## 设计原则
 
-领域间必须通过适配器解耦：
+领域间必须通过适配器解耦，禁止直接依赖其他领域的具体实现：
 
-- **Port（接口）** 定义在提供方子包（如 `user/useradapter/`）
-- **Adapter（实现）** 也放在提供方子包
-- **消费方** 通过 Option 注入适配器实例
-- **返回类型** 定义在提供方子包，避免重复
+- **Port（接口）** 定义在提供方子包（如 `user/useradapter/`）或本领域的 `port.go`
+- **Adapter（实现）** 放在提供方子包（如 `user/useradapter/`）
+- **消费方** 通过 Option 注入适配器接口
+- **返回类型** 定义在提供方子包，避免消费方重复定义模型
 
-当多个消费方需要同一提供方的同一能力时，集中在提供方可避免重复代码。
+---
 
 ## 目录结构
 
@@ -26,12 +26,21 @@ internal/core/message/           # 消费方
 └── ...
 ```
 
+---
+
 ## 提供方：定义接口和模型
 
 ```go
 // user/useradapter/useradapter.go
 
 package useradapter
+
+import (
+    "context"
+    "net/http"
+    "strings"
+    "github.com/ixugo/goddd/pkg/web"
+)
 
 type Brief struct {
     ID    string `json:"id"`
@@ -46,6 +55,8 @@ type BriefProvider interface {
 
 type CoverURLResolver func(r *http.Request, storagePath string) string
 ```
+
+---
 
 ## 提供方：实现适配器
 
@@ -70,7 +81,7 @@ func (p *briefProviderImpl) GetUserBrief(ctx context.Context, userID string) (*B
     }
     u, err := p.userCore.GetUser(ctx, userID)
     if err != nil {
-        return nil, nil  // 用户不存在时返回 nil，不返回 error
+        return nil, nil // 用户不存在时返回 nil，不阻断主流程
     }
     return &Brief{
         ID:    u.ID,
@@ -92,6 +103,8 @@ func (p *briefProviderImpl) resolveCover(ctx context.Context, cover string) stri
     return cover
 }
 ```
+
+---
 
 ## 消费方：Option 注入
 
@@ -133,60 +146,16 @@ func NewCore(store Storer, opts ...Option) Core {
 }
 ```
 
-## API 层：Wire 注入
+---
 
-```go
-// internal/web/api/message.go
+## 跨域事务协调（WithTx 模式）
 
-func NewMessageCore(
-    db *gorm.DB,
-    commentProvider message.ContentProvider,
-    taskProvider message.ContentProvider,
-    mediaProvider message.ContentProvider,
-    briefProvider useradapter.BriefProvider,
-) message.Core {
-    store := messagedb.NewDB(db).AutoMigrate(orm.GetEnabledAutoMigrate())
-    return message.NewCore(store,
-        message.WithContentProvider(message.TypeComment, commentProvider),
-        message.WithContentProvider(message.TypeTask, taskProvider),
-        message.WithContentProvider(message.TypeMedia, mediaProvider),
-        message.WithUserProvider(briefProvider),
-    )
-}
-```
+| 模式 | 耦合 | 适用场景 | 事务发起者 |
+|------|------|---------|-----------|
+| **模式 A：Adapter 协调** | 低 | 两个对等域，无主从关系 | Adapter 持有多个 Storer 并发起事务 |
+| **模式 B：Core 内部编排** | 中 | 有明确主域（A 强依赖 B） | 主域 Core 自行 Begin 并将 tx 传递给从域 Storer |
 
-## Port 定义位置（port.go）
-
-本领域自己的被动适配器接口定义在 `port.go`，与 `model.go` 分离：
-
-```go
-// message/port.go
-
-type ContentProvider interface {
-    GetContent(ctx context.Context, targetID string) (any, error)
-}
-```
-
-## model.go 只放类型定义
-
-```go
-// message/model.go
-
-const (
-    TypeComment = "comment"
-    TypeTask    = "task"
-    TypeMedia   = "media"
-)
-
-type MessageBrief struct {
-    Content  any                 `json:"content"`
-    Creator  *useradapter.Brief  `json:"creator"`
-}
-```
-
-## 跨域事务协调（Adapter 持有多个 Storer）
-
-当两个对等域需要原子写操作时，由 Adapter 协调事务：
+### 模式 A — Adapter 协调（对等域）
 
 ```go
 // order/orderadapter/orderadapter.go
@@ -220,7 +189,41 @@ func (c *OrderTxCoordinator) CreateOrderAndDeduct(ctx context.Context, in Input)
 }
 ```
 
-要点：
-- 两域共享同一个底层 `*gorm.DB`，任一 Storer 的 `Begin()` 均可
-- Adapter 定义在**发起方**子包
-- Wire 注入时将两域的 Storer 传入 Adapter
+### 模式 B — Core 内部编排（主从域）
+
+主域 Core 通过 Option 注入从域的 EntityStorer，内部发起事务：
+
+```go
+type Core struct {
+    store      Storer
+    userStorer user.UserStorer // Option 注入
+}
+
+func WithUserStorer(s user.UserStorer) Option {
+    return func(c *Core) { c.userStorer = s }
+}
+
+func (c Core) CreateOrderAndDeduct(ctx context.Context, in Input) error {
+    tx, err := c.store.Begin()
+    if err != nil {
+        return err
+    }
+    defer tx.Rollback()
+
+    txOrder := c.store.Order().WithTx(tx)
+    txUser := c.userStorer.WithTx(tx)
+
+    if err := txOrder.Create(ctx, in.Order); err != nil {
+        return err
+    }
+    if err := txUser.DeductBalance(ctx, in.UserID, in.Amount); err != nil {
+        return err
+    }
+    return tx.Commit()
+}
+```
+
+**选择依据**：
+- 两域无从属、仅特定操作需要原子性 → **模式 A**
+- 主域强依赖从域且频繁调用 → **模式 B**
+- 两者底层均走 `Begin()` + `WithTx(tx)`

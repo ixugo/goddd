@@ -28,7 +28,7 @@ goddd 的 API 设计规范，按此执行即可。
 
 ## 标准方法
 
-goddd 采用四个标准方法，不使用 PATCH。
+goddd 采用五个标准方法，不推荐使用 PATCH。
 
 | 方法 | HTTP | 路径 | WrapH 绑定 | 响应体 |
 |------|------|------|-----------|--------|
@@ -36,17 +36,16 @@ goddd 采用四个标准方法，不使用 PATCH。
 | Get | GET | `/resources/:id` | `uri` tag → 路由参数 | 资源对象 |
 | Create | POST | `/resources` | `json` tag → Body | 创建后的完整资源 |
 | Update | PUT | `/resources/:id` | `uri` + `json` tag → Body | 更新后的完整资源 |
-| Delete | DELETE | `/resources/:id` | `uri` tag | 空 |
+| Delete | DELETE | `/resources/:id` | `uri` tag | 空或被删实体 |
 
 **补充说明**：
-
 - **Delete 幂等**：资源已删除时仍返回成功
 
 ```go
 type ListEntityInput struct {
     web.PagerFilter
     web.DateFilter
-    Name string `form:"name" binding:"max=12"`
+    Name string `form:"name" binding:"max=64"`
 }
 
 type CreateEntityInput struct {
@@ -68,44 +67,53 @@ type CreateEntityInput struct {
 | Search | `GET /search` | 复杂搜索 |
 | Undelete | `POST /:id/undelete` | 撤销删除 |
 
-优先用标准方法。
-
 ---
 
-## 错误处理
+## 错误处理与 reason 规范
 
-**核心规则**：业务正常响应 200，业务出错一律响应 400（默认），只有认证和限流走其它状态码。
+项目使用 `pkg/reason` 体系，`web.Fail` 会自动提取 `CustomError` 中的 HTTP 状态码并映射响应。
 
-项目用 `reason.Error` 体系，`web.Fail` 默认返回 400。只有显式调用 `SetHTTPStatus()` 的 error 才会使用其它状态码：
+### 常用错误变量
+
+| 变量 | 说明 | HTTP 状态码 |
+|------|------|------------|
+| `reason.ErrBadRequest` | 客户端参数有误 | 400 |
+| `reason.ErrNotFound` | 资源未找到 | 400 |
+| `reason.ErrConflict` | 资源冲突/操作冲突 | 400 |
+| `reason.ErrJSON` / `ErrUsedLogic` | 业务/解析错误 | 400 |
+| `reason.ErrUnauthorized` | 未登录或凭证已过期 | 401 |
+| `reason.ErrPermissionDenied` | 没有该资源权限 | 403 |
+| `reason.ErrFileTooLarge` / `ErrContentTooLarge` | 文件或请求体过大 | 413 |
+| `reason.ErrTooManyRequests` | 触发限流频率过高 | 429 |
+| `reason.ErrDB` / `ErrServer` / `ErrInternal` | 数据或服务器内部错误 | 500 |
+| `reason.ErrTimeout` | 超时 | 504 |
+
+### 错误链式修饰方法（不可变返回副本）
 
 ```go
-// 默认 400 — 大多数业务错误
-reason.ErrBadRequest.WithMsg("参数不合法")
-reason.ErrDB.Withf("查询失败: %s", err)
-reason.ErrNotFound.WithMsg("资源未找到")
-reason.ErrServer.WithMsg("服务器发生错误")
+// WithMsg 覆盖面向用户的友好提示
+reason.ErrBadRequest.WithMsg("用户名称不能为空")
 
-// 显式 401 — 认证失败
-reason.ErrUnauthorized.WithMsg("用户已过期")   // SetHTTPStatus(401)
+// Withf 追加开发者调试 details（生产环境 SetRelease 后不输出）
+reason.ErrDB.Withf("查询用户失败 id[%d]: %w", id, err)
 
-// 显式 429 — 限流
-reason.ErrRateLimit.WithMsg("请求频率过高")          // SetHTTPStatus(429)
+// WithHTTPStatus 覆盖默认状态码
+reason.ErrBadRequest.WithHTTPStatus(422)
+
+// WithCause 携带底层底层 error 链，支持 errors.Is / errors.As
+reason.ErrDB.WithCause(err)
 ```
 
-- `SetMsg()` — 用户可见提示
-- `Withf()` — 开发调试 details，`SetRelease()` 后不输出
-- `SetHTTPStatus()` — 覆盖默认 400 状态码
-
-错误响应结构：
+错误响应结构体示例：
 
 ```json
-{"reason": "ErrBadRequest", "msg": "名称不能为空", "details": ["field[name]: 空字符串"], "trace_id": "abc123"}
+{
+  "reason": "ErrBadRequest",
+  "msg": "用户名称不能为空",
+  "details": ["field[name]: 长度超出限制"],
+  "trace_id": "abc123xyz"
+}
 ```
-
-- `reason` — error 标识（如 `ErrBadRequest`、`ErrStore`）
-- `msg` — 友好提示
-- `details` — 仅开发模式可见（`SetRelease()` 后不输出）
-- `trace_id` — 请求追踪 ID，用于日志调用链定位
 
 ---
 
@@ -121,14 +129,10 @@ type ListEntityInput struct {
 }
 ```
 
-请求：`GET /entities?page=1&size=20&sort=-created_at&start_ms=1720000000000`
-
-响应：`{"items": [...], "total": 42}`
-
 - `SortSafelist` 白名单防注入，`-` 降序 / `+` 升序
-- `NewPagerFilterMaxSize()` 不分页查询
+- `NewPagerFilterMaxSize()` 不分页全量查询
 - `DateFilter` 毫秒时间戳，`StartAt()` / `EndAt()` 获取 `time.Time`
-- 空列表必须序列化为 `"items": []` 而非 `null`：Store 层用 `make([]*T, 0)` 初始化，禁止返回 nil 切片
+- 空列表序列化为 `"items": []` 而非 `null`：Store 层用 `make([]*T, 0)` 初始化
 
 ---
 
@@ -144,8 +148,6 @@ type ListEntityInput struct {
 | `binding:"email"` | 邮箱格式 |
 | `binding:"max=255"` | 最大长度 |
 
-绑定失败 `WrapH` 自动返回 400，定位到具体字段。
-
 ### 业务层 — `web.Validator`
 
 ```go
@@ -156,34 +158,9 @@ if !v.Valid() {
 }
 ```
 
-分工：`binding` 管格式，`Validator` 管业务（唯一、存在、权限、状态）。
+### 转换层 — 必须处理转换错误
 
-### 转换层 — `strconv` 错误必须处理
-
-`uri`/query 绑定的字符串转数值时，转换错误必须返回 400，禁止忽略：
-
-```go
-id, err := strconv.Atoi(c.Param("id"))
-if err != nil {
-    return nil, reason.ErrBadRequest.WithMsg("id 必须是数字")
-}
-```
-
-忽略错误会得到零值，拿零值去查询/删除/更新 = 数据事故（条件退化误伤全表）。
-
-
-
----
-
-## 限流
-
-| 中间件 | 粒度 |
-|--------|------|
-| `web.RateLimiter(r, b)` | 全局 |
-| `web.IPRateLimiterForGin(r, b)` | 按 IP |
-| `web.IDRateLimiter(r, b, ttl)` | 按用户 ID |
-
-被限流返回 `429`，带 `Retry-After` 头。
+路由参数转数值时，转换错误必须返回 400，严禁忽略错误使用零值。
 
 ---
 
@@ -200,11 +177,3 @@ func registerEntity(r gin.IRouter, api EntityAPI, handler ...gin.HandlerFunc) {
     g.PUT("/sort", web.WrapH(api.sortEntities))
 }
 ```
-
----
-
-## 参考
-
-- [Google API 设计指南](https://google-cloud.gitbook.io/api-design-guide)
-- [Google API 设计指南 — 标准方法](https://google-cloud.gitbook.io/api-design-guide/standard_methods)
-- [Google API 设计指南 — 自定义方法](https://google-cloud.gitbook.io/api-design-guide/custom_methods)
