@@ -1,16 +1,31 @@
 ---
-name: goddd-git-workflow
+name: git-workflow
 description: >
-  Git 提交与分支管理规范。当进行 Git 提交、创建分支、合并代码、打版本 tag、
-  生成 Changelog 时使用此技能。也应在以下场景主动触发：编写 commit message、
-  选择 commit type、决定分支命名、合并策略（rebase vs merge）、版本号管理、
-  破坏性变更标注。即使用户没有提到"git"，只要涉及代码提交、版本发布、分支管理、
-  变更日志等概念，都应使用此技能。
+  Git 提交与分支管理规范，适用于所有 git 仓库，不限于某一个项目。当进行 Git 提交、
+  创建分支、合并代码、打版本 tag、生成 Changelog 时使用此技能。也应在以下场景
+  主动触发：编写 commit message、选择 commit type、决定分支命名、合并策略
+  （rebase vs merge）、版本号管理、破坏性变更标注。即使用户没有提到"git"，只要
+  涉及代码提交、版本发布、分支管理、变更日志等概念，都应使用此技能。
+  此外，在任何 git 仓库中完成一次代码改动后，应主动按本规范提议提交。
 ---
 
 # Git 工作流规范
 
-Git 提交与分支管理规范。
+Git 提交与分支管理规范，适用于所有 git 仓库。
+
+---
+
+## 自动提交
+
+在任何 git 仓库中（含非本项目仓库），完成一次逻辑改动后，主动检查 `git status`：
+
+- 存在未提交改动时，按本规范拟好 commit message，直接执行 `git add` 与 `git commit`，自动提交，不征求确认
+- 只提交到当前分支，不执行 push
+- 一个逻辑改动一个 commit，不把无关改动混入同一 commit
+- 用户明确表示"本次不提交"后，不再为该改动重复提议
+- 只提交本次改动涉及的文件，用户自行修改的文件不 add、不提交
+- 工作区存在他人改动时，用 `git commit <路径>` 按 pathspec 精确提交，不用 `git add -A`
+- 用户已自行 `git add` 的改动视为用户修改，保持原状、不并入提交
 
 ---
 
@@ -22,7 +37,7 @@ Git 提交与分支管理规范。
 <type>[(<scope>)]: <subject>
 ```
 
-- `(scope)` 可选，填写被修改的业务领域名（如 `rule`、`phone`、`sms`、`sched`）
+- `(scope)` 可选，填写被修改的业务领域名（如 `auth`、`order`、`api`、`ui`）
 - `chore` 类型通常不带 scope
 - subject 用祈使句，不超过 30 字符，首字母小写，末尾无句号
 - 字符计数规则：一个汉字、一个字母、一个标点均算 1 个字符
@@ -45,18 +60,18 @@ subject 的语言跟随用户与 AI 交互所用的语言：
 | `fix` | 修复 bug |
 | `refactor` | 重构（不改行为） |
 | `perf` | 性能优化 |
-| `chore` | 文档、构建、CI、工具、依赖 |
+| `chore` | 文档、构建、CI、工具、依赖、格式化（不单设 docs/style/build/ci） |
 | `test` | 测试新增或修改 |
 
 ### 示例
 
 ```
-feat(rule): add clone_from_id to track rule origin
-fix(phone): map sopsdk online status to device_status correctly
-refactor(rule): remove opts from ListAll to enforce cache hit
-refactor(sched): use CancelCauseFunc for card exit reason
+feat(auth): add token refresh support
+fix(order): prevent duplicate creation on retry
+refactor(cache): remove opts from ListAll to enforce cache hit
+refactor(task): use CancelCauseFunc for exit reason
 chore: upgrade Go to 1.26
-test(phone): add onlineStatusToDeviceStatus mapping test
+test(api): add status mapping test
 ```
 
 ### 带 body 的提交
@@ -189,8 +204,8 @@ sequenceDiagram
 
 ### 合并到 `dev`
 
-- `go build ./...` 编译通过
-- `go test ./...` 通过
+- 项目对应的构建命令通过（如 Go 项目 `go build ./...`，Node 项目 `npm run build`）
+- 项目对应的测试命令通过（如 `go test ./...`、`npm test`）
 - 无新增 lint 告警
 - 关键配置变更已同步更新配置示例与文档
 
@@ -250,7 +265,7 @@ git log $(git describe --tags --abbrev=0)..HEAD --pretty=format:"%s" | sort
 
 ## 提交前检查
 
-- 代码编译通过
+- 项目构建通过
 - 无新增 lint 告警
 - 相关测试通过
 - 不提交 `.env`、凭证等敏感文件
