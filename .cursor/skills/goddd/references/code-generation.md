@@ -95,6 +95,8 @@ func NewTaskCore(db *gorm.DB, uni uniqueid.Core) task.Core {
 }
 ```
 
+**派生文件红线**：`internal/app/wire_gen.go` 属于全自动生成的派生代码，**严禁任何手动修改、微调或补丁注入**。如需变更依赖装配，只能修改 provider 定义后执行 `make wire` 重新生成。
+
 ### 4. 路由注册
 
 在 `internal/web/api/api.go` 的 `setupRouter` 中注册：
