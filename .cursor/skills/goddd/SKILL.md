@@ -58,7 +58,7 @@ description: >
 
 | 文档路径 | 必读时机 | 核心内容 |
 |---------|---------|---------|
-| `references/code-generation.md` | 新增 CRUD、定义数据库表模型、Wire 注册 | `tables/` 目录规范、主键与时间戳约束、`goddd gen` 命令、Wire 注入、路由注册 |
+| `references/code-generation.md` | 新增 CRUD、定义数据库表模型、Wire 注册 | `tables/` 目录规范、主键与时间戳约束、`goddd gen` 命令、Wire 注入、`wire_gen.go` 严禁手改、路由注册 |
 | `references/domain-layer-architecture.md` | 实现/修改领域 Core、Store 接口与事务 | Storer 聚合接口、EntityStorer 规范、事务机制（`Begin/WithTx`）、访问器零分配原理、原子更新、幂等删除、Input 参数定义 |
 | `references/api-design-patterns.md` | 设计新接口、审查 API 规范、错误映射 | 资源命名、标准方法（List/Get/Create/Update/Delete）、自定义方法、错误体系、分页过滤、校验、限流 |
 | `references/web-toolkit.md` | 使用 `pkg/web` 中的工具函数与中间件 | WrapH 绑定规则、PagerFilter/DateFilter、JWT 鉴权、日志/限流/SSE 中间件、Validator |
