@@ -25,7 +25,35 @@ Wire 的值类型和指针类型匹配问题与依赖环是两类问题。先查
 
 ## 关闭与错误处理
 
-关闭需要可重复调用，并等待后台任务退出。先阻止新的任务进入，再发送停止信号并等待退出；最终持久化的位置由状态所有权决定，确保不会与后台写入并发。不要一律规定“先持久化再取消”。
+以下片段依赖 `context`，适用于单个、只启动一次的后台循环。组合入口完成注入后传入非 nil 的 `run`；`run` 必须响应取消并在正常退出时返回 nil，其他错误原样返回。`Close` 可并发、重复调用，所有调用都等待同一次退出并取得结果。
+
+```go
+type Handler struct {
+    cancel context.CancelFunc
+    done   chan struct{}
+    err    error
+}
+
+// StartHandler 在依赖就绪后启动循环，并用 done 同步退出结果。
+func StartHandler(parent context.Context, run func(context.Context) error) *Handler {
+    ctx, cancel := context.WithCancel(parent)
+    h := &Handler{cancel: cancel, done: make(chan struct{})}
+    go func() {
+        defer close(h.done)
+        h.err = run(ctx)
+    }()
+    return h
+}
+
+// Close 等待退出，避免清理资源时后台任务仍在使用资源。
+func (h *Handler) Close() error {
+    h.cancel()
+    <-h.done
+    return h.err
+}
+```
+
+若循环另有任务入口，关闭时先阻止新任务进入。最终持久化的位置由状态所有权决定，确保不会与后台写入并发，不一律规定“先持久化再取消”。
 
 最终落库需要仍然有效的 context 和数据库连接。持久化及清理失败应返回给调用方；若清理接口不能返回 error，则使用项目日志记录，不能静默忽略。Wire 的清理函数应覆盖实际资源释放，不能仅取消 context 就认定退出完成。
 
