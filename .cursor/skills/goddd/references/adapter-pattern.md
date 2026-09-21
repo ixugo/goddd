@@ -26,11 +26,28 @@ type UserBriefProvider interface {
 }
 ```
 
-适配器调用提供方业务方法并转换为该模型。先核实实际方法签名和错误类型，再编写实现，不假定所有领域都存在 `GetUser(ctx, id)`。
+下面片段接续上述契约，依赖 `context`、`fmt`。`UserRecord` 代表提供方返回模型；装配时通过已有构造函数注入非 nil 的 `lookup`，由它调用提供方真实方法，不假定方法名称。入口先按项目契约验证 ID。
 
-- 参数在既有入口处验证；空 ID 的结果遵循契约，不默认返回成功。
-- 查询失败保留错误。只有契约明确允许“用户不存在时省略附加信息”，且错误已被识别为不存在时，才转换为缺失结果。
-- 超时、权限、数据库异常不能统一吞成 `nil, nil`。需要降级时由业务调用方决定，并记录可定位的错误。
+```go
+type UserRecord struct { ID, DisplayName, AvatarURL string }
+
+type UserAdapter struct {
+    lookup func(context.Context, string) (UserRecord, error)
+}
+
+// GetUserBrief 隔离提供方模型，同时保留错误链供调用方判断。
+func (a UserAdapter) GetUserBrief(ctx context.Context, id string) (*UserBrief, error) {
+    record, err := a.lookup(ctx, id)
+    if err != nil {
+        return nil, fmt.Errorf("读取用户简要信息: %w", err)
+    }
+    return &UserBrief{
+        ID: record.ID, Name: record.DisplayName, Cover: record.AvatarURL,
+    }, nil
+}
+```
+
+仅在契约明确允许、且错误已识别为不存在时，才能转换为缺失结果；超时、权限与数据库错误交给业务调用方处理，不统一吞成 `nil, nil`。
 - 批量接口仅在实际需要时添加；定义缺失项和整体失败的语义，并完整实现接口中的方法。
 - URL 转换确需 HTTP 请求时，按 [HTTP 上下文说明](with-context.md) 获取；已有绝对 URL 的识别应检查实际协议，不使用宽泛的 `strings.HasPrefix(value, "http")`。
 
