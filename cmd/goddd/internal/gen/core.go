@@ -116,7 +116,7 @@ func startGenerateWithProgress(domain *Domain, module string, onStep func(label 
 				data = formatGoSource(k, data)
 			}
 			if err := os.WriteFile(k, data, os.ModePerm); err != nil {
-				fmt.Println("⚠️ WriteFile err:", err)
+				return nil, fmt.Errorf("写入生成文件 %s 失败: %w", k, err)
 			}
 		}
 	}
