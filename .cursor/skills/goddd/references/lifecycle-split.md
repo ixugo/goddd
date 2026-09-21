@@ -1,152 +1,34 @@
 # Core 与生命周期分离
 
-> **定位：应急方案，非默认规范。**
-> 大多数场景下 `*Core` 指针类型 + 生命周期方法直接挂 Core 即可，可读性更高。
-> 仅当 Wire 注入因值类型/指针类型冲突产生循环依赖、或被迫引入全局变量桥接时，才启用本模式。
+## 何时使用
 
-当领域 Core 需要后台 goroutine（定时持久化、心跳检测、定时清理等），且 Wire 无法解析依赖顺序时，可将生命周期拆到独立 Handler。
+默认可以由 `*Core` 持有后台任务及生命周期方法。只有后台任务的启动、停止和业务调用已经难以独立管理，或依赖图需要明确的生命周期边界时，才考虑独立 Handler。不要因为出现 goroutine、ctx、cancel 或 ticker 字段就要求重构。
 
-**原则：Core 做值类型，生命周期拆到独立的 Handler，Core 内嵌 Handler 指针作为字段。**
+Wire 的值类型和指针类型匹配问题与依赖环是两类问题。先查看 provider 的输入、输出和实际依赖链：类型不匹配应统一类型；真正的环需要调整依赖方向或拆开构造与启动。仅把 `*Core` 换成 `Core` 不能保证消除依赖环。
 
-## 结构
+## 职责划分
 
-```go
-// Core 业务核心，值类型。生命周期管理委托给内嵌的 SessionHandler。
-type Core struct {
-    store             Storer
-    sessionStore      SessionStore
-    viewCountAdjuster ViewCountAdjuster
-    maxViewsPerDay    int
+| 组件 | 职责 |
+|------|------|
+| Core | 业务查询、计算和状态变更 |
+| Handler | 管理后台任务的 context、取消、退出等待与资源释放 |
+| 组合入口 | 构造完整依赖图，完成注入后启动任务，关闭时按依赖的逆序清理 |
 
-    ss *SessionHandler // 生命周期管理器，由 NewCore 创建
-}
+如果 Handler 只服务一个 Core，可作为 Core 的内部实现，由 Core 转发生命周期操作。如果组合入口需要统一管理多个任务，可以直接持有生命周期接口，不必为了隐藏 Handler 强制所有调用都绕经 Core。
 
-// SessionHandler 管理 Core 的生命周期：goroutine、ctx、优雅停机。
-type SessionHandler struct {
-    core   Core // 持有 Core 值副本，用于 goroutine 中调用业务方法
-    ctx    context.Context
-    cancel context.CancelFunc
-    quit   chan struct{}
-    once   sync.Once
-}
-```
+## 构造和启动
 
-## 构造函数
+- 先完成依赖注入和状态初始化，再启动 goroutine，避免后台任务读取尚未初始化的字段。
+- 沿用项目已采用的 Core 值类型或指针类型；不要仅为套用本模式改动公开构造函数。
+- 如果 Handler 持有 Core 值副本，确认复制的字段适合共享：接口复制不会复制底层对象，但也不会自动保证线程安全；锁、原子状态和需要同步修改的值不能随意复制。
+- 若后台任务必须延后启动，显式区分构造和启动，并由组合入口负责调用，不使用全局变量桥接依赖。
 
-```go
-func NewCore(store Storer, sessionStore SessionStore, opts ...Option) (Core, func()) {
-    c := Core{
-        store:          store,
-        sessionStore:   sessionStore,
-        maxViewsPerDay: 3,
-    }
-    for _, opt := range opts {
-        opt(&c)
-    }
-    s := &SessionHandler{core: c}
-    s.ctx, s.cancel = context.WithCancel(context.Background())
-    s.quit = make(chan struct{})
-    go s.persistence()
-    c.ss = s
-    return c, c.Close
-}
-```
+## 关闭与错误处理
 
-## 方法分配
+关闭需要可重复调用，并等待后台任务退出。先阻止新的任务进入，再发送停止信号并等待退出；最终持久化的位置由状态所有权决定，确保不会与后台写入并发。不要一律规定“先持久化再取消”。
 
-| 方法归属 | 判断标准 | 示例 |
-|----------|---------|------|
-| Core 方法 | 查询 DB、纯业务计算 | GetOverallStats, GetTimeserieStats |
-| Core 委托方法 | 需要转发给 SessionHandler | TrackHeartbeat, ActiveViewers, Close |
-| SessionHandler 方法 | goroutine 内部调用 | persistence, PersistSessions |
+最终落库需要仍然有效的 context 和数据库连接。持久化及清理失败应返回给调用方；若清理接口不能返回 error，则使用项目日志记录，不能静默忽略。Wire 的清理函数应覆盖实际资源释放，不能仅取消 context 就认定退出完成。
 
-Core 上的委托方法只是一行转发：
+## 验证
 
-```go
-func (c Core) TrackHeartbeat(mediaID, sessionID, userID string, currentTimeSec int) {
-    c.ss.TrackHeartbeat(mediaID, sessionID, userID, currentTimeSec)
-}
-func (c Core) Close() { c.ss.Close() }
-func (c Core) ActiveViewers(mediaID string) int { return c.ss.ActiveViewers(mediaID) }
-```
-
-## Wire 注入
-
-```go
-// 返回值类型 Core，不是指针
-func NewViewerCore(...) (viewer.Core, func()) { ... }
-
-// API 层持有值类型
-type ViewerAPI struct {
-    core      viewer.Core
-    mediaCore media.Core
-}
-type ProgressAPI struct {
-    progressCore progress.Core
-    viewerCore   viewer.Core  // 值类型，通过它调用 TrackHeartbeat / ActiveViewers
-}
-```
-
-## 适用场景
-
-- 领域 Core 需要后台 goroutine（定时持久化、定时清理、心跳超时检测等）
-- Core 被多个上层模块依赖，且依赖方向不同
-- Wire 注入出现循环依赖，被迫使用全局变量桥接
-
-## 注意事项
-
-- Core 做值类型时，内部的接口字段（Storer、SessionStore）仍是引用语义，值拷贝安全
-- Option 签名为 `func(*Core)`，在 NewCore 中先 `opt(&c)` 再赋值给 SessionHandler
-- SessionHandler.Close 必须等待 goroutine 退出（`<-quit`），防止资源泄漏
-- Core 的委托方法用值接收者 `(c Core)`，因为 `c.ss` 是指针，转发不影响生命周期
-
-## 优势
-
-1. **无全局变量**：SessionHandler 持有 Core 值副本，不需要全局注册
-2. **无 Wire 循环依赖**：Core 是值类型，NewCore 返回值而非指针
-3. **职责清晰**：业务逻辑在 Core，生命周期在 SessionHandler
-4. **API 统一**：外部只接触 Core（值类型），SessionHandler 是内部实现细节
-5. **Close 安全**：先 PersistSessions 落库，再 cancel + 等待 goroutine 退出
-
-## 反模式警告
-
-以下做法会破坏 SRP，遇到时需重构：
-
-**反模式 1：Core 直接持有 goroutine 控制字段**
-
-```go
-// ❌ 错误：Core 同时承载业务逻辑和生命周期管理
-type Core struct {
-    store  Storer
-    ctx    context.Context    // 生命周期字段混入业务结构体
-    cancel context.CancelFunc
-    quit   chan struct{}
-    ticker *time.Ticker
-}
-```
-
-Core 一旦持有 ctx/cancel/ticker，就意味着它既要处理业务又要管理 goroutine 生死，可读性和测试难度都会上升。
-
-**反模式 2：用全局变量桥接两个领域**
-
-```go
-// ❌ 错误：用包级变量绕过 Wire 注入顺序问题
-var globalViewerCore *viewer.Core
-
-func init() {
-    globalViewerCore = &viewer.Core{}
-}
-```
-
-全局变量掩盖了依赖关系，使初始化顺序不可控，且无法在测试中替换。正确做法是让 Core 保持值类型，由 Wire 的 `func()` 清理函数统一管理生命周期。
-
-**反模式 3：SessionHandler 暴露给外部调用方**
-
-```go
-// ❌ 错误：外部直接操作 Handler
-type ViewerAPI struct {
-    handler *viewer.SessionHandler  // 应该只持有 viewer.Core
-}
-```
-
-外部调用方只应持有 `Core` 值类型，`SessionHandler` 是 Core 的内部实现细节，不应透出。
+针对实际修改的生命周期验证：依赖构造完成后才启动、启动失败释放已有资源、关闭等待任务退出、重复关闭不阻塞、并发访问共享状态无竞态。检查生成的 Wire 代码和依赖图，不以值类型替换作为依赖环已消除的证据。

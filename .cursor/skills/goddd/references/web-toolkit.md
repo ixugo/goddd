@@ -14,11 +14,8 @@
 6. [JWT 鉴权](#jwt-鉴权)
 7. [日志中间件](#日志中间件)
 8. [限流中间件](#限流中间件)
-9. [缓存与 ETag](#缓存与-etag)
-10. [SSE（Server-Sent Events）](#sse)
-11. [参数校验](#参数校验)
-12. [性能分析](#性能分析)
-13. [其他工具](#其他工具)
+9. [SSE（Server-Sent Events）](#sseserver-sent-events)
+10. [参数校验](#参数校验)
 
 ---
 
@@ -31,7 +28,8 @@ func WrapH[I, O any](fn func(*gin.Context, *I) (O, error)) gin.HandlerFunc
 ```
 
 将 `func(*gin.Context, *Input) (Output, error)` 包装为 `gin.HandlerFunc`，自动完成：
-- POST/PUT/DELETE/PATCH → 绑定 Request Body（`json` tag 或 multipart form）
+- POST/PUT/PATCH → `ContentLength > 0` 时按 Content-Type 绑定 Body
+- DELETE → `ContentLength > 0` 时绑定 Body，否则绑定 Query
 - GET → 绑定 URL Query（`form` tag）
 - 路由路径参数 → 自动绑定 `uri` tag
 - 错误自动转为统一 HTTP 响应
@@ -44,27 +42,9 @@ router.POST("/users", web.WrapH(api.addUser))
 
 #### 文件上传（multipart form）
 
-文件上传接口（如批量导入）禁止使用 `*struct{}` 入参再手动调用 `c.Request.FormFile("file")`。正确做法是将文件和普通字段写入同一个 in 结构体：
+使用 WrapH 自动绑定上传参数时，将 `*multipart.FileHeader` 与其他 `form` 字段放在同一个输入结构体中。`*struct{}` 是零大小类型，会跳过 WrapH 的自动绑定。
 
-```go
-type ImportGreetsInput struct {
-    AccessKey string                `form:"access_key" binding:"max=64"`
-    File      *multipart.FileHeader `form:"file"`
-}
-
-func (a GreetAPI) importGreets(c *gin.Context, in *greet.ImportGreetsInput) (*greet.ImportGreetsResult, error) {
-    if in.File == nil {
-        return nil, reason.ErrBadRequest.WithMsg("file 参数缺失")
-    }
-    file, err := in.File.Open()
-    if err != nil {
-        return nil, reason.ErrBadRequest.WithMsg("读取文件失败")
-    }
-    defer file.Close()
-    // 后续解析 file ...
-    return &greet.ImportGreetsResult{}, nil
-}
-```
+处理上传时检查文件是否存在、请求大小与内容格式；打开文件、解析和关闭资源的错误按项目约定处理。已有手动读取请求的接口无需仅为风格统一而重写。
 
 ### WrapHs — 带中间件的路由包装
 
@@ -113,7 +93,9 @@ type PagerFilter struct {
 func NewPagerFilterMaxSize() PagerFilter
 ```
 
-创建 `Size=99999` 的分页，用于"全量查询不分页"场景。
+创建 `Size=99999` 的参数，但 `Limit()` 仍返回 `10000`，并不取消分页，也不保证取回全部数据。全量处理应使用项目已有的分页或游标遍历。
+
+`Offset()` 使用原始 `Size` 计算，`Limit()` 的截断不会回写 `Size`。面向请求时应先校验并统一有效页大小，再计算偏移和查询数量，避免页间漏数据。排序使用 `name` 表示升序、`-name` 表示降序；`SortColumn()` 只去掉 `-`，不会去掉 `+`。
 
 ### DateFilter — 日期范围过滤
 
@@ -167,29 +149,9 @@ func AbortWithStatusJSON(c ResponseWriter, err error, fn ...WithData)
 
 ## 错误处理
 
-WrapH 内部自动捕获错误，Core 层返回实现了 `reason.ErrorInfoer` 的错误类型（如 `reason.CustomError`）：
+WrapH 将处理函数返回的错误交给 `web.Fail`。错误类型、默认 HTTP 状态码和修饰方法见 [api-design-patterns.md](api-design-patterns.md#错误处理与-reason-规范)。
 
-```go
-reason.ErrBadRequest.WithMsg("参数不合法")              // → 400
-reason.ErrNotFound.WithMsg("资源未找到")                // → 400
-reason.ErrUnauthorized.WithMsg("用户未登录")           // → 401
-reason.ErrPermissionDenied.WithMsg("权限不足")          // → 403
-reason.ErrTooManyRequests.WithMsg("请求频率过高")        // → 429
-reason.ErrDB.Withf("查询失败: %s", err)                // → 500
-reason.ErrServer.WithMsg("服务器发生错误")               // → 500
-```
-
-- `WithMsg()`：设置面向用户的友好提示
-- `Withf()`：追加 details 信息供开发者排查
-- `WithHTTPStatus()`：覆盖默认状态码
-
-环境切换：
-
-```go
-web.SetRelease() // 生产环境，details 不输出
-web.SetDebug()   // 开发环境，输出 details
-web.IsRelease()  // 检查是否生产环境
-```
+`web.SetRelease()` 隐藏响应中的调试 details，`web.SetDebug()` 开启 details，`web.IsRelease()` 查询当前模式。
 
 ---
 
@@ -204,6 +166,7 @@ type Context interface {
     GetBaseURL() string
     GetScheme() string
     GetHost() string
+    BaseURLJoin(...string) string
 }
 ```
 
@@ -217,6 +180,8 @@ func GetHost(req *http.Request) string                         // 提取 host
 func GetScheme(req *http.Request) string                       // 提取 http/https
 func XForwardedPrefix(req *http.Request, path string) string   // 处理反向代理前缀
 ```
+
+透传前提及标准 context 再包装限制见 [with-context.md](with-context.md)。
 
 ### TraceID
 

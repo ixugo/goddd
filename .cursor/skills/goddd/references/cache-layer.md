@@ -1,263 +1,70 @@
 # Store 缓存层规范
 
-goddd 生成的 `stores/<domain>cache/` 默认使用 `conc.Cacher`（进程内内存 TTL 缓存）。当需要 **Redis 缓存**（多副本共享、长 TTL、高频读场景）时，按本文档规范改造。
+修改 `stores/<domain>cache/` 时，先确认已有缓存实现、缓存的查询维度、写入路径与一致性要求。本专题指导已获准的缓存改动，不要求为普通业务修改切换缓存后端、增加预热或引入新依赖。
 
----
+## 缓存实现与适用边界
 
-## 1. 判断缓存类型
+生成模板使用 `conc.Cacher`，仓库提供 `conc.NewTTLCache` 内存实现。多副本是否需要共享缓存，应根据失效传播、一致性、容量和运维条件判断，不能仅凭“高频读”决定使用 Redis。采用 Redis 的项目沿用现有客户端及封装。
 
-修改 `stores/<domain>cache/` 时，**首先**判断是内存缓存还是 Redis 缓存：
+生成模板的 Create/Update 在写库后刷新缓存，Delete 写入墓碑。Redis 项目可以选择首次读取时再缓存新记录，但这不是覆盖生成模板或既有行为的统一规则。
 
-| 类型 | 依赖 | 适用场景 |
-|------|------|---------|
-| 内存缓存 | `conc.Cacher` (`conc.NewTTLCache`) | 单副本、短 TTL、数据量小 |
-| Redis 缓存 | `redis.Cmdable` (`github.com/redis/go-redis/v9`) | 多副本共享、长 TTL、高频读 |
+## 键空间与调用一致性
 
-**如果是 Redis 缓存**：删除 `conc.Cacher` 依赖，替换为 `redis.Cmdable`（接口类型，兼容 `*redis.Client` 单机和 `*redis.ClusterClient` 集群）。
+实施前列出“查询方法 → 缓存键 → 写入/失效路径”：
 
----
+| 查询维度 | 键示例 | 维护要求 |
+|---|---|---|
+| 主键 | `user:id:1001` | 创建、更新、删除、回填使用同一个 ID 编码 |
+| 业务键 | `user:code:1001` | 与 ID 区分命名空间，业务键变化时处理旧键与新键 |
+| 租户内标识 | `tenant:7:user:id:1001` | 所有路径包含同一个租户维度 |
 
-## 2. 防竞态缓存操作（核心规则）
+键前缀沿用项目约定；标识值保留原有大小写及编码语义。singleflight 使用完整缓存键，不能只用裸 ID/业务值；否则不同维度的并发查询会被错误合并。
 
-### 竞态问题
+只缓存业务所需的维度。若同时缓存 ID 与业务键，更新和删除要维护两套键；无法完整维护时，让额外查询维度直接查库，不能共用一个键空间。聚合 Cache 的预热调用应复用实体缓存的键构造与写入路径，不能调用仅存在于实体接收者上的方法。
 
-简单的 DEL 后回填会导致并发脏数据：
+生成模型的 `CacheKey()` 被缓存写路径调用，而 `GetByID` 用 ID 构造读键；自定义 `CacheKey()` 前应核实读写一致性。删除该方法属于模型与调用方的联合变更，不在单纯修改缓存策略时顺手进行。
 
-```
-T1: GET miss → 查 DB 得 v1
-T2: UPDATE → DB 写入 v2 → DEL 缓存
-T1: SET 缓存 v1 （脏数据！DEL 已经执行完毕）
-```
+## 读穿透、写入与竞态
 
-### 解决方案
+读路径：尝试缓存 → 缺失时查 DB → 成功后按策略回填。singleflight 可合并同进程、同键的并发回源，但不是跨副本锁。需要负缓存时使用能与有效模型区分的标记，并定义较短 TTL 及创建后的失效策略。
 
-| 操作 | Redis 命令 | 理由 |
-|------|-----------|------|
-| 读穿透回填 | `singleflight.Do` + `SetNX` | singleflight 合并并发穿透 + SetNX 不覆盖写入的新值 |
-| Create | 不写缓存 | 新记录等首次读取时由 SetNX 回填 |
-| Update | `Set(ctx, key, val, ttl)` | 写完 DB 后用最新值覆盖缓存，防止读穿透回填旧值 |
-| WarmUp | `SetNX` | 不覆盖运行期间已更新的缓存 |
+`SetNX` 只保证不覆盖已经存在的键，并不保证整条 DB/缓存链路一致：
 
----
-
-## 3. Redis 缓存改造步骤
-
-### 1. 改造 cache.go
-
-```go
-package xxxcache
-
-import (
-    "github.com/ixugo/goddd/internal/core/xxx"
-    "github.com/redis/go-redis/v9"
-    "golang.org/x/sync/singleflight"
-)
-
-var _ xxx.Storer = (*Cache)(nil)
-
-func NewCache(store xxx.Storer, rdb redis.Cmdable) *Cache {
-    c := &Cache{store: store, rdb: rdb}
-    // 子 storer 于构造时预建，访问器直返字段，热路径零分配
-    c.entity = &Entity{store: store.Entity(), rdb: rdb, sf: &c.sf}
-    return c
-}
-
-type Cache struct {
-    store  xxx.Storer
-    entity xxx.EntityStorer
-    rdb    redis.Cmdable
-    sf     singleflight.Group // 防缓存击穿：同一 key 并发穿透合并为一次 DB 查询
-}
-
-func (c *Cache) Entity() xxx.EntityStorer {
-    return c.entity
-}
-
-func (c *Cache) Begin() (orm.Tx, error) {
-    return c.store.Begin()
-}
+```text
+读请求查到旧值 → 更新请求写 DB 并写缓存新值 → 读请求 SetNX 失败
 ```
 
-### 2. 实现实体缓存方法
+上例可防止旧值覆盖已缓存的新值；以下情形仍需单独处理：
 
-```go
-package xxxcache
+- 并发更新的 DB 提交顺序与缓存 Set 顺序不同，会使较旧的 Set 最后生效。
+- 删除后的墓碑已过期或被淘汰，迟到的回填仍能成功。
+- DB 成功而缓存写入失败，既有缓存会保留旧值直到失效。
 
-import (
-    "context"
-    "encoding/json"
-    "time"
+根据项目已约定的一致性级别选择失效、版本校验或提交后维护机制。不要把 `SetNX`、墓碑或“写库后 Set”描述成全面消除竞态的保证，也不要为一次局部修改自动引入分布式锁。
 
-    "github.com/ixugo/goddd/internal/core/xxx"
-    "github.com/ixugo/goddd/pkg/orm"
-    "github.com/redis/go-redis/v9"
-    "golang.org/x/sync/singleflight"
-)
+## 事务副本
 
-const (
-    keyPrefix = "xxx:key:"
-    keyTTL    = 24 * time.Hour
-)
+`WithTx` 副本的读操作直连事务 DB，提交前不把未提交数据写入公共缓存。写操作使用项目既有的失效策略。
 
-// Entity 缓存层，写操作同步维护缓存。
-// inTx 标记事务副本：事务可能回滚，副本内写操作只做缓存失效、读操作直连 db，
-// 避免缓存残留未提交的数据。
-type Entity struct {
-    store xxx.EntityStorer
-    rdb   redis.Cmdable
-    sf    *singleflight.Group
-    inTx  bool
-}
+仅在事务内 Del 不能保证提交后的缓存有效：其他请求可在事务提交前读取旧 DB 值并回填，提交后便留下旧缓存。事务内墓碑也有 TTL、淘汰和其他写请求覆盖的限制。需要提交后失效或刷新时，由事务拥有者在确认 Commit 成功后协调；跨调用链机制尚不存在时，应先明确改动范围，不能暗中扩展事务接口。回滚不得发布未提交数据。
 
-func (c *Entity) cacheKey(key string) string {
-    return keyPrefix + key
-}
+## 错误处理
 
-// GetByKey 按业务键查 Redis，miss 时通过 singleflight 合并并发穿透，用 SETNX 回填。
-// 事务副本内直连 db，保证读到事务内的最新数据。
-func (c *Entity) GetByKey(ctx context.Context, key string) (*xxx.Entity, error) {
-    if c.inTx {
-        return c.store.GetByKey(ctx, key)
-    }
-    cacheKey := c.cacheKey(key)
-    data, err := c.rdb.Get(ctx, cacheKey).Bytes()
-    if err == nil {
-        var out xxx.Entity
-        if json.Unmarshal(data, &out) == nil {
-            return &out, nil
-        }
-    }
-    v, err, _ := c.sf.Do(key, func() (any, error) {
-        out, err := c.store.GetByKey(ctx, key)
-        if err != nil {
-            return nil, err
-        }
-        if b, _ := json.Marshal(out); b != nil {
-            c.rdb.SetNX(ctx, cacheKey, b, keyTTL)
-        }
-        return out, nil
-    })
-    if err != nil {
-        return nil, err
-    }
-    return v.(*xxx.Entity), nil
-}
+- DB 错误向上传递，不写入成功缓存。
+- 缓存 miss 与连接、序列化错误区分处理；允许降级时记录必要诊断后查 DB。
+- DB 已成功后的缓存失败，应按项目契约记录、失效或修复；不能把已提交操作描述为已回滚，也不能静默吞错。
+- Redis 命令结果及序列化错误都要检查；预热统计只计成功写入项。
 
-// Create 只写 DB，不写缓存，等首次读取时由 SetNX 回填。
-func (c *Entity) Create(ctx context.Context, model *xxx.Entity) error {
-    return c.store.Create(ctx, model)
-}
+## 可选预热
 
-// Update 写完 DB 后用最新值覆盖缓存；事务副本内仅删除失效，回滚不残留脏缓存。
-func (c *Entity) Update(ctx context.Context, model *xxx.Entity, changeFn func(*xxx.Entity) error) error {
-    if err := c.store.Update(ctx, model, changeFn); err != nil {
-        return err
-    }
-    if c.inTx {
-        c.rdb.Del(ctx, c.cacheKey(model.Key))
-        return nil
-    }
-    c.setCache(ctx, model)
-    return nil
-}
+仅在启动性能或业务需求明确需要时添加预热；不要无条件在构造函数里执行全量 IO。
 
-// setCache 将实体序列化后写入 Redis，附带 TTL。
-func (c *Entity) setCache(ctx context.Context, model *xxx.Entity) {
-    if b, err := json.Marshal(model); err == nil {
-        c.rdb.Set(ctx, c.cacheKey(model.Key), b, keyTTL)
-    }
-}
+1. 从既定范围读取一批数据，使用稳定分页或游标，支持取消。
+2. 复用实体的键构造与序列化逻辑；采用不覆盖已有值的策略时使用 SetNX，并处理失败。
+3. 继续读取直到结束，记录成功数与失败；不能把单页最大条数当作全量。
 
-// GetByID 按主键查询，走缓存；事务副本内直连 db，保证读到事务内的最新数据。
-func (c *Entity) GetByID(ctx context.Context, id int64) (*xxx.Entity, error) {
-    if c.inTx {
-        return c.store.GetByID(ctx, id)
-    }
-    cacheKey := c.cacheKey(fmt.Sprintf("%d", id))
-    data, err := c.rdb.Get(ctx, cacheKey).Bytes()
-    if err == nil {
-        var out xxx.Entity
-        if json.Unmarshal(data, &out) == nil {
-            return &out, nil
-        }
-    }
-    v, err, _ := c.sf.Do(fmt.Sprintf("%d", id), func() (any, error) {
-        out, err := c.store.GetByID(ctx, id)
-        if err != nil {
-            return nil, err
-        }
-        if b, _ := json.Marshal(out); b != nil {
-            c.rdb.SetNX(ctx, cacheKey, b, keyTTL)
-        }
-        return out, nil
-    })
-    if err != nil {
-        return nil, err
-    }
-    return v.(*xxx.Entity), nil
-}
+`NewPagerFilterMaxSize()` 的分页限制见 [Web 工具集](web-toolkit.md#分页与日期过滤)。全量遍历应使用固定、合法的批大小；预热处理 n 条记录需要 O(n) 次键处理，批次大小应限制内存与网络负载。
 
-// WithTx 返回保留缓存封装的事务副本：事务内写操作仅失效缓存、读操作直连 db。
-func (c *Entity) WithTx(tx orm.Tx) xxx.EntityStorer {
-    return &Entity{store: c.store.WithTx(tx), rdb: c.rdb, sf: c.sf, inTx: true}
-}
+## 验证重点
 
-// Delete 删除后写入墓碑：阻止读穿透的 SetNX 把已删除的旧值回填复活。
-func (c *Entity) Delete(ctx context.Context, model *xxx.Entity) error {
-    if err := c.store.Delete(ctx, model); err != nil {
-        return err
-    }
-    c.rdb.Set(ctx, c.cacheKey(model.Key), "__tombstone__", keyTTL)
-    return nil
-}
-
-// 不走缓存的方法直接透传
-func (c *Entity) List(ctx context.Context, in *xxx.ListEntityInput) ([]*xxx.Entity, int64, error) {
-    return c.store.List(ctx, in)
-}
-func (c *Entity) Count(ctx context.Context, in *xxx.ListEntityInput) (int64, error) {
-    return c.store.Count(ctx, in)
-}
-```
-
-### 3. 实现 WarmUp
-
-```go
-// WarmUp 启动时预热：全量加载写入 Redis，用 SETNX 不覆盖已有缓存。
-func (c *Cache) WarmUp(ctx context.Context) {
-    pager := web.NewPagerFilterMaxSize()
-    in := &xxx.ListEntityInput{PagerFilter: pager}
-    items, _, err := c.store.Entity().List(ctx, in)
-    if err != nil {
-        slog.ErrorContext(ctx, "xxx cache WarmUp failed", "err", err)
-        return
-    }
-    count := 0
-    for _, item := range items {
-        data, _ := json.Marshal(item)
-        c.rdb.SetNX(ctx, c.cacheKey(item.Key), data, keyTTL)
-        count++
-    }
-    slog.InfoContext(ctx, "xxx cache WarmUp done", "count", count)
-}
-```
-
-### 4. API 层装配
-
-```go
-func NewXxxCore(db *gorm.DB, rdb redis.Cmdable) xxx.Core {
-    dbStore := xxxdb.NewDB(db).AutoMigrate(orm.GetEnabledAutoMigrate())
-    store := xxxcache.NewCache(dbStore, rdb)
-    store.WarmUp(context.Background())
-    return xxx.NewCore(store)
-}
-```
-
----
-
-## 4. Key 命名规范与穿透防护
-
-- **Key 格式**：`domain:dimension:value`（全部小写、冒号分隔，如 `user:id:1001`）
-- **空值防穿透**：当 DB 中数据不存在时，可短时间缓存空标记（如 `null`，TTL 30 秒），防止恶意高频请求打崩 DB。
-- **singleflight 防击穿**：并发穿透时通过 `sf.Do(key, fn)` 合并为一次 DB 查询。
-- **事务副本语义**：`WithTx` 副本在事务内仅对写操作 Del/写墓碑，读操作直连 DB，回滚不残留脏缓存。
+按本次修改涉及的路径选择测试：同值 ID/业务键隔离、不同租户隔离、更新和删除后的全部键、业务键变更、并发回填、事务提交/回滚、缓存错误降级与超过单页数据量的预热。需要缓存一致性保证时，用受控并发时序验证，而不是只测试串行命中率。
