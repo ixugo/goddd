@@ -1,6 +1,6 @@
 # API 设计规范
 
-goddd 的 API 设计规范，按此执行即可。
+本页约定用于设计新的 GoDDD API。维护已有接口时，保留其路径、HTTP 方法、状态码、响应结构和查询语义；不要为统一风格修改已上线契约。
 
 ---
 
@@ -9,7 +9,7 @@ goddd 的 API 设计规范，按此执行即可。
 1. **资源导向** — 先定义资源，再定义操作，标准方法优先
 2. **一致性** — 相同语义用相同 HTTP 方法、路径模式、状态码
 3. **简单优先** — 标准方法能解决的不用自定义方法
-4. **避免 PATCH** — `PUT` 全量替换 + `POST + 语义化路径` 已足够清晰
+4. **更新语义明确** — 新接口优先沿用项目惯例；`PUT` 表示完整替换，局部更新应明确字段缺省语义。已有 `PATCH` 接口保持兼容。
 
 ---
 
@@ -28,7 +28,7 @@ goddd 的 API 设计规范，按此执行即可。
 
 ## 标准方法
 
-goddd 采用五个标准方法，不推荐使用 PATCH。
+新资源接口可参考以下五种操作；表中响应是设计建议，不要求迁移已有接口。
 
 | 方法 | HTTP | 路径 | WrapH 绑定 | 响应体 |
 |------|------|------|-----------|--------|
@@ -100,7 +100,7 @@ reason.ErrDB.Withf("查询用户失败 id[%d]: %w", id, err)
 // WithHTTPStatus 覆盖默认状态码
 reason.ErrBadRequest.WithHTTPStatus(422)
 
-// WithCause 携带底层底层 error 链，支持 errors.Is / errors.As
+// WithCause 携带底层 error 链，支持 errors.Is / errors.As
 reason.ErrDB.WithCause(err)
 ```
 
@@ -119,20 +119,9 @@ reason.ErrDB.WithCause(err)
 
 ## 分页与过滤
 
-嵌入 `web.PagerFilter` 和 `web.DateFilter`：
+分页、日期过滤和排序字段行为见 [web-toolkit.md](web-toolkit.md#分页与日期过滤)，不要在 API 层另写一套与其不一致的参数解释。
 
-```go
-type ListEntityInput struct {
-    web.PagerFilter
-    web.DateFilter
-    Name string `form:"name"`
-}
-```
-
-- `SortSafelist` 白名单防注入，`-` 降序 / `+` 升序
-- `NewPagerFilterMaxSize()` 不分页全量查询
-- `DateFilter` 毫秒时间戳，`StartAt()` / `EndAt()` 获取 `time.Time`
-- 空列表序列化为 `"items": []` 而非 `null`：Store 层用 `make([]*T, 0)` 初始化
+新接口可约定空列表返回 `"items": []`，并在输出边界保证空切片初始化。维护已有接口时保持原来的 `[]` 或 `null` 契约。
 
 ---
 

@@ -24,6 +24,7 @@ type Context interface {
     GetBaseURL() string
     GetScheme() string
     GetHost() string
+    BaseURLJoin(...string) string
 }
 
 func WithContext(r *http.Request) Context {
@@ -49,9 +50,12 @@ Core 层完全不感知 HTTP，只是透传 `ctx context.Context`：
 ```go
 func (c Core) FindItems(ctx context.Context, in *FindInput) (*web.PageOutput[*Item], error) {
     items, total, err := c.store.Find(ctx, in)
+    if err != nil {
+        return nil, err
+    }
     // Adapter 内部会通过类型断言获取 HTTP 信息
     c.enrichItems(ctx, items)
-    return &web.PageOutput[*Item]{Items: items, Total: total}, err
+    return &web.PageOutput[*Item]{Items: items, Total: total}, nil
 }
 ```
 
@@ -72,6 +76,12 @@ func (p *impl) resolveCover(ctx context.Context, cover string) string {
 }
 ```
 
+## 再包装的限制
+
+`ctx.(web.Context)` 检查的是当前值的动态类型。对它调用 `context.WithCancel`、`context.WithTimeout` 或 `context.WithValue` 后，返回的标准 context 包装类型不实现 `web.Context`，下游断言会失败；其取消和 Value 传递机制不会自动转发这些扩展方法。
+
+需要增加超时或请求值时，优先在 API 边界先派生标准 context，再通过 `web.WithContext(c.Request.WithContext(derivedCtx))` 包装，随后原样透传。产生取消函数时要按生命周期调用。非 HTTP 调用使用标准 context，并按业务约定处理缺失的请求元信息；不得把这种降级用于权限或租户身份校验。
+
 ## 数据流
 
 ```
@@ -88,7 +98,7 @@ API 层                      Adapter (BriefProvider)
 
 | 特性 | 说明 |
 |------|------|
-| 零破坏性 | 实现 `context.Context`，现有签名无需修改 |
+| 签名兼容 | 实现 `context.Context`，现有签名无需修改；扩展方法依赖动态类型保留 |
 | 渐进式采用 | 只改调用处（API）和使用处（Adapter） |
 | 优雅降级 | 断言失败返回原始值，定时任务/测试/CLI 正常工作 |
 | 可扩展 | 可定义子接口扩展，如 `TenantContext` |

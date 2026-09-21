@@ -31,7 +31,7 @@
 └──────────────────────────────────────────────────────────┘
 ```
 
-**依赖方向**：API → Core ← Store/Adapter（外层依赖内层，内层通过接口反转依赖，Core 不依赖任何底层 ORM 或具体数据库驱动）。
+**依赖方向**：API → Core ← Store/Adapter（外层依赖内层，内层通过接口反转依赖，Core 的存储接口不暴露 `*gorm.DB`，通过 `orm.Tx` 协调事务；生成的领域模型可以包含 GORM 映射信息，不能据此宣称整个 Core 包与 ORM 完全无关）。
 
 ---
 
@@ -51,8 +51,8 @@ type Storer interface {
 
 1. **事务入口抽象**：`Begin()` 由 DB 层实现（`orm.Begin(d.db)`），Cache 层直接透传底层 DB 的 Begin。Core 层通过 `c.store.Begin()` 发起事务，不接触 `*gorm.DB`。
 2. **访问器零分配设计**：
-   - **DB 层（类型转换零分配）**：DB 结构体保持单字段 `type DB struct { db *gorm.DB }`。访问器实现为 `func (d DB) User() UserStorer { return User(d) }`，其中 `type User DB`。单指针字段结构体在 Go 中符合 directIface，装箱入接口时不发生堆分配。**严禁向 DB 结构体添加其他字段**，否则会导致隐式退化为堆分配。
-   - **Cache 层（构造时预建）**：Cache 结构体包含多个字段（store、rdb、sf 等），直接类型转换必然逃逸分配。因此子 storer 在 `NewCache` 构造时预先实例化并保存在 Cache 字段中，访问器直接返回已建好的字段。
+   - **DB 层（类型转换零分配）**：DB 结构体保持单字段 `type DB struct { db *gorm.DB }`。访问器实现为 `func (d DB) User() UserStorer { return User(d) }`，其中 `type User DB`。单指针字段布局有助于避免接口装箱分配。不要为了无关需求随意改变此布局；需要扩展 DB 时，先用目标 Go 版本的逃逸分析或基准测试评估影响，不把编译器实现细节当作跨版本保证。
+   - **Cache 层（构造时预建）**：Cache 结构体包含多个字段（store、rdb、sf 等），按值装箱存在分配成本，需要结合逃逸分析判断。因此子 storer 在 `NewCache` 构造时预先实例化并保存在 Cache 字段中，访问器直接返回已建好的字段。
 
 ---
 
@@ -77,11 +77,11 @@ type EntityStorer interface {
 | 规则 | 说明 |
 |------|------|
 | `Storer.Begin()` | 聚合接口提供事务入口，Core 层即可发起事务 |
-| `WithTx` 跨域事务 | 传入 `orm.Tx` 返回事务副本，多个 Store 共享同一底层事务 |
+| `WithTx` 跨域事务 | 传入 `orm.Tx` 返回事务副本；参与 Store 必须兼容该事务实现，并访问同一事务可覆盖的数据库，不用于跨数据库原子提交 |
 | `WithTx` 返回指针/副本 | 每事务一次、非热路径；Cache 层返回 `&Entity{...}`，DB 层返回 `Entity{db: orm.GormDB(tx)}` |
 | `Update` 原子性 | Store 内部用 `SELECT ... FOR UPDATE` + `changeFn` + `Save`，保证读写原子 |
 | `Update` 锁查询 | 使用 `Take(model)` 而非 `First(model)`，避免多余的 ORDER BY 排序开销 |
-| `Delete` 幂等 | `Clauses(clause.Returning{}).Delete(model)`，重复删除不报错，返回被删实体 |
+| `Delete` 幂等 | 模板使用 `Clauses(clause.Returning{}).Delete(model)`；方法只返回 error，通过 model 接收数据库返回字段，需确认目标数据库支持 RETURNING |
 | 主键必填 panic | 当 `model.ID == 0`（或空字符串）时直接 panic，强制调用方填充主键，防止全表误操作 |
 | 无 ORM 泄露 | Core 层接口不含 `*gorm.DB`，仅通过 `orm.Tx` 抽象事务 |
 | `GetByID` 命名 | 单条主键查询统一命名为 `GetByID`（非 QueryByID / FindByID） |
@@ -186,7 +186,7 @@ type DeleteEntityInput struct {
 
 ## 版本变化与迁移清单
 
-遇到旧代码时按以下清单迁移：
+以下是识别旧写法的检查线索，不是自动迁移指令。仅在用户授权的迁移范围内处理，先核实目标版本中的实际定义和调用方；保持公开接口兼容，不因遇到旧命名就扩大本次改动。
 
 | 旧写法 | 新写法 | 说明 |
 |--------|--------|------|
@@ -199,5 +199,5 @@ type DeleteEntityInput struct {
 | `.Where("id=?", model.ID).Delete(model)` | `.Delete(model)` | GORM 自动推导非零主键 WHERE |
 | `stores/xxxdb/entity.go` | `stores/xxxdb/entity.db.go` | 生成文件命名含层级后缀 `.db.go` |
 | `List(ctx, *[]*T, in) (int64, error)` | `List(ctx, in) ([]*T, int64, error)` | 出参改返回值 |
-| `orm.ListWithContext` / `orm.List` / `orm.Find` / `orm.Pager` | Store 内直接 `Count` + `Limit(in.Limit()).Offset(in.Offset()).Find` | `pkg/orm/old.go` 全部函数已弃用，禁止新增引用 |
+| `orm.ListWithContext` / `orm.List` / `orm.Find` / `orm.Pager` | Store 内直接 `Count` + `Limit(in.Limit()).Offset(in.Offset()).Find` | 维护旧代码先核实目标版本及语义；新代码参考当前生成模板 |
 | Cache 层访问器内 `return &Xxx{...}` | 子 storer 于 `NewCache` 构造时预建为字段，访问器直接返回字段 | 规避每次调用堆分配 |

@@ -1,110 +1,46 @@
 # 排序功能实现方案
 
-实现拖拽重排序：接收有序 ID 数组，重新分配 sort 值，不影响未传入的记录。
+适用于拖拽重排序：输入一个排序范围内的有序 ID 集合，把这些记录已有的 `sort` 值按升序重新分配给输入顺序中的 ID，保持未传入记录的排序值不变。
 
-## 设计思路
+## 适用前提
 
-将现有 sort 值收集后升序排列，再按用户期望的 ID 顺序重新分配，保证排序值不冲突、不影响其他记录。
+- 先确定排序范围，例如同一租户、目录或父节点。读写条件都必须包含该范围，Core 负责验证操作者是否有权调整该范围。
+- 输入 ID 必须非空、无重复，并符合接口已有的批量上限；数据库返回的 ID 集合必须与请求集合完全一致。跨范围、无权限和不存在的 ID 不得被静默忽略。
+- 此算法复用已有排序值，不创建新的排序位置。请求包含部分记录时，只能在这些记录原有的位置之间交换；若产品要求连续插入、跨目录移动，需要另外设计相应语义。
+- 选中记录已有的 `sort` 值必须互不相同，才能精确表示请求顺序。若数据存在重复值，应先确定修复方案，不能宣称重新分配会自动消除冲突。
 
-## 1. 参数定义
+## 分层职责
 
-```go
-type SortXxxInput struct {
-    IDs []int64 `json:"ids"`
-}
-```
+API 负责解析参数并传递请求上下文；Core 负责授权、范围和输入规则；Store 封装完整的事务操作。不要先在 Core 查询排序值，再调用另一个仅负责写入的事务方法：两次操作之间的数据会被并发请求修改。
 
-## 2. Store 层
+Store 的排序操作接收明确的排序范围和有序 ID 集合，在同一事务中完成以下步骤：
 
-```go
-type SortItem struct {
-    ID   int64
-    Sort int64
-}
+1. 获取该范围约定的并发保护，再读取选中记录的 ID 和 `sort` 值。使用行锁时按固定 ID 顺序加锁，避免不同输入顺序造成相反的锁顺序。
+2. 校验实际记录集合、范围以及排序值是否满足前提。将数据库读取失败与输入校验失败分别返回。
+3. 收集选中记录的排序值并升序排列，按输入 ID 顺序建立一一对应关系。
+4. 在同一事务内写入映射，检查更新结果并提交。任一步失败均回滚，提交成功后再记录成功日志。
 
-// GetByIDs 按 ID 集合查询，不暴露 orm.QueryOption 给 Core 层。
-func (d Xxx) GetByIDs(ctx context.Context, ids []int64) ([]*Xxx, error) {
-    var items []*Xxx
-    err := d.db.WithContext(ctx).Where("id IN ?", ids).Find(&items).Error
-    return items, err
-}
+Core 不传递 `orm.QueryOption` 或直接操作数据库事务，事务边界和锁定策略由 Store 实现。列表查询采用与产品顺序一致的排序条件；存在相同 `sort` 值的历史数据时，可以用 ID 作为稳定次序，但这不能替代本操作对排序值唯一性的校验。
 
-// UpdateSortBatch 事务内批量更新 sort 值。
-func (d Xxx) UpdateSortBatch(ctx context.Context, items []SortItem) error {
-    return d.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-        for _, item := range items {
-            if err := tx.Model(&Xxx{}).
-                Where("id=?", item.ID).
-                Update("sort", item.Sort).Error; err != nil {
-                return err
-            }
-        }
-        return nil
-    })
-}
-```
+## 算法示例
 
-## 3. Core 层 — 排序逻辑
+数据库读取结果：`A=10, B=20, C=30`。输入顺序为 `[C, A, B]`，则更新映射为 `C=10, A=20, B=30`。未选中记录的排序值保持不变。
 
-```go
-func (c Core) SortXxx(ctx context.Context, in *SortXxxInput) error {
-    if len(in.IDs) == 0 {
-        return reason.ErrBadRequest.WithMsg("ids 不能为空")
-    }
+排序值收集与映射占用 O(n) 空间，排序耗时 O(n log n)；逐条写入需要 O(n) 次数据库操作。沿用项目已有批量上限；若预计一次处理超过 1000 条，先评估锁持有时间和批量写入方案。
 
-    items, err := c.store.Xxx().GetByIDs(ctx, in.IDs)
-    if err != nil {
-        return reason.ErrDB.Withf(`GetByIDs err[%s]`, err.Error())
-    }
+## 并发与唯一约束
 
-    if len(items) != len(in.IDs) {
-        return reason.ErrBadRequest.WithMsg("部分 ID 不存在")
-    }
+重新分配保留排序值集合，但这不等于任何写入方式都不会触发唯一约束。例如交换 `10` 和 `20` 时，逐条更新会在中间状态产生重复值。
 
-    sorts := make([]int64, 0, len(items))
-    for _, item := range items {
-        sorts = append(sorts, item.Sort)
-    }
-    slices.Sort(sorts)
+实施前检查实际数据库、索引和约束：
 
-    sortItems := make([]SortItem, 0, len(in.IDs))
-    for i, id := range in.IDs {
-        sortItems = append(sortItems, SortItem{
-            ID:   id,
-            Sort: sorts[i],
-        })
-    }
+- 若存在 `(范围, sort)` 唯一约束，必须选择数据库支持且经过验证的更新策略，例如可延迟到提交时检查的约束，或事务内分两阶段写入已确认可用的临时值。不能假定单条批量更新语句天然绕过唯一检查；也不能直接假定负数或极大整数可用。
+- 临时值方案需要验证字段取值范围、检查约束、溢出和与现存值的冲突，并保证整个过程对其他写入者互斥。
+- 仅锁定选中记录时，不能声称已协调该范围内的插入、删除和其他排序值分配。若这些操作会影响排序规则，应使用共同的范围锁、版本检查或项目已有的一致性机制；所有相关写入路径必须遵守同一协议。
+- 不要仅为了排序给 `sort` 添加 `autoIncrement`。排序值的初始化与分配应遵循现有数据库模型和业务约束。
 
-    if err := c.store.Xxx().UpdateSortBatch(ctx, sortItems); err != nil {
-        return reason.ErrDB.Withf(`UpdateSortBatch err[%s]`, err.Error())
-    }
+这里规定算法和一致性边界，不提供脱离数据库条件的通用事务代码。采用具体方案前，应从项目实现核实数据库能力和并发协议。
 
-    slog.InfoContext(ctx, "排序成功", "ids", in.IDs)
-    return nil
-}
-```
+## 验证要点
 
-## 4. API 层
-
-```go
-func (a XxxAPI) sortXxx(c *gin.Context, in *xxx.SortXxxInput) (any, error) {
-    if err := a.xxxCore.SortXxx(c.Request.Context(), in); err != nil {
-        return nil, err
-    }
-    return gin.H{"message": "排序成功"}, nil
-}
-```
-
-路由注册：
-
-```go
-group.PUT("/sort", web.WrapH(api.sortXxx))
-```
-
-## 注意事项
-
-1. Store 接口中声明 `GetByIDs` 和 `UpdateSortBatch` 方法（手动添加，非生成）
-2. 查询列表时使用 `OrderBy("sort ASC")` 保证按排序值返回
-3. 数据库字段 `sort` 使用 gorm tag `autoIncrement` 自增
-4. 导入 `slices` 包用于排序
-5. Core 层不使用 `orm.NewQuery`/`orm.QueryOption`，通过专用 Store 方法封装查询条件
+覆盖空输入、重复 ID、缺失 ID、跨范围 ID、重复排序值、部分记录交换和已处于目标顺序的请求。数据库集成测试应验证唯一约束下的交换、写入失败后的回滚，以及两个并发重排序请求；若采用范围级协议，还要验证插入、删除与重排序的并发行为。
