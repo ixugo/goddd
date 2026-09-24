@@ -9,6 +9,7 @@
 1. **生成入口**：新建且符合生成器支持范围的 CRUD 使用 `goddd gen` 生成基础代码；维护已有代码时直接修改本次涉及的实现，不为套用模板重新生成整个领域。
 2. **表定义归属**：用于生成的输入模型放在 `tables/<domain>/`（如 `tables/user/user.go`）。已有项目沿用其模型来源，不因本技能搬迁全部模型。
 3. **主键与时间戳**：标准 CRUD 输入使用单个 `ID`；新表按业务审计需求定义 `CreatedAt`、`UpdatedAt`。现有表缺少时间戳不构成自动迁移数据库的理由。
+4. **字段注释**：执行 `goddd gen` 前，为输入结构体的每个字段写简短的行尾注释，说明字段作用。注释语言跟随用户本次使用的语言；用户使用中文时写中文，使用英文时写英文。不要只重复字段名或类型。生成器会读取字段行尾注释并写入模型字段的数据库注释标签；生成后核对其内容。
 
 ---
 
@@ -27,13 +28,13 @@ import (
 
 // User 用户表定义
 type User struct {
-    ID        int64
-    Name      string
-    Status    int
-    CreatedBy string
-    Sort      int64
-    CreatedAt time.Time
-    UpdatedAt time.Time
+    ID        int64     // 用户主键
+    Name      string    // 用户名
+    Status    int       // 用户状态
+    CreatedBy string    // 创建人
+    Sort      int64     // 排序值
+    CreatedAt time.Time // 创建时间
+    UpdatedAt time.Time // 更新时间
 }
 ```
 
@@ -50,11 +51,11 @@ import (
 )
 
 type Task struct {
-    ID        uniqueid.Core
-    Title     string
-    Status    int
-    CreatedAt time.Time
-    UpdatedAt time.Time
+    ID        uniqueid.Core // 任务主键
+    Title     string        // 任务标题
+    Status    int           // 任务状态
+    CreatedAt time.Time     // 创建时间
+    UpdatedAt time.Time     // 更新时间
 }
 ```
 
