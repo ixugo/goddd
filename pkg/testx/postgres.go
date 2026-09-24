@@ -27,8 +27,7 @@ const (
 )
 
 // NewPostgres 为单个测试准备一套干净的 Postgres 数据库,返回其 DSN。
-// 固定名容器跨测试进程复用(测试结束有意保留容器以加速下次运行),
-// 每个测试用例在容器内创建随机名数据库实现隔离,t.Cleanup 负责删库。
+// 每个测试创建独立临时容器与随机数据库实现隔离,t.Cleanup 负责清理资源。
 // 客户端库由调用方按所用技术栈自选;gorm 版便利封装见子包 testx/postgres。
 func NewPostgres(t *testing.T) string {
 	t.Helper()
@@ -38,10 +37,16 @@ func NewPostgres(t *testing.T) string {
 	if err != nil {
 		t.Fatalf("启动测试容器失败: %v", err)
 	}
+	t.Cleanup(func() {
+		if err := docker.StopContainer(c.ID); err != nil {
+			t.Logf("删除 Postgres 测试容器 %s 失败: %v", c.Name, err)
+		}
+	})
 
 	ctx := context.Background()
 	master := openSQL(t, c.HostPort, "postgres")
-	waitReady(t, master)
+	t.Cleanup(func() { _ = master.Close() })
+	waitReady(t, master, c.ID)
 
 	// 随机库名保证并行测试互不干扰
 	dbName := randomDBName(8)
@@ -55,16 +60,13 @@ func NewPostgres(t *testing.T) string {
 		if _, err := master.ExecContext(ctx, "DROP DATABASE "+dbName+" WITH (FORCE)"); err != nil {
 			t.Logf("删除测试库 %s 失败: %v", dbName, err)
 		}
-		_ = master.Close()
 	})
 
 	return dsn
 }
 
 // StopPostgres 停止并删除 Postgres 测试容器。
-// 测试流程无需调用(容器有意保留以加速下次运行,CI runner 为一次性虚机亦无需清理),
-// 仅供本地开发欲彻底清理时在代码中调用,亦可直接执行:
-// docker stop godddtest && docker rm godddtest
+// 测试流程无需调用,仅供本地开发欲彻底清理时在代码中调用。
 func StopPostgres() error {
 	return docker.StopContainer(pgName)
 }
@@ -81,7 +83,7 @@ func openSQL(t *testing.T, hostPort, dbName string) *sql.DB {
 }
 
 // waitReady 容器启动不等于 Postgres 就绪,轮询 ping 直至可服务或超时
-func waitReady(t *testing.T, db *sql.DB) {
+func waitReady(t *testing.T, db *sql.DB, containerID string) {
 	t.Helper()
 	deadline := time.Now().Add(pingTimeout)
 	for {
@@ -92,7 +94,7 @@ func waitReady(t *testing.T, db *sql.DB) {
 			return
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("等待 Postgres 就绪超时: %v\n容器日志:\n%s", err, docker.DumpContainerLogs(pgName))
+			t.Fatalf("等待 Postgres 就绪超时: %v\n容器日志:\n%s", err, docker.DumpContainerLogs(containerID))
 		}
 		time.Sleep(pingInterval)
 	}

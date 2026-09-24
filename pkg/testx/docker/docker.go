@@ -3,59 +3,49 @@ package docker
 
 import (
 	"bytes"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
+	"os"
 	"os/exec"
 	"strings"
-	"time"
 )
 
-// Container 记录测试用容器的名字与宿主机访问地址
+// Container 记录测试用容器的 ID、名字与宿主机访问地址
 type Container struct {
+	ID       string
 	Name     string
 	HostPort string
 }
 
-// StartContainer 启动指定容器供测试使用。
+// StartContainer 启动唯一ID容器供测试使用，测后清理。
+// fix: 使用唯一容器名称（<名称前缀>-<当前进程 PID>-<随机后缀>），避免产生脏容器。容器占用等潜在错误退出。
 // 每个测试可能运行在独立进程中,进程间无法串行化此调用,
 // 故先查固定名容器是否已存在;启动失败时退避等待其他进程把容器拉起来。
 func StartContainer(image string, name string, port string, dockerArgs []string, appArgs []string) (Container, error) {
-	// 容器已在运行则直接复用
-	if c, err := exists(name, port); err == nil {
-		return c, nil
+	containerName, err := randomContainerName(name)
+	if err != nil {
+		return Container{}, fmt.Errorf("生成测试容器名称失败: %w", err)
 	}
 
-	c, err := dockerRun(image, name, port, dockerArgs, appArgs)
+	c, err := dockerRun(image, containerName, port, dockerArgs, appArgs)
 	if err == nil {
 		return c, nil
 	}
 
-	// 启动失败多半是同名校验冲突:另一个测试进程已占名,
-	// 退避轮询等待其容器就绪
-	for i := range 10 {
-		time.Sleep(time.Duration(i+1) * 500 * time.Millisecond)
-
-		c, err := exists(name, port)
-		if err == nil {
-			return c, nil
-		}
-	}
-
-	return Container{}, fmt.Errorf("could not start or find container %s", name)
+	return Container{}, fmt.Errorf("启动测试容器失败 %s: %w", name, err)
 }
 
-// StopContainer 停止并删除指定容器(含挂载卷)
+// StopContainer 强制停止并删除指定测试容器(含挂载卷),重复调用视为成功。
 func StopContainer(id string) error {
-	// #nosec G204 -- 测试基建,容器 id 由 docker daemon 返回,非外部输入
-	if err := exec.Command("docker", "stop", id).Run(); err != nil {
-		return fmt.Errorf("could not stop container: %w", err)
-	}
-
 	// #nosec G204 -- 同上
-	if err := exec.Command("docker", "rm", id, "-v").Run(); err != nil {
-		return fmt.Errorf("could not remove container: %w", err)
+	cmd := exec.Command("docker", "rm", "-f", "-v", id)
+	out, err := cmd.CombinedOutput()
+	if err != nil && !strings.Contains(string(out), "No such container") {
+		return fmt.Errorf("删除测试容器失败: %w: %s", err, strings.TrimSpace(string(out)))
 	}
 
 	return nil
@@ -76,7 +66,7 @@ func DumpContainerLogs(id string) []byte {
 // 避免固定端口在多环境下冲突
 func dockerRun(image string, name string, port string, dockerArgs []string, appArgs []string) (Container, error) {
 	arg := make([]string, 0, 6+len(dockerArgs)+len(appArgs))
-	arg = append(arg, "run", "-P", "-d", "--name", name)
+	arg = append(arg, "run", "--rm", "-P", "-d", "--name", name)
 	arg = append(arg, dockerArgs...)
 	arg = append(arg, image)
 	arg = append(arg, appArgs...)
@@ -84,12 +74,16 @@ func dockerRun(image string, name string, port string, dockerArgs []string, appA
 	var out bytes.Buffer
 	// #nosec G204 -- 测试基建,镜像与参数由测试代码传入,非外部输入
 	cmd := exec.Command("docker", arg...)
-	cmd.Stdout = &out
-	if err := cmd.Run(); err != nil {
-		return Container{}, fmt.Errorf("could not start container %s: %w", image, err)
+	output, err := cmd.CombinedOutput()
+	out.Write(output)
+	if err != nil {
+		return Container{}, fmt.Errorf("could not start container %s: %w: %s", image, err, strings.TrimSpace(string(output)))
 	}
 
-	id := out.String()[:12]
+	id := strings.TrimSpace(out.String())
+	if id == "" {
+		return Container{}, errors.New("docker run 未返回容器 ID")
+	}
 	hostIP, hostPort, err := extractIPPort(id, port)
 	if err != nil {
 		_ = StopContainer(id)
@@ -97,6 +91,7 @@ func dockerRun(image string, name string, port string, dockerArgs []string, appA
 	}
 
 	c := Container{
+		ID:       id,
 		Name:     name,
 		HostPort: net.JoinHostPort(hostIP, hostPort),
 	}
@@ -104,19 +99,20 @@ func dockerRun(image string, name string, port string, dockerArgs []string, appA
 	return c, nil
 }
 
-// exists 通过 inspect 判断固定名容器是否在运行,在运行则返回其访问地址
-func exists(name string, port string) (Container, error) {
-	hostIP, hostPort, err := extractIPPort(name, port)
-	if err != nil {
-		return Container{}, errors.New("container not running")
+// randomContainerName 生成 Docker 合法的唯一名称
+func randomContainerName(prefix string) (string, error) {
+	prefix = strings.ToLower(strings.Trim(prefix, "-"))
+	if prefix == "" {
+		prefix = "testx"
 	}
-
-	c := Container{
-		Name:     name,
-		HostPort: net.JoinHostPort(hostIP, hostPort),
+	var suffix [6]byte
+	if _, err := rand.Read(suffix[:]); err != nil {
+		return "", err
 	}
-
-	return c, nil
+	if len(prefix) > 36 {
+		prefix = prefix[:36]
+	}
+	return fmt.Sprintf("%s-%d-%s", prefix, os.Getpid(), hex.EncodeToString(suffix[:])), nil
 }
 
 // extractIPPort 用 docker inspect 的 Go template 取出容器端口在宿主机的
