@@ -1,11 +1,9 @@
 ---
 name: goddd-api-doc
 description: >
-  Apifox 同步、上传接口文档到 Apifox、生成或更新 OpenAPI 3.1 YAML 接口文档。
-  当用户提到 apifox、同步 apifox、更新到 apifox、上传到 apifox、.go.yaml 文件、
-  接口文档、同步文档、生成文档时使用此技能。
-  也在项目使用 web.WrapH 注册路由且 API 层发生变动时自动触发。
-  docs/api/*.go.yaml 文件的任何操作都应触发此技能。
+  为 Go/Gin 项目生成或更新 OpenAPI 3.1 YAML，或按授权同步到 Apifox。
+  用户要求维护接口文档、docs/api/*.go.yaml，或 web.WrapH 项目 API 契约变化时使用。
+  只读查看文档不触发写入；本地更新不自动授予上传权限。
 ---
 
 # 更新接口文档
@@ -49,7 +47,7 @@ paths:
 
 ## 路由变更与弃用
 
-当代码中某个接口的**路由路径或 HTTP 方法**发生变更时（如 `/tenants/:id` 改为 `/tenants/{id}`，或 `GET` 改为 `POST`），**不得删除文档中的旧接口**，必须按以下规则处理：
+当代码中某个接口的**实际请求路径或 HTTP 方法**发生变更时（如 `/tenants/:id` 改为 `/tenants/:id/info`，或 `GET` 改为 `POST`），**不得删除文档中的旧接口**，必须按以下规则处理。先将 Gin 的 `:id` 规范化为 OpenAPI 的 `{id}` 再比较；仅表示法转换、实际请求 URL 与方法不变，不属于接口变更：
 
 1. **旧接口标记弃用**：在旧路径/方法的定义中添加 `deprecated: true`，并在其 `description` 中追加弃用说明，指明替代的新接口。
 2. **新接口正常补充**：按常规流程在文档中添加新路由/方法的接口定义。
@@ -80,7 +78,7 @@ paths:
 
 **判断标准**：
 
-- 路由路径变更（含路径参数格式变化）→ 旧接口标弃用 + 新增接口
+- 实际请求路径变更 → 旧接口标弃用 + 新增接口；`:id` 与 `{id}` 的等价表示转换不标弃用
 - HTTP 方法变更（如 GET → POST）→ 旧方法标弃用 + 新增方法
 - 接口从代码中彻底移除（无对应 handler）→ 标记弃用（`deprecated: true`），除非用户明确要求删除
 - 字段/参数变更 → 走「字段变更记录」规则，不涉及弃用标记
@@ -165,8 +163,8 @@ end_ms:
 
 ## 字段命名约定
 
-- 文档中所有 JSON 属性键（properties key）**必须使用蛇形小写（snake_case）**，例如 `access_key`、`group_code`、`api_permissions`。
-- 禁止在文档中出现小驼峰（`accessKey`）或大驼峰（`AccessKey`）形式，以与 Go 蛇形 JSON tag 保持一致。
+- 文档中的 JSON 属性键必须与实际响应或请求契约一致：有 `json` tag 时使用其字段名，无 tag 时按实际编码规则保留可见字段名；`json:"-"` 不输出。
+- 保留既有 snake_case、camelCase 或其他实际字段名，不为命名偏好改写公开协议。自定义 `MarshalJSON` 以实际序列化结果为准；需要改协议时另按用户授权实施。
 
 ## Tag 规则
 
@@ -181,21 +179,23 @@ end_ms:
 4. 用 `ls docs/api/` 检查目标 `.go.yaml` 是否已存在
 5. 已存在则对比更新（保留已有 tags 不变），不存在则全新生成
 6. 将 YAML 文档写入 `docs/api/{源文件名}.yaml`
-7. 满足条件时自动执行 Apifox 同步（见末尾章节）
+7. 已有明确同步授权且条件齐备时执行 Apifox 同步（见末尾章节）
 
 ---
 
 ## Apifox 同步
 
-文档写入后，若满足以下条件，自动执行 `references/apifox.sh` 将变更同步到 Apifox：
+文档写入后，满足以下条件时执行 `references/apifox.sh` 将变更同步到 Apifox：
 
-- **条件 A**：环境变量 `APIFOX_TOKEN` 已设置
-- **条件 B**：项目 `CLAUDE.md` 或 `AGENTS.md` 中定义了 `APIFOX_PROJECT_ID`
+- **授权**：用户已要求同步本次文档，或项目规则已明确授权自动同步。只有 Token、项目 ID 或“更新本地文档”不构成上传授权；已有明确授权不重复确认。
+- **凭据与目标**：环境变量 `APIFOX_TOKEN` 可用，目标项目 ID 已从用户指定或项目规则核实。只检查是否配置，不输出凭据值。
+
+从项目根目录确认目标文件实际存在，再使用技能脚本的绝对路径调用；文件参数也使用项目文档的绝对路径。不要切到技能目录后把 `./docs/api/` 当作项目路径。
 
 **执行命令**：
 
 ```bash
-bash references/apifox.sh projectid=<PROJECT_ID> token=${APIFOX_TOKEN} file=./docs/api/<被改动的文件>
+bash /<技能绝对目录>/references/apifox.sh projectid=<PROJECT_ID> token="${APIFOX_TOKEN}" file="/<项目绝对目录>/docs/api/<被改动的文件>"
 ```
 
-执行时 cwd 应为本技能所在目录（`.cursor/skills/goddd-api-doc/`）。不满足条件时跳过同步，不报错。
+不满足条件时只完成本地文档，并说明未同步的具体原因。记录导入结果，不把脚本启动或退出当作接口全部导入成功。
